@@ -1,6 +1,6 @@
 # Block 4: Color Classification
 
-**Status:** todo · **Owner:** — · **Branch:** —
+**Status:** in progress · **Owner:** Maciej · **Branch:** `block/04-color-classification`
 **Owned paths:** `src/sorter/color_classifier/`, `tests/color_classifier/`, `config/default.yaml` → `color_classifier`
 
 ## Goal
@@ -9,14 +9,15 @@ Given a frame from the `look_bg` pose, find every item on the background and ret
 
 ## Scope
 
-- [ ] Implement `ColorClassifier.classify(frame) -> BackgroundResult` per [architecture.md](../architecture.md).
-- [ ] Segment items in the background ROI (`views.background.roi`): difference from the known gray, and/or depth above the background plane. Split into blobs, drop blobs below the min area, sort by area (largest first).
-- [ ] Classify each blob on robust color statistics (e.g. median in Lab/HSV): high chroma → **colored**, otherwise lightness splits **light** vs **dark**. Erode the mask so shadows and edges don't skew it. Fill `confidence` and `stats`.
-- [ ] Re-grasp point: the **highest point** (smallest depth) among pixels deep inside the blob (distance transform above a threshold). Not the centroid: it can fall outside non-convex shapes.
-- [ ] `touches_roi_edge` when the blob touches the ROI border.
-- [ ] Thresholds in config, tuned on the demo clothes. A small tool that prints the stats of an item helps tuning.
-- [ ] Overlay: masks, grasp points, color labels.
-- [ ] Tests on recorded observations: each class, empty background, two items.
+- [x] Implement `ColorClassifier.classify(frame) -> BackgroundResult` per [architecture.md](../architecture.md): `Sam3ColorClassifier` in `classifier.py`, `backend.create(cfg)`.
+- [x] Segment items in the background ROI (`views.background.roi`, whole frame while it is empty) with the remote **SAM3 service** ([D-013](../decisions.md), `segmenter.py`): one instance per item, prompt `color_classifier.sam.prompt`. Pixels without depth (gripper fingers, glare) are dropped; an instance mostly covered by a better-scored one is dropped; blobs below `min_area_px` or above `max_area_frac` of the ROI are dropped; sorted by area (largest first).
+- [x] Classify each blob on the median Lab of the eroded mask: L* below `lightness_dark` → **dark**; chroma ≥ `chroma_colored` → **colored**; otherwise L* ≥ `lightness_light` → **light**, else **dark**. `confidence` = 0.5 at the deciding threshold, 1 at `confidence_margin` from it. `stats`: `L`, `a`, `b`, `chroma`, `px`, `score`.
+- [x] Re-grasp point: the **highest point** at least `grasp_inset_px` inside the blob (distance transform); points within `grasp_depth_tol_mm` of the highest are ties, and the one most inside the top region and the blob wins (a flat cloth is grasped in its middle). Depth = median of the non-zero depths in a small window.
+- [x] `touches_roi_edge` when the blob touches the ROI border or the image border.
+- [ ] Thresholds in config, tuned on the demo clothes. Tool: `uv run python -m sorter.color_classifier.stats <obs.npz ...> [--sim N] [--prompt P] [--threshold T] [--save DIR]` prints the stats of every item and saves overlays.
+- [x] Overlay: union mask, outline + label per item, grasp marker with class and confidence, item count.
+- [x] Tests (`tests/color_classifier/`): RLE decoding, the HTTP client and its errors (mocked), each class on sim frames with a depth-based SAM3 stand-in, empty background, three items, duplicates / fingers / ROI edge, the re-grasp point, and the full sim loop with the real classifier. A live-service test runs when `SAM3_API_KEY` is set.
+- [ ] Tests on recorded real observations (needs block 1 recordings).
 
 ## Out of scope
 
@@ -37,11 +38,15 @@ Pixel → arm conversion (block 2). What to do with the result (block 6).
 - **The blob count is a contract.** The state machine verifies a drop by the count going down ([D-008](../decisions.md)). Noise blobs or one item split into two break the counters.
 - Agree on class rules with the team before tuning: jeans, gray, prints, multicolor. Write the rules here. For the demo, prefer unambiguous items.
 - Mid-gray clothes on a mid-gray background are hard to segment. Avoid them in the demo or use depth.
+- **SAM3 is remote.** Unreachable service, bad key, or timeout (`sam.timeout_s`) → `SegmentationError` → the loop goes to `ERROR`, paused; Reset retries. No fallback (D-013). Check the ngrok URL and the key before the demo.
+- **A SAM3 miss is an unsorted item:** the loop sees an empty background and moves on to the box. On the rendered sim cloth, prompt `clothing` finds nothing and `blob` scores only 0.2–0.7, so sim runs with the real classifier leave items behind. Validate prompt and threshold on the real demo clothes.
+- SAM3 also finds the gripper fingers (prompt `object`/`blob`); they are removed because they have no depth. If the real camera reports depth on the fingers, the ROI must exclude them.
 - A flat cloth is hard to grasp with a parallel gripper. That's why the re-grasp point is the highest point. Block 5 releases items from a height so they land crumpled.
 
 ## Open questions
 
-- Class rules for ambiguous items.
+- Class rules for ambiguous items. Current rules: very dark saturated items (navy, dark brown, L* < 22) are **dark**; pastel items (chroma < 20) are **light** or **dark** by L*. Jeans, prints, and multicolor items are still to agree with the team.
+- Best SAM3 prompt and threshold for the real demo clothes on the mat.
 
 ## Requests from other blocks
 
@@ -52,3 +57,4 @@ _None yet._
 - 2026-09-25: contract fixed: `classify` returns all blobs (`items`, largest first) instead of one item; the re-grasp point is the highest point inside the blob (D-008).
 - 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/color_classifier/config.py` (placeholder). Real backend: `sorter/color_classifier/backend.py` → `create(cfg) -> ColorClassifier`. See architecture.md → Wiring.
 - 2026-09-25 (block 6): run logs are written: `data/runs/<run_id>/<cycle:04d>_<phase>.npz` + `.json` per sense phase (vision result, decision). Usable as test data; format in architecture.md → Recording format.
+- 2026-09-25 (block 4): real backend on the SAM3 service (D-013). New config section `color_classifier` (typed, `extra="forbid"`); the API key goes in `config/local.yaml` or `SAM3_API_KEY`. `classify` can raise `SegmentationError` (a `SorterError`).

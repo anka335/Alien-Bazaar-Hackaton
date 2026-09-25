@@ -30,7 +30,25 @@ camera: {}           # block 1
 calibration: {}      # block 2
 box_detector:        # block 3
   avoid_radius_px: 30
-color_classifier: {} # block 4
+color_classifier:    # block 4 (D-013)
+  sam:                         # remote SAM3 segmentation service
+    url: https://exes-shape-zoning.ngrok-free.dev
+    api_key: ""                # secret: set it in config/local.yaml or the SAM3_API_KEY env var
+    prompt: clothing           # "blob" finds the cloth of the sim scene
+    threshold: 0.5             # instance score
+    mask_threshold: 0.5
+    timeout_s: 10
+  min_area_px: 1500            # smaller blobs are noise
+  max_area_frac: 0.8           # a blob covering more of the ROI is the background itself
+  overlap_max: 0.5             # drop an instance this much covered by a better-scored one
+  erode_px: 5                  # erode the mask before color stats (shadows, edges)
+  lightness_dark: 22           # median L* below → dark whatever the chroma (navy, dark brown)
+  chroma_colored: 20           # median Lab chroma at or above → colored
+  lightness_light: 55          # else median L* at or above → light, below → dark
+  confidence_margin: 10        # distance from the deciding threshold that gives confidence 1
+  grasp_inset_px: 15           # the re-grasp point is at least this far inside the blob
+  grasp_depth_tol_mm: 5        # points this close to the highest count as the highest
+  depth_window_px: 5           # window for the robust depth of the grasp point
 arm: {}              # block 5
 
 state_machine:       # block 6
