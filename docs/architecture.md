@@ -16,7 +16,7 @@ Single source of truth for the contracts between blocks. Block 0 implements the 
 | Camera | 1 | Background capture thread. `latest()` for the live feed, `fresh()` for decisions |
 | Calibration | 2 | Hand-eye transform. Pixel + depth + camera pose → arm point, and back. The only place where this conversion happens |
 | Box detector | 3 | Grasp point in the box (pixels), or "box empty" |
-| Color classifier | 4 | All items on the background: color, re-grasp point (pixels), area. Empty list = background empty |
+| Color classifier | 4 | All items on the background: color, re-grasp point (pixels), area. Empty list = background empty. Masks from the remote SAM3 service ([D-013](decisions.md)) |
 | Arm controller | 5 | Named poses, `look` / `pick` / `place_on_background` / `drop_to_bin`, workspace checks, hold, recover |
 | Observer | 0 | `observe(zone)`: move to look pose, take a fresh frame, attach camera pose |
 | Hub | 0 | Status, decision frames, and commands between the state machine and the dashboard |
@@ -275,6 +275,9 @@ class ColorClassifier(Protocol):
     def classify(self, frame: Frame) -> BackgroundResult: ...
 ```
 
+- The real backend sends the color image to the SAM3 service ([D-013](decisions.md)). If the service fails, `classify` raises `SegmentationError` (`sorter.color_classifier.segmenter`, a `SorterError`), so the state machine goes to `ERROR`.
+- `stats` holds `L` (0..100), `a`, `b`, `chroma` (median over the eroded mask), `px` (pixels used), `score` (SAM3 instance score).
+
 ### Calibration (block 2)
 
 ```python
@@ -444,7 +447,7 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 | `views.<zone>.roi` | 1 | Pixel polygon of the zone in its look pose, excluding the gripper fingers (`rig.yaml`) |
 | `calibration` | 2 | `hand_eye` (the transform, from `hand_eye.yaml`) |
 | `box_detector` | 3 | Thresholds, `avoid_radius_px`, wall margin |
-| `color_classifier` | 4 | Class thresholds, erosion, min / max item area |
+| `color_classifier` | 4 | `sam` (SAM3 service: `url`, `api_key`, `prompts`, `threshold`, `mask_threshold`, `timeout_s`), class thresholds (`lightness_dark`, `chroma_colored`, `lightness_light`, `confidence_margin`), `erode_px`, `min_area_px`, `max_area_frac`, `overlap_max`, re-grasp (`grasp_inset_px`, `grasp_depth_tol_mm`, `depth_window_px`). The API key goes in `local.yaml` or env `SAM3_API_KEY`, never committed |
 | `arm` | 5 | SDK config path, speeds, `tcp_offset_mm`, `grasp_rpy_deg`, `safe_z_mm`, `place_release_height_mm`, gripper (`open`, `close_kp`, `empty_below`), timeouts |
 | `poses` | 5 | Joint angles (rad): `rest`, `home`, `look_box`, `look_bg`, `place_bg`, `bin_light`, `bin_dark`, `bin_colored` (`rig.yaml`) |
 | `zones.<zone>` | 5 | `workspace_mm` (XY polygon, arm frame), `z_floor_mm`, `grasp_depth_mm`, `approach_mm` (`rig.yaml`) |

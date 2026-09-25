@@ -15,7 +15,7 @@ A robotic arm sorts clothes by color: it picks an item from a mixed box, uses an
 
 ## Ground rules (already decided, don't relitigate without a new entry in decisions.md)
 
-- Vision uses **classic CV plus depth**, not trained models, unless a block's task file says otherwise.
+- Vision uses **classic CV plus depth**, not trained models, unless a block's task file says otherwise. Exception: block 4 gets its masks from a remote SAM3 service ([D-013](docs/decisions.md)).
 - Vision outputs **pixel coordinates**. Only the calibration module converts pixels to arm coordinates.
 - Every hardware-facing module has a **stub/mock** so other blocks can develop and test without hardware.
 - Safety comes first: every arm target is checked against workspace limits, and a stop (hold) is always available. Never disable the motors except at the rest pose: the arm falls.
