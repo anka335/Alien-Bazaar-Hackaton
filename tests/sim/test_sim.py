@@ -71,3 +71,21 @@ def test_hold_interrupts_a_motion(system):
     threading.Timer(0.05, system.arm.hold).start()
     with pytest.raises(EStopped):
         system.arm.home()
+
+
+def test_start_refills_the_box_when_everything_is_sorted(system):
+    world = system.world
+    for it in world.items:
+        it.location, it.bin = "bin", it.color
+    system.arm.start()
+    assert all(it.location == "box" and it.bin is None for it in world.items)
+
+
+def test_camera_follows_the_arm(system):
+    system.arm.look(Zone.BACKGROUND)
+    pose = system.world.camera.pose()
+    view = system.world.views[Zone.BACKGROUND]
+    assert (pose.x, pose.y, pose.z) == (*view.center_mm, view.cam_z_mm)
+    system.arm.drop_to_bin(system.world.items[0].color)
+    pose = system.world.camera.pose()
+    assert (pose.x, pose.y) == system.world.bin_xy[system.world.items[0].color]

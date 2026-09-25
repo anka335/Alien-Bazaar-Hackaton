@@ -40,7 +40,8 @@ class SimConfig(BaseModel):
     )  # colors of the items in the box at start
     miss_prob: float = 0.2  # a pick grabs nothing
     double_prob: float = 0.1  # a pick from the box grabs two items
-    motion_s: float = 0.0  # duration of every arm motion; > 0 to watch the loop live
+    motion_s: float = 0.0  # per path segment of an arm motion; > 0 to watch the loop live
+    vision_s: float = 0.0  # how long sim vision "thinks" per frame
     width: int = 640
     height: int = 480
     cam_height_mm: float = 400  # camera above the zone surface at the look pose

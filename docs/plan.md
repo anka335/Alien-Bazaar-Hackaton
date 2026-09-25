@@ -14,7 +14,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | 4 | [Color classification](tasks/04-color-classification.md) | todo | — | — | — |
 | 5 | [Arm control](tasks/05-arm-control.md) | todo | — | — | — |
 | 6 | [State machine](tasks/06-state-machine.md) | review | Softjey + Claude | `block/06-state-machine` | — |
-| 7 | [Dashboard](tasks/07-dashboard.md) | todo | — | — | — |
+| 7 | [Dashboard](tasks/07-dashboard.md) | review | Softjey + Claude | `block/07-dashboard` | — |
 | 8 | [Demo preparation](tasks/08-demo.md) | todo | — | — | — |
 
 ## Dependencies

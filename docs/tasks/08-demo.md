@@ -36,3 +36,4 @@ A demo that works on stage, and a backup if it doesn't.
 ## Log
 
 - 2026-09-25: runbook covers the touch test and HOLD instead of full recalibration and e-stop (D-006, D-009).
+- 2026-09-25 (block 7): Space or Esc on the dashboard also sends HOLD; `/snapshot/decision.jpg` saves the current decision frame (e.g. for backup material).

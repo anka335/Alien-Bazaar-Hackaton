@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Sequence
 
 from sorter.core.types import (
@@ -33,6 +34,7 @@ class SimBoxDetector:
         self.avoid_radius_px = avoid_radius_px
 
     def detect(self, frame: Frame, avoid: Sequence[PixelPoint] = ()) -> BoxResult:
+        time.sleep(self.world.cfg.vision_s)
         view = self.world.views[Zone.BOX]
         items = sorted(self.world.at("box"), key=lambda it: it.height_mm, reverse=True)
         overlay = Overlay(markers=[Marker(a, "avoid", "avoid") for a in avoid])
@@ -54,6 +56,7 @@ class SimColorClassifier:
         self.world = world
 
     def classify(self, frame: Frame) -> BackgroundResult:
+        time.sleep(self.world.cfg.vision_s)
         view = self.world.views[Zone.BACKGROUND]
         r_px = self.world.cfg.item_radius_mm / view.mm_per_px
         overlay = Overlay()

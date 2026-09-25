@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import random
 import threading
+import time
 from dataclasses import dataclass
 from typing import Literal
 
@@ -14,12 +15,75 @@ from sorter.sim.config import SimConfig, SimZoneConfig
 Location = Literal["box", "background", "gripper", "bin"]
 
 _PALETTE: dict[ColorClass, list[tuple[int, int, int]]] = {  # BGR
-    ColorClass.LIGHT: [(235, 235, 235), (215, 225, 230), (225, 230, 220)],
-    ColorClass.DARK: [(30, 30, 30), (55, 35, 25), (25, 25, 45)],
-    ColorClass.COLORED: [(40, 40, 200), (190, 90, 30), (40, 160, 40), (30, 200, 220)],
+    # white, cream, light gray, pale blue
+    ColorClass.LIGHT: [(238, 238, 236), (208, 228, 240), (206, 206, 204), (236, 222, 206)],
+    # black, navy, charcoal, dark brown
+    ColorClass.DARK: [(32, 30, 30), (72, 38, 20), (48, 46, 46), (30, 40, 62)],
+    # red, blue, green, yellow, orange, purple, pink
+    ColorClass.COLORED: [
+        (48, 44, 206),
+        (196, 104, 34),
+        (70, 160, 48),
+        (40, 196, 236),
+        (32, 124, 238),
+        (150, 62, 118),
+        (170, 120, 236),
+    ],
 }
 
 BG_ITEM_HEIGHT_MM = 25.0  # an item lying on the background
+BIN_SIZE_MM = 170.0
+BIN_FLOOR_Z_MM = 15.0
+HOME_CAM = (300.0, 0.0, 450.0)  # camera x, y, z at the home pose, mm
+
+
+@dataclass(frozen=True)
+class CamPose:
+    """Where the wrist camera is, looking straight down. `ref_z_mm` is the surface whose scale
+    the image follows (the zone surface at a look pose), so look-pose images match `ZoneView`."""
+
+    x: float
+    y: float
+    z: float
+    ref_z_mm: float = 0.0
+
+    def lerp(self, other: CamPose, t: float) -> CamPose:
+        return CamPose(
+            self.x + (other.x - self.x) * t,
+            self.y + (other.y - self.y) * t,
+            self.z + (other.z - self.z) * t,
+            self.ref_z_mm + (other.ref_z_mm - self.ref_z_mm) * t,
+        )
+
+
+class CamPath:
+    """The camera's motion: straight segments between waypoints, eased, one per `seg_s`."""
+
+    def __init__(self, pose: CamPose):
+        self._start = pose
+        self._t0 = 0.0
+        self._seg_s = 0.0
+        self._waypoints: list[CamPose] = []
+
+    def pose(self, now: float | None = None) -> CamPose:
+        if not self._waypoints:
+            return self._start
+        now = time.monotonic() if now is None else now
+        if self._seg_s <= 0:
+            return self._waypoints[-1]
+        k, frac = divmod(max(now - self._t0, 0.0) / self._seg_s, 1.0)
+        if k >= len(self._waypoints):
+            return self._waypoints[-1]
+        a = self._start if k == 0 else self._waypoints[int(k) - 1]
+        return a.lerp(self._waypoints[int(k)], frac * frac * (3 - 2 * frac))  # smoothstep
+
+    def move(self, waypoints: list[CamPose], seg_s: float) -> None:
+        now = time.monotonic()
+        self._start, self._t0, self._seg_s = self.pose(now), now, seg_s
+        self._waypoints = list(waypoints)
+
+    def freeze(self) -> None:
+        self._start, self._waypoints = self.pose(), []
 
 
 @dataclass(frozen=True)
@@ -94,20 +158,21 @@ class SimWorld:
         self.lock = threading.RLock()
         self.views = {z: ZoneView.from_config(z, zc, cfg) for z, zc in cfg.zones.items()}
         self.looking_at: Zone | None = None  # the zone whose look pose the arm is at
-        self.items: list[SimItem] = []
-        for i, color in enumerate(cfg.items):
-            x, y = self.random_point(Zone.BOX, margin_mm=cfg.item_radius_mm)
-            self.items.append(
-                SimItem(
-                    i,
-                    color,
-                    self.rng.choice(_PALETTE[color]),
-                    x,
-                    y,
-                    height_mm=20.0 + 15.0 * i,
-                    location="box",
-                )
-            )
+        self.camera = CamPath(CamPose(*HOME_CAM))
+        self.bin_xy = self._bin_layout()
+        self.items = [
+            SimItem(i, color, self.rng.choice(_PALETTE[color]), 0.0, 0.0, 0.0, "box")
+            for i, color in enumerate(cfg.items)
+        ]
+        self.fill_box()
+
+    def fill_box(self) -> None:
+        """Put every item in the box, at random places, stacked in id order."""
+        with self.lock:
+            for i, it in enumerate(self.items):
+                it.x, it.y = self.random_point(Zone.BOX, margin_mm=self.cfg.item_radius_mm)
+                it.height_mm = 20.0 + 15.0 * i
+                it.location, it.bin = "box", None
 
     def at(self, location: Location) -> list[SimItem]:
         with self.lock:
@@ -133,6 +198,27 @@ class SimWorld:
                 break
             x, y = self.random_point(Zone.BACKGROUND, margin_mm=r)
         return x, y
+
+    def look_pose(self, zone: Zone) -> CamPose:
+        view = self.views[zone]
+        return CamPose(*view.center_mm, view.cam_z_mm, view.surface_z_mm)
+
+    def _bin_layout(self) -> dict[ColorClass, tuple[float, float]]:
+        """Three bins in a column beyond the far edge of the zones."""
+        x0, x1, y0, y1 = self.zones_extent()
+        x = x1 + 60 + BIN_SIZE_MM / 2
+        yc, step = (y0 + y1) / 2, BIN_SIZE_MM + 30
+        return {c: (x, yc + (i - 1) * step) for i, c in enumerate(ColorClass)}
+
+    def zones_extent(self) -> tuple[float, float, float, float]:
+        """x0, x1, y0, y1 of everything the zone views cover, mm."""
+        xs, ys = [], []
+        for v in self.views.values():
+            for u, w in ((0, 0), (v.width, v.height)):
+                x, y = v.to_xy(u, w)
+                xs.append(x)
+                ys.append(y)
+        return min(xs), max(xs), min(ys), max(ys)
 
     def bins(self) -> dict[ColorClass, list[SimItem]]:
         with self.lock:

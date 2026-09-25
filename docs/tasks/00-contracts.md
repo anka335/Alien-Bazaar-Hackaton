@@ -52,3 +52,5 @@ _None yet._
 
 - 2026-09-25: contracts, repo layout, config keys, and stack fixed in `architecture.md` (eye-in-hand, observation-driven loop, D-005 to D-009).
 - 2026-09-25: skeleton, `sorter.core`, simulator, wiring, placeholders for blocks 6 and 7, smoke test. Python 3.11 instead of 3.12 (D-010). Added to the contracts: `sorter.core.protocols`, `System`, backend factories `sorter.<package>.backend.create(cfg)`, config models in `sorter/<package>/config.py` (architecture.md → Wiring, Config).
+- 2026-09-25 (block 7): `app.py` passes `views=cfg.views` to `create_app` (ROIs on the decision frame); `pyproject.toml` adds `websockets` so uvicorn serves `/ws` (architecture.md → Wiring, D-012).
+- 2026-09-25 (block 7): the simulator renders a table scene under a moving wrist camera (`sorter.sim.scene`), clothes instead of discs; `sim.motion_s` is now per path segment (default 0.8), new `sim.vision_s` (0.4); `SimArm.start()` refills the box when everything is sorted (architecture.md → Simulator).

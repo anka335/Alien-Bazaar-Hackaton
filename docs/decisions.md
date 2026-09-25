@@ -78,3 +78,9 @@ Template:
 **Context:** The docs named the Seeed reBot Arm B601-DM (Damiao motors) and used DM specs. The team's arm is the B601-RS: RobStride motors, RS-06 on joints 1–3 and RS-00 on joints 4–6 and the gripper.
 **Decision:** Every reference to the arm means the B601-RS. Block 5 runs the SDK with `config/rebotarm_rs.yaml`; the transport is SocketCAN through a PEAK PCAN-USB (`can0`, 1 Mbit/s) on Linux, not a serial port. DM-only numbers (~767 mm reach, ±0.2 mm repeatability) are removed; the URDF gives a reach of roughly 0.6–0.7 m from the shoulder axis.
 **Consequences:** D-009 and D-010 still hold (the SDK's `estop()` disables the RS motors too; the Python < 3.12 limit is the SDK's). With the tool pointing straight down the TCP only reaches z ≲ 0.14 m above the base plate (URDF, not yet verified on the hardware), which constrains the look poses and the approach height (block 5 *Notes & risks*). `rebot_b601/` (standalone RS driver, IK, simulator, MCP server, 3D twin) can seed block 5's `ArmDriver`.
+
+## D-012: Dashboard is a static page with plain JS (2026-09-25)
+
+**Context:** React was considered for the dashboard. The page has one data source (`Status` over a WebSocket), two MJPEG `<img>` tags, a few buttons, and an event list. Overlays are drawn server-side.
+**Decision:** One static page (`index.html`, `app.js`, `style.css`) served by FastAPI, no framework, no build step, no CDN (it must work offline at the venue; the Barlow font, OFL, is vendored in `static/fonts/`). `websockets` is a dependency so uvicorn serves `/ws`; the page falls back to polling `/api/status` when the socket is down. If the page outgrows plain DOM code, Preact + htm vendored into `static/` is the next step, still without a build.
+**Consequences:** No Node toolchain on the demo laptop. The HTTP API stays the same whatever the frontend becomes.

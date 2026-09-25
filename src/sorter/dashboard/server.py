@@ -1,56 +1,108 @@
-"""Placeholder dashboard from block 0: status JSON, commands, a bare page. Block 7 replaces it.
+"""Dashboard: FastAPI server with a single static page. It depends only on the Hub.
 
 The HTTP API is in docs/architecture.md → Dashboard HTTP API.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import dataclasses
+import json
+import threading
+import time
+from collections.abc import AsyncIterator, Callable, Mapping
+from pathlib import Path
+from typing import Any
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request, WebSocket
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from sorter.camera.config import ViewConfig
 from sorter.core.hub import Hub
-from sorter.core.types import Command
+from sorter.core.types import Command, Decision, Status, Zone
 from sorter.dashboard.config import DashboardConfig
+from sorter.dashboard.render import PHASE_LABELS, encode_jpeg, placeholder, render_decision
 
-_PAGE = """<!doctype html>
-<html><head><meta charset="utf-8"><title>Sorter</title>
-<style>body{font:16px system-ui;margin:2em}button{font-size:1.1em;margin:.2em}
-#hold{background:#c00;color:#fff;font-weight:bold}pre{background:#eee;padding:1em}</style>
-</head><body>
-<h1>Sorter <small>(placeholder dashboard, block 7 replaces it)</small></h1>
-<div id="buttons"></div><pre id="status">…</pre>
-<script>
-const cmds = ["start","pause","resume","step","stop","reset","hold"];
-for (const c of cmds) {
-  const b = document.createElement("button"); b.textContent = c.toUpperCase(); b.id = c;
-  b.onclick = () => fetch("/api/command", {method: "POST",
-    headers: {"Content-Type": "application/json"}, body: JSON.stringify({cmd: c})});
-  document.getElementById("buttons").append(b);
-}
-setInterval(async () => {
-  const s = await (await fetch("/api/status")).json();
-  document.getElementById("status").textContent = JSON.stringify(s, null, 2);
-}, 300);
-</script></body></html>"""
+STATIC_DIR = Path(__file__).parent / "static"
+BOUNDARY = "frame"
 
 
 class CommandRequest(BaseModel):
     cmd: str
 
 
-def create_app(hub: Hub, cfg: DashboardConfig) -> FastAPI:
+def status_json(s: Status) -> dict[str, Any]:
+    """`Status` as JSON, plus `now` (monotonic, same clock as `Event.t`) for event ages."""
+    return {**jsonable_encoder(dataclasses.asdict(s)), "now": time.monotonic()}
+
+
+class Frames:
+    """JPEGs of the decision frame and the live feed. Each is encoded once and cached."""
+
+    def __init__(self, hub: Hub, cfg: DashboardConfig, rois: Mapping[Zone, list]):
+        self.hub, self.cfg, self.rois = hub, cfg, rois
+        self._lock = threading.Lock()
+        self._decision: tuple[Decision | None, bytes] | None = None
+        self._live: tuple[int | None, bytes] | None = None
+
+    def decision(self) -> bytes:
+        d = self.hub.decision()
+        with self._lock:
+            if self._decision is None or self._decision[0] is not d:
+                img = render_decision(d, self.rois) if d else placeholder("No decision yet")
+                self._decision = (d, encode_jpeg(img, self.cfg.jpeg_quality))
+            return self._decision[1]
+
+    def live(self) -> bytes:
+        f = self.hub.live_frame()
+        seq = f.seq if f else None
+        with self._lock:
+            if self._live is None or self._live[0] != seq:
+                img = f.color if f else placeholder("No camera frame")
+                self._live = (seq, encode_jpeg(img, self.cfg.jpeg_quality))
+            return self._live[1]
+
+
+def _part(jpeg: bytes) -> bytes:
+    # The boundary goes right after each frame, so browsers show it without waiting for the next.
+    head = f"Content-Type: image/jpeg\r\nContent-Length: {len(jpeg)}\r\n\r\n".encode()
+    return head + jpeg + f"\r\n--{BOUNDARY}\r\n".encode()
+
+
+async def mjpeg(
+    request: Request, next_jpeg: Callable[[], bytes], period_s: float
+) -> AsyncIterator[bytes]:
+    """multipart/x-mixed-replace body: a frame every `period_s` until the client disconnects."""
+    yield f"--{BOUNDARY}\r\n".encode()
+    while not await request.is_disconnected():
+        yield _part(await asyncio.to_thread(next_jpeg))
+        await asyncio.sleep(period_s)
+
+
+def create_app(
+    hub: Hub, cfg: DashboardConfig, views: Mapping[Zone, ViewConfig] | None = None
+) -> FastAPI:
+    """`views` gives the zone ROIs drawn on the decision frame (`cfg.views`)."""
     app = FastAPI(title="Sorter")
+    rois = {z: list(v.roi) for z, v in (views or {}).items()}
+    frames = Frames(hub, cfg, rois)
+    period_s = 1 / cfg.stream_fps
+    labels = json.dumps({p.value: label for p, label in PHASE_LABELS.items()})
+    page = (STATIC_DIR / "index.html").read_text().replace("__PHASE_LABELS__", labels)
+
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
-        return _PAGE
+        return page
 
     @app.get("/api/status")
     def status() -> dict:
-        return dataclasses.asdict(hub.status())
+        return status_json(hub.status())
 
     @app.post("/api/command")
     def command(req: CommandRequest) -> dict:
@@ -58,7 +110,51 @@ def create_app(hub: Hub, cfg: DashboardConfig) -> FastAPI:
             cmd = Command(req.cmd)
         except ValueError:
             raise HTTPException(400, f"unknown command {req.cmd!r}") from None
-        hub.send(cmd)
+        hub.send(cmd)  # HOLD calls arm.hold() right here, in this worker thread
         return {"ok": True}
+
+    @app.websocket("/ws")
+    async def ws(websocket: WebSocket) -> None:
+        await websocket.accept()
+
+        async def push() -> None:
+            last = None
+            while True:
+                s = hub.status()
+                if s != last:
+                    await websocket.send_json(status_json(s))
+                    last = s
+                await asyncio.sleep(1 / cfg.status_hz)
+
+        task = asyncio.create_task(push())
+        try:
+            while (await websocket.receive())["type"] != "websocket.disconnect":
+                pass
+        finally:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+
+    def stream(next_jpeg: Callable[[], bytes]):
+        def endpoint(request: Request) -> StreamingResponse:
+            return StreamingResponse(
+                mjpeg(request, next_jpeg, period_s),
+                media_type=f"multipart/x-mixed-replace; boundary={BOUNDARY}",
+                headers={"Cache-Control": "no-store"},
+            )
+
+        return endpoint
+
+    def snapshot(next_jpeg: Callable[[], bytes]):
+        def endpoint() -> Response:
+            return Response(
+                next_jpeg(), media_type="image/jpeg", headers={"Cache-Control": "no-store"}
+            )
+
+        return endpoint
+
+    for name, fn in (("decision", frames.decision), ("live", frames.live)):
+        app.add_api_route(f"/stream/{name}.mjpg", stream(fn), methods=["GET"])
+        app.add_api_route(f"/snapshot/{name}.jpg", snapshot(fn), methods=["GET"])
 
     return app

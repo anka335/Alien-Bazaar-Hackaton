@@ -88,7 +88,12 @@ def run(cfg: Config, *, sim: bool = False, dashboard: bool = True, autostart: bo
 
         d = system.cfg.dashboard
         server = uvicorn.Server(
-            uvicorn.Config(create_app(system.hub, d), host=d.host, port=d.port, log_level="warning")
+            uvicorn.Config(
+                create_app(system.hub, d, views=system.cfg.views),
+                host=d.host,
+                port=d.port,
+                log_level="warning",
+            )
         )
         threading.Thread(target=server.run, name="dashboard", daemon=True).start()
         print(f"Dashboard: http://{d.host}:{d.port}", flush=True)

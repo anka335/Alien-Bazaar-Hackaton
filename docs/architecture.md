@@ -396,13 +396,14 @@ class Hub:
 | Endpoint | Content |
 | --- | --- |
 | `GET /` | Single page, no build step |
-| `GET /api/status` | `Status` as JSON |
-| `WS /ws` | `Status` pushed on change, at most ~5 Hz |
-| `GET /stream/decision.mjpg` | Last decision frame with overlay and ROI drawn server-side |
-| `GET /stream/live.mjpg` | Live wrist camera (`hub.live_frame()`) |
+| `GET /api/status` | `Status` as JSON, plus `now` (`time.monotonic()`, the clock of `Event.t`) for event ages |
+| `WS /ws` | The same JSON, pushed on change, at most `dashboard.status_hz` (5 Hz) |
+| `GET /stream/decision.mjpg` | Last decision frame with the zone ROI (`views.<zone>.roi`), the overlay, and a caption strip (phase + `summary`) drawn server-side |
+| `GET /stream/live.mjpg` | Live wrist camera (`hub.live_frame()`), at `dashboard.stream_fps` |
+| `GET /snapshot/decision.jpg`, `GET /snapshot/live.jpg` | One JPEG of the same images |
 | `POST /api/command` | `{"cmd": "start" \| "pause" \| "resume" \| "step" \| "stop" \| "hold" \| "reset"}` |
 
-The decision frame is the main panel: the wrist feed moves with the arm, and overlays only match the frame they were computed on. An optional fixed scene webcam for the audience can be added by block 7 (`dashboard.scene_camera`), with no effect on the loop.
+The decision frame is the main panel: the wrist feed moves with the arm, and overlays only match the frame they were computed on. The caption is part of the image for the same reason. Each decision is rendered and encoded once. An optional fixed scene webcam for the audience can be added by block 7 (`dashboard.scene_camera`, not implemented), with no effect on the loop.
 
 ## Threads and process
 
@@ -425,7 +426,7 @@ Entry points each block provides:
 | --- | --- |
 | 1, 2, 3, 4, 5 | `sorter.<package>.backend.create(cfg: Config) -> <Protocol>`: the real backend. Until the module exists, `backends.<name>: real` fails with a clear error |
 | 6 | `sorter.orchestrator.state_machine.StateMachine(system)` with `run(stop: threading.Event)`, the loop for the state machine thread |
-| 7 | `sorter.dashboard.server.create_app(hub, cfg.dashboard) -> FastAPI` |
+| 7 | `sorter.dashboard.server.create_app(hub, cfg.dashboard, views=cfg.views) -> FastAPI` (`views` gives the ROIs drawn on the decision frame) |
 
 Package `__init__.py` files stay empty: `sorter.core.config` imports every block's config model, so an import in an `__init__` can create a cycle. Import driver SDKs inside `backend.create`, so sim runs don't need them.
 
@@ -438,7 +439,7 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 | Key | Owner | Content |
 | --- | --- | --- |
 | `backends` | 0 | Per component `real` \| `sim`: `camera`, `arm`, `calibration`, `box_detector`, `color_classifier`. Swap stubs one at a time during integration |
-| `sim` | 0 | Simulator world: `seed`, `items` (colors in the box), `miss_prob`, `double_prob`, `motion_s`, image size, `cam_height_mm`, `item_radius_mm`, `zones.<zone>` (`center_mm`, `width_mm`, `surface_z_mm`) |
+| `sim` | 0 | Simulator world: `seed`, `items` (colors in the box), `miss_prob`, `double_prob`, `motion_s` (per path segment), `vision_s` (sim vision delay), image size, `cam_height_mm`, `item_radius_mm`, `zones.<zone>` (`center_mm`, `width_mm`, `surface_z_mm`) |
 | `camera` | 1 | Device type, serial, resolution, fps, exposure / white balance |
 | `views.<zone>.roi` | 1 | Pixel polygon of the zone in its look pose, excluding the gripper fingers (`rig.yaml`) |
 | `calibration` | 2 | `hand_eye` (the transform, from `hand_eye.yaml`) |
@@ -448,7 +449,7 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 | `poses` | 5 | Joint angles (rad): `rest`, `home`, `look_box`, `look_bg`, `place_bg`, `bin_light`, `bin_dark`, `bin_colored` (`rig.yaml`) |
 | `zones.<zone>` | 5 | `workspace_mm` (XY polygon, arm frame), `z_floor_mm`, `grasp_depth_mm`, `approach_mm` (`rig.yaml`) |
 | `state_machine` | 6 | `empty_confirmations`, `max_consecutive_failures`, `low_confidence`, `save_runs`, `runs_dir` |
-| `dashboard` | 7 | Host, port, stream fps, JPEG quality, optional `scene_camera` |
+| `dashboard` | 7 | `host`, `port`, `stream_fps`, `jpeg_quality`, `status_hz` |
 
 ## Recording format (block 0)
 
@@ -462,10 +463,10 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 
 `SimWorld` holds items (position in arm frame, color, height), the bins, and the zone whose look pose the arm is at. All sim components share one world. No physics, no 3D.
 
-- `SimArm` implements `ArmController` directly: `pick` grabs the highest item near the target, misses with `sim.miss_prob`, grabs two items from the box with `sim.double_prob`; `place_on_background` / `drop_to_bin` move the gripper content. A target outside the zone view raises `TargetRejected`. `hold()` interrupts a motion and blocks motions until `recover()`. Each motion takes `sim.motion_s` seconds.
-- `SimCamera` renders the zone the arm looks at: colored discs on the zone surface (gray background, brown box), plus depth. Between look poses it returns a dark frame with no depth.
+- `SimArm` implements `ArmController` directly: `pick` grabs the highest item near the target, misses with `sim.miss_prob`, grabs two items from the box with `sim.double_prob`; `place_on_background` / `drop_to_bin` move the gripper content. A target outside the zone view raises `TargetRejected`. `hold()` interrupts a motion and blocks motions until `recover()`. Each motion is a camera path of one or more segments (a pick: above the target, down, up), `sim.motion_s` seconds each. `start()` puts every item back in the box when all of them are in bins, so the next run has something to sort.
+- `SimCamera` renders what the wrist camera sees wherever the arm is (`sorter.sim.scene`): a table rendered once (wood, a cardboard box, the gray mat, three bins), crumpled cloth sprites with shadows, the gripper fingers at the bottom of the frame (no depth there) and the item they hold, plus depth. The camera follows the arm's path smoothly, so the live feed moves between poses. At a look pose the image matches `ZoneView` exactly, which sim vision and sim calibration use.
 - `SimCalibration` is a fixed linear pixel ↔ XY mapping per zone; Z comes from depth.
-- Sim vision (`SimBoxDetector`, `SimColorClassifier`) reads the world directly and returns pixels, with perfect colors.
+- Sim vision (`SimBoxDetector`, `SimColorClassifier`) reads the world directly and returns pixels, with perfect colors, after `sim.vision_s`.
 
 Each sim component is selected independently through `backends`, so a real component can run against the rest of the sim (e.g. real vision on sim frames).
 
@@ -483,7 +484,7 @@ Each sim component is selected independently through `backends`, so a real compo
 | `src/sorter/color_classifier/` (incl. stats tool) | 4 |
 | `src/sorter/arm/` (driver, mock driver, controller, pose teaching tool) | 5 |
 | `src/sorter/orchestrator/` (state machine, run log) | 6 |
-| `src/sorter/dashboard/` (server, static page; block 0 left a placeholder) | 7 |
+| `src/sorter/dashboard/` (server, renderer, `static/` page) | 7 |
 | `src/sorter/<package>/config.py` | The block that owns the package |
 | `tests/<package>/` | Same as the package |
 | `tests/conftest.py` (shared fixtures) | 0 |
