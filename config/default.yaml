@@ -41,5 +41,8 @@ state_machine:       # block 6
   runs_dir: data/runs
 
 dashboard:           # block 7
-  host: 127.0.0.1
+  host: 127.0.0.1    # 0.0.0.0 to open the dashboard from another device
   port: 8000
+  stream_fps: 10     # live wrist feed and decision frame streams
+  jpeg_quality: 80
+  status_hz: 5       # max rate of status pushes over /ws
