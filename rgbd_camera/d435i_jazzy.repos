@@ -1,0 +1,6 @@
+repositories:
+  src/realsense-ros:
+    type: git
+    url: https://github.com/realsenseai/realsense-ros.git
+    version: 9a11121700cb4780e273e34141f6402fe184321d
+

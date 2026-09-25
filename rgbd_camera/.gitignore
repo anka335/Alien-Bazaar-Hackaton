@@ -1,0 +1,9 @@
+build/
+install/
+log/
+
+# Re-fetch these pinned upstream repositories with vcs import.
+src/realsense-ros/
+src/yolo_ros/
+src/rgbd_camera_bringup/models/
+
