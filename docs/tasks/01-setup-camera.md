@@ -39,13 +39,13 @@ A fixed, repeatable physical rig with the camera rigidly mounted on the wrist, a
 
 ## Notes & risks
 
-- **Minimum depth range.** The look pose must keep the zone farther than the camera's minimum range (D405: ~7 cm, D435: ~28 cm), including the top of a full pile.
+- **Minimum depth range.** For the D435i, the specified minimum-Z depends on resolution: approximately 17.5 cm at 640x480 (the configured profile) and 28 cm at 1280x720. Keep the nearest point, including the top of a full pile, beyond the applicable minimum plus a measured safety margin.
 - The gripper fingers are at fixed pixels in every frame. Keep them out of the ROIs.
 - Datasets taken by hand from other viewpoints are fine to start, but only look-pose recordings match runtime.
 
 ## Open questions
 
-- Camera model? Where does the full dataset live (not in git if large)?
+- Where does the full dataset live (not in git if large)?
 
 ## Requests from other blocks
 
@@ -54,4 +54,4 @@ _None yet._
 ## Log
 
 - 2026-09-25: camera moved from an overhead stand to the wrist (D-006); zones fixed (D-007); ROI and record tools added to scope.
-- 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/camera/config.py` (placeholder). Real backend: `sorter/camera/backend.py` → `create(cfg) -> Camera`. See architecture.md → Wiring.
+- 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/camera/config.py` (placeholder). The real backend still needs to be implemented at `sorter/camera/backend.py` with `create(cfg) -> Camera`. See architecture.md → Wiring.
