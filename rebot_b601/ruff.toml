@@ -1,0 +1,3 @@
+# rebot_b601 is a self-contained, standalone package (reBot Arm B601-RS) that keeps its own style.
+# Keep it out of the repo-wide `ruff check . && ruff format .` run so it never changes the team's lint results.
+exclude = ["*"]

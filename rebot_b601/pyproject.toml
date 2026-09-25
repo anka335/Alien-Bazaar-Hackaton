@@ -1,0 +1,17 @@
+[project]
+name = "rebot-b601"
+version = "0.1.0"
+description = "Inverse kinematics, motion scripts and an MCP server for the reBot Arm B601-RS"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26", "mcp>=1.10,<2", "motorbridge"]
+
+[project.scripts]
+rebot-b601 = "rebot_b601.cli:main"
+rebot-b601-mcp = "rebot_b601.mcp_server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["rebot_b601"]
