@@ -1,0 +1,5 @@
+# Fixed rig, committed (D-007). Empty until measured on the real rig:
+# views: block 1 (ROI tool); poses and zones: block 5 (pose teaching tool).
+views: {}
+poses: {}
+zones: {}

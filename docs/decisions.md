@@ -66,3 +66,9 @@ Template:
 **Context:** The SDK's `estop()` disables the motors, and the arm falls onto the table and the clothes.
 **Decision:** The dashboard stop button and Ctrl+C call `hold()` (freeze joint targets at the current position). A hardware e-stop switch cuts power when needed. Shutdown moves to a `rest` pose before disabling.
 **Consequences:** Stopping is safe for the hardware in normal cases. After a hold, `recover()` is needed before any motion.
+
+## D-010: Python 3.11; the arm SDK is added by block 5 (2026-09-25)
+
+**Context:** D-005 chose Python 3.12, but the arm SDK `reBotArm_control_py` declares `requires-python = ">=3.10,<3.12"`. It also has no `[build-system]` and keeps `config/` and `urdf/` next to the package, so it can't be a plain git dependency.
+**Decision:** Python 3.11 for the whole project (supersedes the version in D-005; the rest of D-005 stays). `pyproject.toml` does not depend on the SDK yet: block 5 adds it (a clone next to the repo, installed as a path / editable dependency) together with the real arm backend.
+**Consequences:** One process with the SDK stays possible. Sim runs and blocks 0–4, 6, 7 install on any laptop without Pinocchio or the USB-CAN stack.

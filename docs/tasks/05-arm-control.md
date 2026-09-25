@@ -38,6 +38,7 @@ Safe, blocking, high-level arm operations for the state machine, on the Seeed re
 - SDK units: metres and radians. The SDK's "home" is all joints at 0; ours is the `home` pose from config.
 - The camera on the wrist descends with the gripper. Check that it clears the box walls at the wall margin used by block 3.
 - The Seeed docs recommend Ubuntu; check the USB-CAN adapter and Pinocchio on the team laptop early.
+- The SDK requires Python < 3.12 and has no `[build-system]` (D-010): clone it next to the repo and add it as a path / editable dependency (e.g. `uv add --editable ../reBotArm_control_py`, may need a small `[build-system]` patch). Its `config/` and `urdf/` are loaded by relative path; check that they are found.
 
 ## Open questions
 
@@ -50,3 +51,4 @@ _None yet._
 ## Log
 
 - 2026-09-25: arm fixed (reBot B601-DM); `park()` replaced by `look(zone)`; `pick(target, zone) -> PickResult`; `hold` / `recover` instead of e-stop (D-006, D-009).
+- 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/arm/config.py` (placeholder). Real backend: `sorter/arm/backend.py` → `create(cfg) -> ArmController`. Python is 3.11 and the SDK is not in `pyproject.toml` yet: this block adds it (D-010). See architecture.md → Wiring.

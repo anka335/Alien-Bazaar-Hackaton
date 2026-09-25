@@ -45,3 +45,4 @@ _None yet._
 ## Log
 
 - 2026-09-25: runs on the same laptop in the same process (D-005); main panel is the decision frame (wrist camera, D-006); e-stop is HOLD (D-009); HTTP API fixed.
+- 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/dashboard/config.py` (placeholder). A placeholder server is in `sorter/dashboard/server.py` (`create_app(hub, cfg)`: page, `/api/status`, `/api/command`); replace it, keep the entry point. See architecture.md → Wiring.

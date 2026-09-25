@@ -50,3 +50,4 @@ _None yet._
 ## Log
 
 - 2026-09-25: contract fixed: `classify` returns all blobs (`items`, largest first) instead of one item; the re-grasp point is the highest point inside the blob (D-008).
+- 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/color_classifier/config.py` (placeholder). Real backend: `sorter/color_classifier/backend.py` → `create(cfg) -> ColorClassifier`. See architecture.md → Wiring.

@@ -54,3 +54,4 @@ _None yet._
 ## Log
 
 - 2026-09-25: camera moved from an overhead stand to the wrist (D-006); zones fixed (D-007); ROI and record tools added to scope.
+- 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/camera/config.py` (placeholder). Real backend: `sorter/camera/backend.py` → `create(cfg) -> Camera`. See architecture.md → Wiring.
