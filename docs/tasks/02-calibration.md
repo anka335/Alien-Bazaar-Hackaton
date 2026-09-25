@@ -1,7 +1,7 @@
 # Block 2: Calibration
 
 **Status:** todo · **Owner:** — · **Branch:** —
-**Owned paths:** _TBD in block 0_ (calibration module, calibration tool)
+**Owned paths:** `src/sorter/calibration/`, `tests/calibration/`, `config/hand_eye.yaml`, `config/default.yaml` → `calibration`
 
 ## Goal
 
@@ -9,31 +9,30 @@ Convert camera observations into arm coordinates accurately enough to grasp clot
 
 ## Scope
 
-- [ ] Choose the method and record it in `docs/decisions.md`:
-  - **3D (recommended with depth camera):** pixel + depth → 3D camera point via intrinsics, then a rigid camera→arm transform fitted from ≥4 point pairs (SVD/Kabsch). Gives X, Y and Z.
-  - **Fallback, 2D homography:** pixel → arm XY on the table plane. Exact for one plane only.
-- [ ] Calibration tool: for each reference point, move the arm tip onto a marker, read the arm position, mark the same point in the image. Save the result to a file.
-- [ ] Load calibration at startup; conversion API per the block 0 contract.
-- [ ] Verify accuracy with held-out points across the whole working area (box corners, box center, background).
+- [ ] Hand-eye calibration, eye-in-hand ([D-006](../decisions.md)): get `T_flange_cam`. Start from the Seeed script (`collect_handeye_eih.py`: ArUco marker, automatic poses, Tsai) and port or wrap it. Its output is in metres; convert to mm.
+- [ ] Make sure the result is relative to the same flange frame (`end_link`) that `ArmController.ee_pose()` returns.
+- [ ] Save to `config/hand_eye.yaml`: 4×4 in mm, `rmse_mm`, `method`, `camera_serial`, `created`. The file is committed ([D-007](../decisions.md)).
+- [ ] Implement the `Calibration` contract: `cam_pose`, `to_arm`, `to_pixel`.
+- [ ] Verification tool (touch test): from a look pose, click a point in the image (or detect a marker), move the TCP there with the arm, and measure the error. Cover box corners, box center, and background.
 
 ## Depends on / Unblocks
 
-- Depends on: 1 (fixed rig, camera), 5 (move the arm to points and read positions), 0 (contract).
+- Depends on: 1 (camera, rigid wrist mount), 5 (FK, moving the arm, TCP offset), 0 (contract).
 - Unblocks: integration.
 
 ## Acceptance criteria
 
-- Error on held-out points ≤ _N_ mm across box and background. Set N from the gripper's tolerance, e.g. 10 mm.
-- Recalibration after a rig bump takes ≤ 10 minutes, and the steps are written in this file.
+- Touch-test error ≤ _N_ mm over the box and the background, from the look poses. Set N from the gripper tolerance, e.g. 10 mm.
+- Recalibration takes ≤ 15 minutes, and the steps are written in this file.
 
 ## Notes & risks
 
-- Any shift of the camera or arm invalidates the calibration. Fix the mounts well.
-- Calibration results are machine/rig-specific and are not committed (see `AGENTS.md`).
+- The error budget includes FK accuracy, hand-eye accuracy, and depth noise. Depth error grows with distance, so the look poses should be as low as the camera's minimum range allows.
+- Only a change of the camera mount invalidates the hand-eye result. Moving the rig doesn't, as long as the zones stay at their positions.
 
 ## Open questions
 
-- Can the arm SDK report the current tool position? If not, points must be commanded, not jogged.
+- Does the Seeed script run with our camera model as is?
 
 ## Requests from other blocks
 
@@ -41,4 +40,4 @@ _None yet._
 
 ## Log
 
-_Significant changes to this block's scope or contracts, one line each (date: what, why)._
+- 2026-09-25: method changed to eye-in-hand hand-eye calibration (D-006); API now `cam_pose` / `to_arm(obs, point)` / `to_pixel`; result committed in `config/hand_eye.yaml` (D-007).

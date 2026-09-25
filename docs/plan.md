@@ -28,6 +28,7 @@ graph LR
   B0 --> B7[7 Dashboard]
   B1[1 Setup & camera] --> B2[2 Calibration]
   B5 --> B2
+  B5 -. look poses .-> B1
   B1 -. real frames .-> B3
   B1 -. real frames .-> B4
   B2 --> INT((Integration))
@@ -40,10 +41,10 @@ graph LR
 ```
 
 - **Block 0 comes first and is short.** It fixes the stack, the repo layout, the interfaces, and the stubs. After it, blocks 3–7 run fully in parallel.
-- **Block 1 is physical work** and runs in parallel with block 0.
-- **Block 2** needs the rig from block 1 and basic arm motion from block 5 (to touch reference points).
-- **Blocks 3 and 4** start on photos or recorded frames and switch to live frames once block 1 is ready.
-- **Block 6** is developed against stubs. Real integration needs 2–5.
+- **Block 1 is physical work** (zones, wrist camera mount, lamp) and runs in parallel with block 0. Its ROIs and datasets need the look poses from block 5.
+- **Block 2** needs the camera mount from block 1 and FK + motion from block 5. It reuses the Seeed hand-eye script (D-006).
+- **Blocks 3 and 4** start on photos or recorded frames and switch to look-pose recordings and live frames once blocks 1 and 5 are ready.
+- **Block 6** is developed against the simulator. Real integration needs 2–5.
 - **Block 8** starts early for one thing: choose the demo clothes on day 1, since thresholds and grasp depth are tuned on them.
 
 ## Suggested order

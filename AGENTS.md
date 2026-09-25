@@ -4,7 +4,7 @@ Instructions for AI coding agents (Claude Code, Codex, Cursor, …) and humans w
 
 ## Project in one paragraph
 
-A robotic arm sorts clothes by color: it picks an item from a mixed box, uses an overhead RGB-D camera to find the grasp point, places the item on a uniform background, classifies its color (light / dark / colored), and drops it into one of 3 bins. A live dashboard shows the process. This is a **hackathon project**: favor simple, working, demo-able solutions over generality. Details are in [README.md](README.md).
+A robotic arm sorts clothes by color: it picks an item from a mixed box, uses an RGB-D camera on its wrist to find the grasp point, places the item on a uniform background, classifies its color (light / dark / colored), and drops it into one of 3 bins. A live dashboard shows the process. This is a **hackathon project**: favor simple, working, demo-able solutions over generality. Details are in [README.md](README.md).
 
 ## Where things are
 
@@ -18,7 +18,7 @@ A robotic arm sorts clothes by color: it picks an item from a mixed box, uses an
 - Vision uses **classic CV plus depth**, not trained models, unless a block's task file says otherwise.
 - Vision outputs **pixel coordinates**. Only the calibration module converts pixels to arm coordinates.
 - Every hardware-facing module has a **stub/mock** so other blocks can develop and test without hardware.
-- Safety comes first: every arm target is clamped to workspace limits, and an emergency stop is always available.
+- Safety comes first: every arm target is checked against workspace limits, and a stop (hold) is always available. Never disable the motors except at the rest pose: the arm falls.
 
 ## Parallel workflow
 
@@ -57,6 +57,6 @@ Keep docs short and factual. Describe the current state, not history: history li
 ## Conventions
 
 - Commit messages: English, [Conventional Commits](https://www.conventionalcommits.org/) (`feat(vision): ...`, `fix(arm): ...`, `docs: ...`). Use the block name as scope.
-- Code language, package layout, tooling, and test runner are defined by block 0. Once fixed, they are documented here.
+- Python 3.12, uv, pytest, ruff ([D-005](docs/decisions.md)). Package layout and path ownership: [docs/architecture.md → Repo layout](docs/architecture.md#repo-layout). Install / run / test commands are added here by block 0.
 - Run the tests relevant to your change (prefer single tests or files over the full suite) before committing.
 - Never commit machine-specific artifacts (calibration results, recorded frames, local config overrides) unless a task file says so.

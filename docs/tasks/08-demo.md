@@ -1,7 +1,7 @@
 # Block 8: Demo Preparation
 
 **Status:** todo · **Owner:** — · **Branch:** —
-**Owned paths:** `docs/demo.md` (runbook), demo config overrides
+**Owned paths:** `docs/demo.md` (runbook). Tuned values go into the config sections of the owning blocks.
 
 ## Goal
 
@@ -12,7 +12,7 @@ A demo that works on stage, and a backup if it doesn't.
 - [ ] **Day 1:** choose the demo clothes. Unambiguous colors, fabrics that grasp reliably, no mid-gray. Share them with blocks 3, 4, 5 for tuning.
 - [ ] Full end-to-end rehearsals. Log success rate and cycle time per run here.
 - [ ] Record a backup video of a successful run.
-- [ ] Demo runbook (`docs/demo.md`): rig setup, calibration check, startup commands, reset between runs, what to do on failure (step mode, e-stop, restart).
+- [ ] Demo runbook (`docs/demo.md`): rig setup, calibration touch test, startup commands, reset between runs, what to do on failure (step mode, HOLD, hardware e-stop, restart).
 - [ ] Pitch notes: problem, how it works, what's next (wash–dry–sort pipeline).
 
 ## Depends on / Unblocks
@@ -27,7 +27,7 @@ A demo that works on stage, and a backup if it doesn't.
 ## Notes & risks
 
 - Venue lighting differs from the lab. The dedicated lamp should dominate. Re-check thresholds on site.
-- Transport may shift the rig. Budget time for recalibration (block 2).
+- Transport may shift the zones. Re-place them on the tape marks and run the touch test. The hand-eye result survives transport as long as the camera mount is untouched (D-006).
 
 ## Open questions
 
@@ -35,4 +35,4 @@ A demo that works on stage, and a backup if it doesn't.
 
 ## Log
 
-_Significant changes to this block's scope or contracts, one line each (date: what, why)._
+- 2026-09-25: runbook covers the touch test and HOLD instead of full recalibration and e-stop (D-006, D-009).

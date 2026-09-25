@@ -1,41 +1,47 @@
 # Block 5: Arm Control
 
 **Status:** todo · **Owner:** — · **Branch:** —
-**Owned paths:** _TBD in block 0_ (arm driver(s), arm controller, pose tools)
+**Owned paths:** `src/sorter/arm/`, `tests/arm/`, `config/default.yaml` → `arm`, `config/rig.yaml` → `poses`, `zones`
 
 ## Goal
 
-Safe, blocking, high-level arm operations callable from the state machine.
+Safe, blocking, high-level arm operations for the state machine, on the Seeed reBot Arm B601-DM.
 
 ## Scope
 
-- [ ] Control the arm from code (SDK / ROS / serial). Low-level driver behind the block 0 interface.
-- [ ] Record fixed poses into config: home, above box, above background, bin light / dark / colored. Provide a tool to teach/record poses.
-- [ ] High-level operations: `pick(point, depth)`, `place_on_background()`, `drop_to_bin(color)`, `home()`. Exact signatures per the block 0 contract.
-- [ ] Every motion blocks until finished. The state machine takes a frame right after.
-- [ ] **Safety:** clamp all targets to workspace limits (table, box walls); travel at a safe height between poses; emergency stop callable from the dashboard and from the keyboard.
-- [ ] A "park" pose that moves the arm out of the camera's view before frames are taken.
-- [ ] Tune grasp depth, approach, and grip force on real clothes. Record the working values in config and here.
-- [ ] Mock driver for other blocks (part of block 0 stubs, maintained here).
+- [ ] `ArmDriver`: a thin wrapper over `reBotArm_control_py` (`RebotArm` + `RebotArmEndPose`), internal to this block, plus a mock driver for unit tests. It converts mm ↔ m. Methods: blocking joint move (min-jerk, like the SDK's `safe_home`), blocking linear Cartesian move (`move_to_traj` + wait until still), gripper set/read, joints, FK, hold, disable, gravity compensation on/off.
+- [ ] `ArmController` per [architecture.md](../architecture.md): `start`, `shutdown`, `home`, `look`, `pick`, `place_on_background`, `drop_to_bin`, `ee_pose`, `joints`, `hold`, `recover`.
+- [ ] Pose teaching tool: gravity-compensation mode, move the arm by hand, save joint angles to `config/rig.yaml` → `poses` (`rest`, `home`, `look_box`, `look_bg`, `place_bg`, `bin_light`, `bin_dark`, `bin_colored`).
+- [ ] Zones in `config/rig.yaml` → `zones.<zone>`: `workspace_mm` (XY polygon), `z_floor_mm`, `grasp_depth_mm`, `approach_mm`.
+- [ ] `pick`: reject XY outside the zone workspace or on IK failure (`TargetRejected`, no motion); clamp Z to `z_floor_mm`; approach from above with the top-down orientation, descend linearly, close, lift to `safe_z_mm`. Return `PickResult` from the gripper opening.
+- [ ] TCP offset (`arm.tcp_offset_mm`): targets are fingertip positions; convert to the flange for IK.
+- [ ] **Hold, not disable** ([D-009](../decisions.md)): `hold()` freezes joint targets at the measured position, is thread-safe, and makes every later motion raise `EStopped` until `recover()`. `recover()` lifts to safe Z, opens the gripper above the background, and goes home.
+- [ ] `shutdown()`: go to `rest`, then disable. Never disable anywhere else.
+- [ ] Tune grasp depth, approach, gripper force, and release height on real clothes. Record the working values in config and here.
 
 ## Depends on / Unblocks
 
 - Depends on: 0 (interface). Hardware.
-- Unblocks: 2 (reference-point motion), integration.
+- Unblocks: 2 (FK, moving to calibration poses), look poses for 1, integration.
 
 ## Acceptance criteria
 
-- All named poses reachable repeatedly. Pick/place/drop cycle works on real clothes with hard-coded points.
-- A target outside the workspace is clamped or rejected, never executed. E-stop halts motion.
+- All named poses reachable repeatedly. The pick / place / drop cycle works on real clothes with hard-coded points.
+- A target outside the zone workspace is rejected without motion. Z never goes below `z_floor_mm`.
+- `hold()` from another thread stops motion within a fraction of a second, and the arm stays up. `recover()` resumes.
 
 ## Notes & risks
 
-- Start with the **manual grasp test** (see block 3). It is the earliest signal of whether the approach works.
-- Check reach: box, background, and all 3 bins inside the reachable area with the gripper pointing down.
+- **Start with the manual grasp test** (see block 3). It is the earliest signal of whether the approach works. Include the re-grasp from the flat background: a parallel gripper on flat cloth is harder than on a pile.
+- **The SDK's `estop()` disables the motors, and the arm falls.** Use it only in `shutdown()` after `rest`. The physical e-stop switch is the power cut.
+- `move_to_traj` is non-blocking and returns `False` on IK failure. `move_to_ik` jumps to the target without a trajectory; don't use it for motion.
+- SDK units: metres and radians. The SDK's "home" is all joints at 0; ours is the `home` pose from config.
+- The camera on the wrist descends with the gripper. Check that it clears the box walls at the wall margin used by block 3.
+- The Seeed docs recommend Ubuntu; check the USB-CAN adapter and Pinocchio on the team laptop early.
 
 ## Open questions
 
-- Arm model, DOF, SDK, gripper type? Does the SDK expose Cartesian moves and the current position?
+- Gripper force and `empty_below` threshold: can the gripper opening tell "holding cloth" from "empty" at all? If not, set it so `likely_empty` is never true.
 
 ## Requests from other blocks
 
@@ -43,4 +49,4 @@ _None yet._
 
 ## Log
 
-_Significant changes to this block's scope or contracts, one line each (date: what, why)._
+- 2026-09-25: arm fixed (reBot B601-DM); `park()` replaced by `look(zone)`; `pick(target, zone) -> PickResult`; `hold` / `recover` instead of e-stop (D-006, D-009).

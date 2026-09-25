@@ -2,7 +2,7 @@
 
 An autonomous robotic system that takes clothes from a mixed pile and sorts them by color.
 
-A robotic arm picks items one by one from a box of mixed clothing, using an overhead depth camera to locate a grasp point. Each item is placed on a uniform background area, where a color classifier determines whether it is **light**, **dark**, or **colored**. The arm then picks the item up again and drops it into the matching bin, repeating the cycle until the box is empty. A live dashboard shows the camera feed, detected grasp points and colors, the current system state, and item counts per bin.
+A robotic arm picks items one by one from a box of mixed clothing, using a depth camera mounted on its wrist to locate a grasp point. Each item is placed on a uniform background area, where a color classifier determines whether it is **light**, **dark**, or **colored**. The arm then picks the item up again and drops it into the matching bin, repeating the cycle until the box is empty. A live dashboard shows the camera feed, detected grasp points and colors, the current system state, and item counts per bin.
 
 This demo addresses the core challenge of automated laundry handling — picking and sorting deformable clothing items from a cluttered pile — as the first step toward a fully automated wash–dry–sort pipeline.
 
@@ -10,9 +10,9 @@ This demo addresses the core challenge of automated laundry handling — picking
 
 | Component | Details |
 | --- | --- |
-| Robot arm | model / SDK: _TBD_ |
-| Camera | overhead RGB-D (depth) camera, model: _TBD_ |
-| Work area | mixed-clothes box, uniform background area (mid-gray), 3 bins (light / dark / colored) |
+| Robot arm | [Seeed reBot Arm B601-DM](https://www.seeedstudio.com/reBot-Arm-B601-DM-p-6740.html): 6 DoF + parallel gripper, Python SDK [`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py) |
+| Camera | RGB-D (depth) camera mounted on the arm's wrist (eye-in-hand), model: _TBD_ |
+| Work area | at fixed positions: mixed-clothes box, uniform background area (mid-gray), 3 bins (light / dark / colored) |
 | Lighting | dedicated lamp for stable lighting |
 
 ## How it works
@@ -25,13 +25,13 @@ This demo addresses the core challenge of automated laundry handling — picking
       └──────────────── verify drop, repeat until box is empty ─────────┘
 ```
 
-1. **Pick from box.** Depth + color frame → grasp point in pixels → arm coordinates → pick.
+1. **Pick from box.** The arm looks at the box from a fixed pose → depth + color frame → grasp point in pixels → arm coordinates → pick.
 2. **Place on background.** An item on the background proves the grasp worked. An empty background means a missed grasp.
 3. **Classify.** Segment the item, classify it as light, dark, or colored, and find a re-grasp point.
 4. **Pick from background → drop into bin.**
-5. **Verify.** The background must be empty again before the bin counter goes up.
+5. **Verify.** The next look at the background must show one item fewer before the bin counter goes up.
 
-Vision works in **pixel coordinates**. Conversion to arm coordinates happens in one place (calibration). This lets vision be developed on recorded frames without the arm.
+Every cycle starts by looking at the background, so missed grasps, double grasps, and failed drops are all handled by what the camera sees. Vision works in **pixel coordinates**. Conversion to arm coordinates happens in one place (calibration). This lets vision be developed on recorded frames without the arm.
 
 ## Project plan
 

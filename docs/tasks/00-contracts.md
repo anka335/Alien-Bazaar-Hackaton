@@ -1,21 +1,24 @@
 # Block 0: Contracts & Skeleton
 
 **Status:** todo · **Owner:** — · **Branch:** —
-**Owned paths:** repo root config (build/tooling files), shared types module, `docs/architecture.md`
+**Owned paths:** `pyproject.toml`, `uv.lock`, `.gitignore`, tooling config, `src/sorter/core/`, `src/sorter/sim/`, `src/sorter/app.py`, `src/sorter/__main__.py`, `tests/core/`, `tests/sim/`, structure of `config/default.yaml`, `docs/architecture.md`
 
 ## Goal
 
-Make parallel work possible: fix the stack, the repo layout, and the interfaces between blocks, and provide stubs so every block can develop and test without hardware or other blocks.
+Make parallel work possible: implement the stack, repo layout, shared types, and stubs defined in [architecture.md](../architecture.md), so every block can develop and test without hardware or other blocks.
 
 ## Scope
 
-- [ ] Choose language, package manager, test runner, linter. Document them in `AGENTS.md` → *Conventions* and in `README.md` → *Getting started*.
-- [ ] Define the repo layout and the **directory ⇄ block ownership map** in `docs/architecture.md`. Fill *Owned paths* in every task file.
-- [ ] Define every contract listed in `docs/architecture.md` → *Contracts*: shared types, units, coordinate frames, "nothing found" signals, blocking semantics.
-- [ ] Config format and location, and which keys belong to which block.
-- [ ] Stubs/mocks for camera, arm, box detector, color classifier, calibration. A simple simulator is a bonus: a fake scene the fake arm can change, so the state machine runs end to end.
-- [ ] Entry point to run the system with stubs (e.g. `run --sim`).
-- [ ] A smoke test that runs the loop on stubs.
+- [x] Stack chosen: Python 3.12, uv, pytest, ruff, FastAPI ([D-005](../decisions.md)).
+- [x] Contracts, repo layout, and config keys defined in `docs/architecture.md`.
+- [ ] Project skeleton per _Repo layout_: `pyproject.toml` (depends on the arm SDK), package dirs with empty `__init__.py`, ruff + pytest config, `.gitignore` (`data/`, `config/local.yaml`).
+- [ ] `sorter.core`: `types`, `errors`, `config` (YAML merge + pydantic; each block's section model is a placeholder its owner fills in), `io` (`save_observation` / `load_observation`), `hub`, `observer`, `HubLogHandler`.
+- [ ] Protocols for `Camera`, `BoxDetector`, `ColorClassifier`, `Calibration`, `ArmController`.
+- [ ] Simulator (`sorter.sim`): `SimWorld`, `SimCamera`, `SimArm`, `SimCalibration`, sim vision. Per-component selection through `backends`.
+- [ ] `sorter/app.py`: build the system from config, start threads, Ctrl+C → hold → shutdown. CLI `python -m sorter run [--sim]`.
+- [ ] Minimal state machine and dashboard placeholders, enough for the smoke test. Blocks 6 and 7 replace them.
+- [ ] Smoke test: the loop sorts all sim items end to end.
+- [ ] `README.md` → _Getting started_, `AGENTS.md` → _Conventions_: install, run, test commands.
 
 ## Out of scope
 
@@ -23,24 +26,22 @@ Real implementations of any block.
 
 ## Depends on / Unblocks
 
-- Depends on: nothing. Hardware models (arm SDK, camera SDK) help to shape the interfaces; ask the team.
+- Depends on: nothing.
 - Unblocks: 3, 4, 5, 6, 7.
 
 ## Acceptance criteria
 
-- `docs/architecture.md` has no _TBD_ in *Contracts* and *Repo layout*.
-- A fresh clone can install and run the stub pipeline and its test with the commands from `README.md`.
-- Every task file has *Owned paths* filled in.
+- A fresh clone installs and runs `python -m sorter run --sim` and the smoke test with the commands from `README.md`.
+- The types in `sorter.core` match `docs/architecture.md`.
 
 ## Notes & risks
 
-- Keep interfaces minimal: only what the state machine and dashboard actually need. They will change during integration, and that's fine if the docs follow.
-- Interfaces are designed together with the team and agents. Propose, discuss, then commit.
+- Keep interfaces minimal. They will change during integration, and that's fine if `architecture.md` follows.
+- The arm SDK pulls Pinocchio. Check that `uv sync` works on the team laptops early.
 
 ## Open questions
 
-- Arm model and SDK? Camera model and SDK (RealSense / OAK-D / other)?
-- Single process with threads, or separate processes (e.g. dashboard as a separate service)?
+- Camera model? It decides the camera SDK dependency (Orbbec / RealSense).
 
 ## Requests from other blocks
 
@@ -48,4 +49,4 @@ _None yet._
 
 ## Log
 
-_Significant changes to this block's scope or contracts, one line each (date: what, why)._
+- 2026-09-25: contracts, repo layout, config keys, and stack fixed in `architecture.md` (eye-in-hand, observation-driven loop, D-005 to D-009).

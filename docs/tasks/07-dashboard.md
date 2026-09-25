@@ -1,7 +1,7 @@
 # Block 7: Dashboard
 
 **Status:** todo · **Owner:** — · **Branch:** —
-**Owned paths:** _TBD in block 0_ (dashboard server and frontend)
+**Owned paths:** `src/sorter/dashboard/`, `tests/dashboard/`, `config/default.yaml` → `dashboard`
 
 ## Goal
 
@@ -9,32 +9,34 @@ A live view that makes the demo understandable to the audience and gives the ope
 
 ## Scope
 
-- [ ] Live camera feed with overlays: box and background ROIs, detected grasp point, item mask/center, detected color label.
-- [ ] Optional depth view (colorized) next to the color feed.
-- [ ] Current system state, visually prominent.
+- [ ] FastAPI server and a single static page (no build step), with the HTTP API from [architecture.md](../architecture.md#dashboard-http-api-block-7). It depends only on the Hub.
+- [ ] Main panel: the last **decision frame** with the zone ROI and the overlay (mask, grasp point, color label) drawn server-side.
+- [ ] Small panel: live wrist camera feed. Optional: colorized depth.
+- [ ] Current phase (big), next phase, mode, cycle time.
 - [ ] Item counters per bin.
-- [ ] Controls: start / pause / step / **emergency stop** (big, always visible).
-- [ ] Recent events / error log.
-- [ ] Works on stubs / simulator before hardware is ready.
+- [ ] Controls: start / pause / resume / step / stop / reset, and a big, always visible **HOLD** button.
+- [ ] Recent events and the error, if any.
+- [ ] Works on the simulator before hardware is ready.
+- [ ] Optional: a fixed scene webcam for the audience (`dashboard.scene_camera`), since the wrist feed moves.
 
 ## Depends on / Unblocks
 
-- Depends on: 0 (status snapshot + control contract, stubs).
+- Depends on: 0 (Hub, contracts, simulator).
 - Unblocks: 8.
 
 ## Acceptance criteria
 
 - Readable from 3 meters on a projector or laptop screen.
-- Feed latency low enough that overlays match what the arm is doing.
-- E-stop from the dashboard stops the arm (verified on the real rig).
+- The decision frame and its overlay always match.
+- HOLD from the dashboard stops the arm, and it stays up (verified on the real rig).
 
 ## Notes & risks
 
-- Keep the tech simple (a single page, no build step, unless the team prefers otherwise). Record the choice in `docs/decisions.md`.
+- Keep the tech simple. MJPEG streams and a WebSocket for status are enough.
 
 ## Open questions
 
-- Runs on the same machine as the robot loop, or on a separate laptop/screen?
+_None._
 
 ## Requests from other blocks
 
@@ -42,4 +44,4 @@ _None yet._
 
 ## Log
 
-_Significant changes to this block's scope or contracts, one line each (date: what, why)._
+- 2026-09-25: runs on the same laptop in the same process (D-005); main panel is the decision frame (wrist camera, D-006); e-stop is HOLD (D-009); HTTP API fixed.
