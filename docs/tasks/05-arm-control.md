@@ -5,7 +5,7 @@
 
 ## Goal
 
-Safe, blocking, high-level arm operations for the state machine, on the Seeed reBot Arm B601-DM.
+Safe, blocking, high-level arm operations for the state machine, on the Seeed reBot Arm B601-RS (RobStride).
 
 ## Scope
 
@@ -47,8 +47,11 @@ Safe, blocking, high-level arm operations for the state machine, on the Seeed re
 ## Requests from other blocks
 
 _None yet._
+- **Hardware is the B601-RS (RobStride), not the DM** ([D-011](../decisions.md)). The SDK reads `config/rebotarm_rs.yaml` (selected by `hardware_yaml` in `config/rebotarm.yaml`): RS-06 on joints 1–3, RS-00 on joints 4–6 and the gripper (motor 7). On Linux bring `can0` up at 1 Mbit/s with the PCAN-USB adapter; there is no serial port (that is the DM path). Zero calibration is done once with Motorbridge Studio (`motorbridge-gateway`, which holds the bus: stop it before running the SDK). A standalone RS driver, IK and simulator that can seed `ArmDriver` lives in `rebot_b601/`.
+- **Top-down reach is limited** (computed from the URDF with `rebot_b601/`, not verified on the hardware): with the tool pointing straight down the TCP only reaches z ≲ 0.14 m above the base plate (x ≈ 0.1–0.45 m); pointing forward only z ≳ 0.15 m. Choose `look_*` poses, `safe_z_mm` and the approach height with this in mind, or relax the top-down requirement for the approach.
 
 ## Log
 
-- 2026-09-25: arm fixed (reBot B601-DM); `park()` replaced by `look(zone)`; `pick(target, zone) -> PickResult`; `hold` / `recover` instead of e-stop (D-006, D-009).
+- 2026-09-25: arm fixed (reBot B601-RS); `park()` replaced by `look(zone)`; `pick(target, zone) -> PickResult`; `hold` / `recover` instead of e-stop (D-006, D-009).
 - 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/arm/config.py` (placeholder). Real backend: `sorter/arm/backend.py` → `create(cfg) -> ArmController`. Python is 3.11 and the SDK is not in `pyproject.toml` yet: this block adds it (D-010). See architecture.md → Wiring.
+- 2026-09-25: corrected the arm model everywhere: it is the **B601-RS (RobStride)**, not the DM (Damiao) ([D-011](../decisions.md)); RS hardware notes and the top-down reach limit added to *Notes & risks*.

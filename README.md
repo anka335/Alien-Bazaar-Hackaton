@@ -10,7 +10,7 @@ This demo addresses the core challenge of automated laundry handling — picking
 
 | Component | Details |
 | --- | --- |
-| Robot arm | [Seeed reBot Arm B601-DM](https://www.seeedstudio.com/reBot-Arm-B601-DM-p-6740.html): 6 DoF + parallel gripper, Python SDK [`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py) |
+| Robot arm | Seeed reBot Arm B601-RS (RobStride motors): 6 DoF + parallel gripper, Python SDK [`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py) |
 | Camera | RGB-D (depth) camera mounted on the arm's wrist (eye-in-hand), model: _TBD_ |
 | Work area | at fixed positions: mixed-clothes box, uniform background area (mid-gray), 3 bins (light / dark / colored) |
 | Lighting | dedicated lamp for stable lighting |

@@ -4,7 +4,7 @@ Single source of truth for the contracts between blocks. Block 0 implements the 
 
 ## Physical setup
 
-- **Arm:** Seeed reBot Arm B601-DM (6 DoF + parallel gripper, ~767 mm reach, ±0.2 mm repeatability). USB→CAN, Python SDK [`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py) (Pinocchio IK/FK, metres + radians).
+- **Arm:** Seeed reBot Arm B601-RS (RobStride motors: RS-06 on joints 1–3, RS-00 on joints 4–6 and the gripper; 6 DoF + parallel gripper; reach roughly 0.6–0.7 m from the shoulder axis, from the URDF; see [D-011](decisions.md)). USB→CAN (PEAK PCAN-USB, SocketCAN `can0` at 1 Mbit/s on Linux), Python SDK [`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py) (Pinocchio IK/FK, metres + radians).
 - **Camera:** RGB-D, **mounted on the wrist** behind the gripper, looking along the gripper axis (eye-in-hand, [D-006](decisions.md)). Model _TBD_ (Seeed demos support Orbbec Gemini 2, RealSense D435i / D405).
 - **Zones at fixed positions** ([D-007](decisions.md)): mixed box, background area (mid-gray), 3 bins (light / dark / colored). The clothes inside the box lie arbitrarily.
 - The arm looks at a zone from a fixed **look pose** (`look_box`, `look_bg`). Because look poses are repeatable, pixel ROIs of each zone are constants in config.
