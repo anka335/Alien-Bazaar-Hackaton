@@ -1,0 +1,348 @@
+{
+ "source": "https://motorbridge.github.io/motorbridge-studio/resources/arm03/reBot_Lite_RS_with_gripper/urdf/reBot_Lite_RS_with_gripper.urdf",
+ "note": "third-party CAD (Seeed reBot Arm) fetched from Motorbridge Studio; do not redistribute",
+ "links": {
+  "base_link": [
+   {
+    "mesh": "meshes/base_link.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#b7bcc6"
+   }
+  ],
+  "link1": [
+   {
+    "mesh": "meshes/link1.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#b7bcc6"
+   }
+  ],
+  "link2": [
+   {
+    "mesh": "meshes/motor_2_3.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#4a4f58"
+   },
+   {
+    "mesh": "meshes/cnc2.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#c9ced6"
+   },
+   {
+    "mesh": "meshes/pla2_black.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#2a2d33"
+   },
+   {
+    "mesh": "meshes/pla2_green.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#2e9e5b"
+   }
+  ],
+  "link3": [
+   {
+    "mesh": "meshes/cnc3.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#c9ced6"
+   },
+   {
+    "mesh": "meshes/motor_4.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#4a4f58"
+   },
+   {
+    "mesh": "meshes/pla3_black.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#2a2d33"
+   },
+   {
+    "mesh": "meshes/pla3_green.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#2e9e5b"
+   }
+  ],
+  "link4": [
+   {
+    "mesh": "meshes/motor_5.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#4a4f58"
+   },
+   {
+    "mesh": "meshes/cnc4.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#c9ced6"
+   }
+  ],
+  "link5": [
+   {
+    "mesh": "meshes/motor_6.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#4a4f58"
+   },
+   {
+    "mesh": "meshes/cnc5.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#c9ced6"
+   },
+   {
+    "mesh": "meshes/pla5_green.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#2e9e5b"
+   }
+  ],
+  "link6": [
+   {
+    "mesh": "meshes/link6.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#b7bcc6"
+   }
+  ],
+  "gripper_end": [
+   {
+    "mesh": "meshes/pla7_green.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#2e9e5b"
+   },
+   {
+    "mesh": "meshes/cnc7.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#c9ced6"
+   },
+   {
+    "mesh": "meshes/motor_7.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#4a4f58"
+   }
+  ],
+  "gripper_left": [
+   {
+    "mesh": "meshes/pla_left.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#b7bcc6"
+   },
+   {
+    "mesh": "meshes/cnc_left.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#c9ced6"
+   }
+  ],
+  "gripper_right": [
+   {
+    "mesh": "meshes/pla_right.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#b7bcc6"
+   },
+   {
+    "mesh": "meshes/cnc_right.STL",
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "color": "#c9ced6"
+   }
+  ]
+ }
+}
