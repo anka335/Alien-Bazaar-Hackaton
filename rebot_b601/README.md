@@ -1,9 +1,9 @@
 # rebot_b601: IK, skrypty ruchu i serwer MCP dla reBot Arm B601-RS
 
-> **Scope note for the `sorter` project:** this folder is standalone and targets the **reBot Arm B601-RS (RobStride motors)**.
-> The `sorter` project (block 5) targets the **B601-DM (Damiao)** through `reBotArm_control_py`. The RobStride driver here is not a
-> drop-in for the DM arm; the kinematics (same URDF chain), the trajectory/safety ideas and the tests can be reused. The folder is
-> excluded from the repository-wide `ruff` run (see `ruff.toml`) and from the root `pytest` (`testpaths = ["tests"]`).
+> **Scope note for the `sorter` project:** this folder is standalone code for the team's arm, the **reBot Arm B601-RS (RobStride motors)**
+> ([D-011](../docs/decisions.md)). It talks to the motors through `motorbridge` directly (not through `reBotArm_control_py`) and can seed block 5's
+> `ArmDriver`: kinematics, trajectories, safety checks, simulator. The folder is excluded from the repository-wide `ruff` run (see `ruff.toml`)
+> and from the root `pytest` (`testpaths = ["tests"]`).
 
 Kinematyka (FK/IK), skrypty „jedź do punktu xyz” oraz serwer MCP, dzięki któremu agent może sam poruszać ramieniem.
 

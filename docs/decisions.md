@@ -72,3 +72,9 @@ Template:
 **Context:** D-005 chose Python 3.12, but the arm SDK `reBotArm_control_py` declares `requires-python = ">=3.10,<3.12"`. It also has no `[build-system]` and keeps `config/` and `urdf/` next to the package, so it can't be a plain git dependency.
 **Decision:** Python 3.11 for the whole project (supersedes the version in D-005; the rest of D-005 stays). `pyproject.toml` does not depend on the SDK yet: block 5 adds it (a clone next to the repo, installed as a path / editable dependency) together with the real arm backend.
 **Consequences:** One process with the SDK stays possible. Sim runs and blocks 0–4, 6, 7 install on any laptop without Pinocchio or the USB-CAN stack.
+
+## D-011: The arm is the B601-RS (RobStride), not the DM (2026-09-25)
+
+**Context:** The docs named the Seeed reBot Arm B601-DM (Damiao motors) and used DM specs. The team's arm is the B601-RS: RobStride motors, RS-06 on joints 1–3 and RS-00 on joints 4–6 and the gripper.
+**Decision:** Every reference to the arm means the B601-RS. Block 5 runs the SDK with `config/rebotarm_rs.yaml`; the transport is SocketCAN through a PEAK PCAN-USB (`can0`, 1 Mbit/s) on Linux, not a serial port. DM-only numbers (~767 mm reach, ±0.2 mm repeatability) are removed; the URDF gives a reach of roughly 0.6–0.7 m from the shoulder axis.
+**Consequences:** D-009 and D-010 still hold (the SDK's `estop()` disables the RS motors too; the Python < 3.12 limit is the SDK's). With the tool pointing straight down the TCP only reaches z ≲ 0.14 m above the base plate (URDF, not yet verified on the hardware), which constrains the look poses and the approach height (block 5 *Notes & risks*). `rebot_b601/` (standalone RS driver, IK, simulator, MCP server, 3D twin) can seed block 5's `ArmDriver`.
