@@ -7,13 +7,13 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 
 | # | Block | Status | Owner | Branch | Blocked by / notes |
 | --- | --- | --- | --- | --- | --- |
-| 0 | [Contracts & skeleton](tasks/00-contracts.md) | review | Softjey + Claude | `block/00-contracts` | — |
+| 0 | [Contracts & skeleton](tasks/00-contracts.md) | done | Softjey + Claude | `block/00-contracts` | — |
 | 1 | [Setup & camera](tasks/01-setup-camera.md) | todo | — | — | — |
 | 2 | [Calibration](tasks/02-calibration.md) | todo | — | — | — |
 | 3 | [Box detection](tasks/03-box-detection.md) | todo | — | — | — |
 | 4 | [Color classification](tasks/04-color-classification.md) | todo | — | — | — |
 | 5 | [Arm control](tasks/05-arm-control.md) | todo | — | — | — |
-| 6 | [State machine](tasks/06-state-machine.md) | todo | — | — | — |
+| 6 | [State machine](tasks/06-state-machine.md) | review | Softjey + Claude | `block/06-state-machine` | — |
 | 7 | [Dashboard](tasks/07-dashboard.md) | todo | — | — | — |
 | 8 | [Demo preparation](tasks/08-demo.md) | todo | — | — | — |
 

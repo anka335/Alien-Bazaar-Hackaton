@@ -1,7 +1,8 @@
-"""Placeholder state machine from block 0, enough for the smoke test. Block 6 replaces it.
+"""State machine: the main loop, see docs/architecture.md → Main loop.
 
-Follows docs/architecture.md → Main loop. Missing on purpose (block 6 scope): run logs,
-per-failure-path tests, finer control semantics.
+Observation-driven (D-008): every cycle starts at the background; the box is visited only when the
+background is empty. Memory between phases: counters, `avoid`, `pending`, `failures`,
+`empty_streak`. Each phase is atomic; commands are applied between phases.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from sorter.core.errors import EStopped, SorterError, TargetRejected
 from sorter.core.system import System
@@ -24,12 +26,12 @@ from sorter.core.types import (
     ItemResult,
     Mode,
     Observation,
-    Overlay,
     Phase,
     PixelPoint,
     Status,
     Zone,
 )
+from sorter.orchestrator.runlog import RunLog
 
 log = logging.getLogger(__name__)
 
@@ -38,13 +40,13 @@ _STOPPED = (Phase.IDLE, Phase.DONE, Phase.HELD, Phase.ERROR)
 
 @dataclass(frozen=True)
 class PlacedFromBox:
-    px: PixelPoint
+    px: PixelPoint  # grasp pixel in the box view
 
 
 @dataclass(frozen=True)
 class Dropped:
     color: ColorClass
-    n_before: int
+    n_before: int  # items on the background before the pick
 
 
 class StateMachine:
@@ -56,6 +58,7 @@ class StateMachine:
         self.mode: Mode = "idle"
         self.error: str | None = None
         self.run_id: str | None = None
+        self.runlog: RunLog | None = None
         self._reset_run()
         self._publish()
 
@@ -72,6 +75,7 @@ class StateMachine:
         self.bg: BackgroundResult | None = None
         self.item: ItemResult | None = None
         self.box: BoxResult | None = None
+        self._grasp_px: PixelPoint | None = None
 
     # --- loop ---
 
@@ -92,12 +96,10 @@ class StateMachine:
         step = False
         try:
             if cmd is Command.START and self.mode == "idle":
-                self._reset_run()
-                self.run_id = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
-                self.error = None
-                self.next, self.mode = Phase.STARTING, "running"
+                self._start_run()
             elif cmd is Command.PAUSE and self.mode == "running":
                 self.mode = "paused"
+                self._cycle_t0 = None  # a paused cycle is not timed
             elif cmd is Command.RESUME and self.mode == "paused" and self.phase is not Phase.HELD:
                 if self.phase is Phase.ERROR:
                     self.failures, self.error = 0, None
@@ -110,6 +112,7 @@ class StateMachine:
                 else:
                     self.s.arm.home()
                 self.phase, self.next, self.mode = Phase.IDLE, None, "idle"
+                self._finish_run("stopped")
             elif cmd is Command.RESET and self.phase in (Phase.HELD, Phase.ERROR):
                 self.s.arm.recover()
                 self.failures, self.error = 0, None
@@ -118,10 +121,27 @@ class StateMachine:
                 self.s.arm.hold()
             else:
                 log.warning("command %s ignored in %s / %s", cmd, self.phase, self.mode)
-        except SorterError as e:
-            self._fail(f"{cmd}: {e}")
+        except Exception as e:
+            self._fail(f"{cmd}: {e}", unexpected=not isinstance(e, SorterError))
         self._publish()
         return step
+
+    def _start_run(self) -> None:
+        self._reset_run()
+        self.run_id = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
+        self.error = None
+        self.next, self.mode = Phase.STARTING, "running"
+        self.runlog = RunLog(self.cfg.runs_dir, self.run_id) if self.cfg.save_runs else None
+        if self.runlog:
+            self.runlog.start(self.s.cfg.model_dump(mode="json"))
+        log.info("run %s started", self.run_id)
+
+    def _finish_run(self, reason: str) -> None:
+        log.info(
+            "run %s %s: %s", self.run_id, reason, {c.value: n for c, n in self.counters.items()}
+        )
+        if self.runlog:
+            self.runlog.finish(reason, counters=self.counters, cycles=self.cycle)
 
     def _run_phase(self) -> None:
         phase = self.next
@@ -133,17 +153,22 @@ class StateMachine:
         except EStopped:
             log.warning("arm held during %s", phase)
             self.phase, self.next, self.mode = Phase.HELD, Phase.LOOK_BG, "paused"
-        except SorterError as e:
-            self._fail(f"{phase}: {e}")
+            self._cycle_t0 = None
+        except Exception as e:  # a bug in a module must not kill the loop thread
+            self._fail(f"{phase}: {e}", unexpected=not isinstance(e, SorterError))
         else:
             if self.failures >= self.cfg.max_consecutive_failures:
                 self._fail(f"{self.failures} consecutive failures")
         self._publish()
 
-    def _fail(self, msg: str) -> None:
-        log.error(msg)
+    def _fail(self, msg: str, unexpected: bool = False) -> None:
+        if unexpected:
+            log.exception(msg)
+        else:
+            log.error(msg)
         self.error = msg
         self.phase, self.next, self.mode = Phase.ERROR, Phase.LOOK_BG, "paused"
+        self._cycle_t0 = None
 
     def _publish(self) -> None:
         self.s.hub.publish_status(
@@ -160,9 +185,30 @@ class StateMachine:
             )
         )
 
-    def _decide(self, overlay: Overlay, summary: str) -> None:
+    def _decide(
+        self,
+        result: BackgroundResult | BoxResult,
+        summary: str,
+        next_phase: Phase,
+        **extra: Any,
+    ) -> Phase:
+        """Publish the decision frame and log it. Returns `next_phase`."""
         assert self.obs is not None
-        self.s.hub.publish_decision(Decision(self.phase, self.obs, overlay, summary))
+        self.s.hub.publish_decision(Decision(self.phase, self.obs, result.overlay, summary))
+        if self.runlog:
+            self.runlog.record(
+                self.cycle,
+                self.phase.value,
+                self.obs,
+                result=result,
+                summary=summary,
+                next_phase=next_phase,
+                avoid=self.avoid,
+                counters=self.counters,
+                failures=self.failures,
+                **extra,
+            )
+        return next_phase
 
     # --- phases: each returns the next phase ---
 
@@ -173,7 +219,7 @@ class StateMachine:
 
     def _look_bg(self) -> Phase:
         now = time.monotonic()
-        if self._cycle_t0 is not None:
+        if self._cycle_t0 is not None and self.mode == "running":
             self.last_cycle_s = now - self._cycle_t0
         self._cycle_t0 = now
         self.cycle += 1
@@ -183,34 +229,39 @@ class StateMachine:
     def _sense_bg(self) -> Phase:
         assert self.obs is not None
         self.bg = self.s.color_classifier.classify(self.obs.frame)
-        self._resolve_pending(len(self.bg.items))
+        resolved = self._resolve_pending(len(self.bg.items))
         if not self.bg.items:
-            self._decide(self.bg.overlay, "background empty")
-            return Phase.LOOK_BOX
+            return self._decide(self.bg, "background empty", Phase.LOOK_BOX, resolved=resolved)
         self.item = self.bg.items[0]
-        self._decide(self.bg.overlay, f"{self.item.color} {self.item.confidence:.2f}")
-        if self.item.confidence < 0.5:
+        if self.item.confidence < self.cfg.low_confidence:
             log.warning(
                 "low color confidence %.2f, sorting as %s", self.item.confidence, self.item.color
             )
-        return Phase.PICK_FROM_BG
+        summary = f"{self.item.color} {self.item.confidence:.2f} ({len(self.bg.items)} on bg)"
+        return self._decide(self.bg, summary, Phase.PICK_FROM_BG, resolved=resolved)
 
-    def _resolve_pending(self, n_items: int) -> None:
+    def _resolve_pending(self, n_items: int) -> str | None:
+        """Check the last action against what the camera sees now. Returns what was concluded."""
         pending, self.pending = self.pending, None
         match pending:
             case PlacedFromBox(px) if n_items == 0:
                 log.warning("missed grasp from the box at (%d, %d)", px.u, px.v)
                 self.avoid.append(px)
                 self.failures += 1
+                return "missed grasp from the box"
             case PlacedFromBox():
                 self.avoid.clear()
                 self.failures = 0
+                return "placed from the box"
             case Dropped(color, n_before) if n_items < n_before:
                 self.counters[color] += 1
                 self.failures = 0
+                return f"verified drop: {color}"
             case Dropped():
                 log.warning("pick from the background failed, retrying")
                 self.failures += 1
+                return "drop not verified, retrying"
+        return None
 
     def _pick_from_bg(self) -> Phase:
         assert self.obs is not None and self.item is not None
@@ -233,21 +284,28 @@ class StateMachine:
 
     def _sense_box(self) -> Phase:
         assert self.obs is not None
-        self.box = self.s.box_detector.detect(self.obs.frame, tuple(self.avoid))
-        self._decide(self.box.overlay, f"box: {self.box.status}")
-        match self.box.status:
+        self.box = box = self.s.box_detector.detect(self.obs.frame, tuple(self.avoid))
+        match box.status:
             case BoxStatus.GRASP:
+                assert box.grasp is not None
                 self.empty_streak = 0
-                return Phase.PICK_FROM_BOX
+                g = box.grasp
+                summary = f"grasp ({g.px.u}, {g.px.v}) depth {g.depth_mm:.0f} mm"
+                return self._decide(box, summary, Phase.PICK_FROM_BOX)
             case BoxStatus.EMPTY:
                 self.empty_streak += 1
-                if self.empty_streak >= self.cfg.empty_confirmations:
-                    return Phase.DONE
-                return Phase.LOOK_BOX
+                n = self.cfg.empty_confirmations
+                summary = f"box empty ({self.empty_streak}/{n})"
+                return self._decide(
+                    box, summary, Phase.DONE if self.empty_streak >= n else Phase.LOOK_BOX
+                )
             case _:  # NO_GRASP
+                self.empty_streak = 0
                 if not self.avoid:
+                    self._decide(box, "no grasp candidate", Phase.ERROR)
                     raise SorterError("cloth in the box but no grasp candidate")
                 log.warning("no grasp left, clearing %d avoided points", len(self.avoid))
+                self._decide(box, f"no grasp, clearing {len(self.avoid)} avoided", Phase.SENSE_BOX)
                 self.avoid.clear()
                 return Phase.SENSE_BOX
 
@@ -271,6 +329,7 @@ class StateMachine:
         return Phase.PLACE_ON_BG
 
     def _place_on_bg(self) -> Phase:
+        assert self._grasp_px is not None
         self.s.arm.place_on_background()
         self.pending = PlacedFromBox(self._grasp_px)
         return Phase.LOOK_BG
@@ -278,4 +337,4 @@ class StateMachine:
     def _done(self) -> None:
         self.s.arm.home()
         self.mode = "idle"
-        log.info("run %s done: %s", self.run_id, dict(self.counters))
+        self._finish_run("done")

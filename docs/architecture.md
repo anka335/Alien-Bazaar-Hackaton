@@ -84,8 +84,8 @@ IDLE ─START─► STARTING ─► LOOK_BG ─► SENSE_BG ──items──►
 - `STOP` → finish the current phase, `arm.home()`, phase `IDLE`. Counters are kept until the next `START`.
 - Commands are applied **between phases**. Every phase is atomic, so pause and step never stop the arm mid-air. `STEP` runs exactly one phase, then pauses.
 - `HOLD` is not queued: the Hub calls `arm.hold()` directly from the web thread. The blocked arm call in the state machine raises `EStopped` → phase `HELD`. `RESET` → `arm.recover()` → `LOOK_BG`.
-- Any `ArmError` / `CameraError` / `CalibrationError` → phase `ERROR`, mode `paused`. `RESET` → `arm.recover()` → `LOOK_BG`.
-- Low-confidence color: sort into the most likely class and log a warning (default policy; block 6 may change it).
+- Any `ArmError` / `CameraError` / `CalibrationError`, or an unexpected exception from a module → phase `ERROR`, mode `paused`; the loop thread never dies. `RESET` → `arm.recover()` → `LOOK_BG`. `pending` survives a hold or error: it is set only after its action completed, so the next `SENSE_BG` still verifies it.
+- Low-confidence color (below `state_machine.low_confidence`): sort into the most likely class and log a warning.
 - Every decision is saved to the run log (see _Recording format_).
 
 ## Contracts
@@ -447,7 +447,7 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 | `arm` | 5 | SDK config path, speeds, `tcp_offset_mm`, `grasp_rpy_deg`, `safe_z_mm`, `place_release_height_mm`, gripper (`open`, `close_kp`, `empty_below`), timeouts |
 | `poses` | 5 | Joint angles (rad): `rest`, `home`, `look_box`, `look_bg`, `place_bg`, `bin_light`, `bin_dark`, `bin_colored` (`rig.yaml`) |
 | `zones.<zone>` | 5 | `workspace_mm` (XY polygon, arm frame), `z_floor_mm`, `grasp_depth_mm`, `approach_mm` (`rig.yaml`) |
-| `state_machine` | 6 | `empty_confirmations`, `max_consecutive_failures`, `save_runs`, `runs_dir` |
+| `state_machine` | 6 | `empty_confirmations`, `max_consecutive_failures`, `low_confidence`, `save_runs`, `runs_dir` |
 | `dashboard` | 7 | Host, port, stream fps, JPEG quality, optional `scene_camera` |
 
 ## Recording format (block 0)
@@ -455,7 +455,7 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 `sorter.core.io.save_observation(path, obs)` / `load_observation(path)`: one `.npz` per observation (`color`, `depth_mm`, intrinsics, `timestamp`, `zone`, `T_base_cam`, `joints`), plus a `.png` of the color image for browsing.
 
 - **Datasets** (block 1): `data/datasets/<name>/`. Record from the real look poses so the viewpoint matches runtime.
-- **Run logs** (block 6): `data/runs/<run_id>/<cycle:04d>_<phase>.npz` plus a `.json` with the vision result (without arrays) and the decision taken. Run logs double as test data for blocks 3 and 4.
+- **Run logs** (block 6, `sorter.orchestrator.runlog`): one record per sense phase in `data/runs/<run_id>/`: `<cycle:04d>_<phase>.npz` (+ `.png`) and a `.json` with the vision result (without arrays), the resolved `pending`, `avoid`, counters, the summary, and `next_phase`. A phase repeated within a cycle gets a suffix (`0003_sense_box_2`); a re-sense of the same observation writes only a `.json` whose `observation` names the existing `.npz`. `run.json` holds the config at start and the counters and `end_reason` (`done` / `stopped`) at the end. Run logs double as test data for blocks 3 and 4.
 - `data/` is gitignored. A few small fixtures for tests live in `tests/fixtures/`.
 
 ## Simulator (block 0)
@@ -482,7 +482,7 @@ Each sim component is selected independently through `backends`, so a real compo
 | `src/sorter/box_detector/` | 3 |
 | `src/sorter/color_classifier/` (incl. stats tool) | 4 |
 | `src/sorter/arm/` (driver, mock driver, controller, pose teaching tool) | 5 |
-| `src/sorter/orchestrator/` (state machine; block 0 left a placeholder) | 6 |
+| `src/sorter/orchestrator/` (state machine, run log) | 6 |
 | `src/sorter/dashboard/` (server, static page; block 0 left a placeholder) | 7 |
 | `src/sorter/<package>/config.py` | The block that owns the package |
 | `tests/<package>/` | Same as the package |
