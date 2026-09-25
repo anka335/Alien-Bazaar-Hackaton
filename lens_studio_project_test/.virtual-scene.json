@@ -1,0 +1,4490 @@
+{
+  "version": 2,
+  "scene": {
+    "id": "0a1ccb1a-fe88-4fbb-9883-e3af3c75fd99",
+    "name": "Scene"
+  },
+  "sceneObjects": [
+    {
+      "id": "00000000-0000-0065-0000-000000000064",
+      "name": "Camera Object",
+      "enabled": true,
+      "parentId": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          40
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "00000000-0000-0065-0000-000000000065",
+          "type": "Camera",
+          "name": "Camera",
+          "enabled": true,
+          "properties": {
+            "mipmapLevel": 0,
+            "renderOrder": 0,
+            "size": 20,
+            "near": 1,
+            "far": 1000,
+            "fov": 63.541019480008295,
+            "clearColor.mode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.CameraClearColor.Mode",
+              "options": [
+                "None",
+                "Background",
+                "Color",
+                "Texture"
+              ]
+            },
+            "clearColor.color": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "clearColor.input": null,
+            "clearColor.id": "ea84c3bb-8408-4d46-b234-a1fdcf98536f",
+            "clearColor.type": "CameraClearColor",
+            "clearDepth": {
+              "mode": {
+                "value": "Value",
+                "type": "enum",
+                "enumType": "Editor.Components.CameraClearDepth.Mode",
+                "options": [
+                  "None",
+                  "Value",
+                  "Texture"
+                ]
+              },
+              "value": 1,
+              "input": null,
+              "id": "0fd2a2a9-364b-4938-887f-f8966f99e2e1",
+              "type": "CameraClearDepth"
+            },
+            "aspect": 1,
+            "cameraType": {
+              "value": "Perspective",
+              "type": "enum",
+              "enumType": "Editor.Components.CameraType",
+              "options": [
+                "Perspective",
+                "Orthographic"
+              ]
+            },
+            "depthMode": {
+              "value": "Regular",
+              "type": "enum",
+              "enumType": "Editor.Components.CameraDepthBufferMode",
+              "options": [
+                "Regular",
+                "Logarithmic"
+              ]
+            },
+            "deviceProperty": {
+              "value": "All",
+              "type": "enum",
+              "enumType": "Editor.Components.CameraDeviceProperty",
+              "options": [
+                "None",
+                "Aspect",
+                "Fov",
+                "All"
+              ]
+            },
+            "aspectPreset": {
+              "value": "Custom",
+              "type": "enum",
+              "enumType": "Editor.Components.CameraAspectPreset",
+              "options": [
+                "Specific",
+                "Custom"
+              ]
+            },
+            "oitLayers": {
+              "value": "NoOit",
+              "type": "enum",
+              "enumType": "Editor.Components.CameraOitLayers",
+              "options": [
+                "NoOit",
+                "Layers4",
+                "Layers4Plus1",
+                "Layers8"
+              ]
+            },
+            "renderTarget": "@asset:Render Target.renderTarget",
+            "maskTexture": null,
+            "inputTexture": null,
+            "renderLayer": {
+              "value": 1,
+              "type": "layer_set_mask"
+            },
+            "name": "Camera",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Camera Object",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "00000000-0000-0065-0000-000000000065",
+            "type": "Camera"
+          }
+        }
+      ]
+    },
+    {
+      "id": "6f674e51-9b1e-4351-8e22-e16e1dced595",
+      "name": "Gaze Reticle",
+      "enabled": true,
+      "parentId": "00000000-0000-0065-0000-000000000064",
+      "transform": {
+        "position": [
+          0,
+          0,
+          -25
+        ],
+        "rotation": [
+          90,
+          0,
+          0
+        ],
+        "scale": [
+          1.600000023841858,
+          1.600000023841858,
+          1.600000023841858
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "facf5b5e-921e-4b23-8422-3541d5df9296",
+          "type": "RenderMeshVisual",
+          "name": "Render Mesh Visual",
+          "enabled": true,
+          "properties": {
+            "mesh": "@asset:Reticle Ring.mesh",
+            "blendShapesEnabled": true,
+            "blendNormals": false,
+            "materials.0": "@asset:Reticle Cyan.mat",
+            "mainMaterial": "@asset:Reticle Cyan.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Render Mesh Visual",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Gaze Reticle",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "facf5b5e-921e-4b23-8422-3541d5df9296",
+            "type": "RenderMeshVisual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "f5680f58-6a31-4271-bf31-bfc88fc5732b",
+      "name": "Score HUD",
+      "enabled": true,
+      "parentId": "00000000-0000-0065-0000-000000000064",
+      "transform": {
+        "position": [
+          -4.599999904632568,
+          7,
+          -35
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.6800000071525574,
+          0.6800000071525574,
+          0.6800000071525574
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "511ec565-c1c4-401a-84d5-c58aeed9f8e4",
+          "type": "Text3D",
+          "name": "Text3D",
+          "enabled": true,
+          "properties": {
+            "text": "SCORE  0",
+            "font": null,
+            "fontSource": null,
+            "size": 54,
+            "weight": null,
+            "italic": null,
+            "preferredStyle": "Regular",
+            "extrusionDepth": 0.15,
+            "extrudeDirection": {
+              "value": "Both",
+              "type": "enum",
+              "enumType": "Editor.Components.ExtrudeDirection",
+              "options": [
+                "Forwards",
+                "Backwards",
+                "Both"
+              ]
+            },
+            "verticalOverflow": {
+              "value": "Overflow",
+              "type": "enum",
+              "enumType": "Editor.Components.VerticalOverflow",
+              "options": [
+                "Overflow",
+                "Truncate",
+                "Shrink"
+              ]
+            },
+            "horizontalOverflow": {
+              "value": "Overflow",
+              "type": "enum",
+              "enumType": "Editor.Components.HorizontalOverflow",
+              "options": [
+                "Overflow",
+                "Truncate",
+                "TruncateFront",
+                "Wrap",
+                "Ellipsis",
+                "EllipsisFront",
+                "Shrink"
+              ]
+            },
+            "sizeToFit": false,
+            "enableRichText": false,
+            "letterSpacing": 0,
+            "lineSpacing": 1,
+            "layoutRect.leftBottom": {
+              "x": -7.5,
+              "y": -2.25
+            },
+            "layoutRect.rightTop": {
+              "x": 7.5,
+              "y": 2.25
+            },
+            "layoutRect.left": -7.5,
+            "layoutRect.right": 7.5,
+            "layoutRect.top": 2.25,
+            "layoutRect.bottom": -2.25,
+            "worldSpaceRect.leftBottom": {
+              "x": -7.5,
+              "y": -2.25
+            },
+            "worldSpaceRect.rightTop": {
+              "x": 7.5,
+              "y": 2.25
+            },
+            "worldSpaceRect.left": -7.5,
+            "worldSpaceRect.right": 7.5,
+            "worldSpaceRect.top": 2.25,
+            "worldSpaceRect.bottom": -2.25,
+            "debugRenderLayoutRect": false,
+            "capitalizationOverride": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.CapitalizationOverride",
+              "options": [
+                "None",
+                "AllUpper",
+                "AllLower"
+              ]
+            },
+            "editable": false,
+            "showEditingPreview": true,
+            "touchHandler": null,
+            "advancedLayout.extentsTarget": null,
+            "advancedLayout.letterSpacing": 0,
+            "advancedLayout.lineSpacing": 1,
+            "advancedLayout.capitalizationOverride": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.CapitalizationOverride",
+              "options": [
+                "None",
+                "AllUpper",
+                "AllLower"
+              ]
+            },
+            "advancedLayout.id": "674f2099-8f58-4fce-a58a-b8ad916562db",
+            "advancedLayout.type": "TextAdvancedLayout",
+            "enableBatching": false,
+            "materials.0": "@asset:Text3D.mat",
+            "mainMaterial": "@asset:Text3D.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Text3D",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Score HUD",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "511ec565-c1c4-401a-84d5-c58aeed9f8e4",
+            "type": "Text3D"
+          }
+        }
+      ]
+    },
+    {
+      "id": "3fa57d42-11e3-4ae9-9b8c-d4903273c0a2",
+      "name": "Timer HUD",
+      "enabled": true,
+      "parentId": "00000000-0000-0065-0000-000000000064",
+      "transform": {
+        "position": [
+          4.599999904632568,
+          7,
+          -35
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.6800000071525574,
+          0.6800000071525574,
+          0.6800000071525574
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "b8481aba-d6fe-4ac6-88d6-b2ea5a0e3a33",
+          "type": "Text3D",
+          "name": "Text3D",
+          "enabled": true,
+          "properties": {
+            "text": "TIME  45",
+            "font": null,
+            "fontSource": null,
+            "size": 54,
+            "weight": null,
+            "italic": null,
+            "preferredStyle": "Regular",
+            "extrusionDepth": 0.15,
+            "extrudeDirection": {
+              "value": "Both",
+              "type": "enum",
+              "enumType": "Editor.Components.ExtrudeDirection",
+              "options": [
+                "Forwards",
+                "Backwards",
+                "Both"
+              ]
+            },
+            "verticalOverflow": {
+              "value": "Overflow",
+              "type": "enum",
+              "enumType": "Editor.Components.VerticalOverflow",
+              "options": [
+                "Overflow",
+                "Truncate",
+                "Shrink"
+              ]
+            },
+            "horizontalOverflow": {
+              "value": "Overflow",
+              "type": "enum",
+              "enumType": "Editor.Components.HorizontalOverflow",
+              "options": [
+                "Overflow",
+                "Truncate",
+                "TruncateFront",
+                "Wrap",
+                "Ellipsis",
+                "EllipsisFront",
+                "Shrink"
+              ]
+            },
+            "sizeToFit": false,
+            "enableRichText": false,
+            "letterSpacing": 0,
+            "lineSpacing": 1,
+            "layoutRect.leftBottom": {
+              "x": -7.5,
+              "y": -2.25
+            },
+            "layoutRect.rightTop": {
+              "x": 7.5,
+              "y": 2.25
+            },
+            "layoutRect.left": -7.5,
+            "layoutRect.right": 7.5,
+            "layoutRect.top": 2.25,
+            "layoutRect.bottom": -2.25,
+            "worldSpaceRect.leftBottom": {
+              "x": -7.5,
+              "y": -2.25
+            },
+            "worldSpaceRect.rightTop": {
+              "x": 7.5,
+              "y": 2.25
+            },
+            "worldSpaceRect.left": -7.5,
+            "worldSpaceRect.right": 7.5,
+            "worldSpaceRect.top": 2.25,
+            "worldSpaceRect.bottom": -2.25,
+            "debugRenderLayoutRect": false,
+            "capitalizationOverride": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.CapitalizationOverride",
+              "options": [
+                "None",
+                "AllUpper",
+                "AllLower"
+              ]
+            },
+            "editable": false,
+            "showEditingPreview": true,
+            "touchHandler": null,
+            "advancedLayout.extentsTarget": null,
+            "advancedLayout.letterSpacing": 0,
+            "advancedLayout.lineSpacing": 1,
+            "advancedLayout.capitalizationOverride": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.CapitalizationOverride",
+              "options": [
+                "None",
+                "AllUpper",
+                "AllLower"
+              ]
+            },
+            "advancedLayout.id": "167580ac-f468-4c51-a1ab-30df0eaf61ed",
+            "advancedLayout.type": "TextAdvancedLayout",
+            "enableBatching": false,
+            "materials.0": "@asset:Text3D 2.mat",
+            "mainMaterial": "@asset:Text3D 2.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Text3D",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Timer HUD",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "b8481aba-d6fe-4ac6-88d6-b2ea5a0e3a33",
+            "type": "Text3D"
+          }
+        }
+      ]
+    },
+    {
+      "id": "0b79263c-d291-4f3c-9f54-3e416cdfbae4",
+      "name": "Game Message",
+      "enabled": true,
+      "parentId": "00000000-0000-0065-0000-000000000064",
+      "transform": {
+        "position": [
+          0,
+          -7,
+          -35
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.699999988079071,
+          0.699999988079071,
+          0.699999988079071
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "0c4db657-2e0f-4d82-9dc4-40ea8e3dea84",
+          "type": "Text3D",
+          "name": "Text3D",
+          "enabled": true,
+          "properties": {
+            "text": "LOOK + HOLD TO ZAP",
+            "font": null,
+            "fontSource": null,
+            "size": 48,
+            "weight": null,
+            "italic": null,
+            "preferredStyle": "Regular",
+            "extrusionDepth": 0.12,
+            "extrudeDirection": {
+              "value": "Both",
+              "type": "enum",
+              "enumType": "Editor.Components.ExtrudeDirection",
+              "options": [
+                "Forwards",
+                "Backwards",
+                "Both"
+              ]
+            },
+            "verticalOverflow": {
+              "value": "Overflow",
+              "type": "enum",
+              "enumType": "Editor.Components.VerticalOverflow",
+              "options": [
+                "Overflow",
+                "Truncate",
+                "Shrink"
+              ]
+            },
+            "horizontalOverflow": {
+              "value": "Overflow",
+              "type": "enum",
+              "enumType": "Editor.Components.HorizontalOverflow",
+              "options": [
+                "Overflow",
+                "Truncate",
+                "TruncateFront",
+                "Wrap",
+                "Ellipsis",
+                "EllipsisFront",
+                "Shrink"
+              ]
+            },
+            "sizeToFit": false,
+            "enableRichText": false,
+            "letterSpacing": 0,
+            "lineSpacing": 1,
+            "layoutRect.leftBottom": {
+              "x": -7.5,
+              "y": -2.25
+            },
+            "layoutRect.rightTop": {
+              "x": 7.5,
+              "y": 2.25
+            },
+            "layoutRect.left": -7.5,
+            "layoutRect.right": 7.5,
+            "layoutRect.top": 2.25,
+            "layoutRect.bottom": -2.25,
+            "worldSpaceRect.leftBottom": {
+              "x": -7.5,
+              "y": -2.25
+            },
+            "worldSpaceRect.rightTop": {
+              "x": 7.5,
+              "y": 2.25
+            },
+            "worldSpaceRect.left": -7.5,
+            "worldSpaceRect.right": 7.5,
+            "worldSpaceRect.top": 2.25,
+            "worldSpaceRect.bottom": -2.25,
+            "debugRenderLayoutRect": false,
+            "capitalizationOverride": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.CapitalizationOverride",
+              "options": [
+                "None",
+                "AllUpper",
+                "AllLower"
+              ]
+            },
+            "editable": false,
+            "showEditingPreview": true,
+            "touchHandler": null,
+            "advancedLayout.extentsTarget": null,
+            "advancedLayout.letterSpacing": 0,
+            "advancedLayout.lineSpacing": 1,
+            "advancedLayout.capitalizationOverride": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.CapitalizationOverride",
+              "options": [
+                "None",
+                "AllUpper",
+                "AllLower"
+              ]
+            },
+            "advancedLayout.id": "3a7b98b5-222a-488e-9ce6-627ca21e9255",
+            "advancedLayout.type": "TextAdvancedLayout",
+            "enableBatching": false,
+            "materials.0": "@asset:Text3D 3.mat",
+            "mainMaterial": "@asset:Text3D 3.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Text3D",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Game Message",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "0c4db657-2e0f-4d82-9dc4-40ea8e3dea84",
+            "type": "Text3D"
+          }
+        }
+      ]
+    },
+    {
+      "id": "0005641c-028d-459a-0000-000000014b4d",
+      "name": "Lighting",
+      "enabled": true,
+      "parentId": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "layers": 1,
+      "components": []
+    },
+    {
+      "id": "00056e79-b066-62ca-0000-000000001406",
+      "name": "Envmap",
+      "enabled": true,
+      "parentId": "0005641c-028d-459a-0000-000000014b4d",
+      "transform": {
+        "position": [
+          0,
+          65,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "00056e79-b066-62f1-0000-000000001409",
+          "type": "LightSource",
+          "name": "Light Source",
+          "enabled": true,
+          "properties": {
+            "lightType": {
+              "value": "EnvMap",
+              "type": "enum",
+              "enumType": "Editor.Components.LightType",
+              "options": [
+                "Point",
+                "Directional",
+                "Spot",
+                "Ambient",
+                "EnvMap",
+                "Estimation"
+              ]
+            },
+            "intensity": 1,
+            "innerConeAngle": 0,
+            "outerConeAngle": 45,
+            "decayType": {
+              "value": "Linear",
+              "type": "enum",
+              "enumType": "Editor.Components.DecayType",
+              "options": [
+                "Linear",
+                "None",
+                "Quadratic"
+              ]
+            },
+            "decayLimit": false,
+            "decayRange": null,
+            "falloffType": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.FalloffType",
+              "options": [
+                "None",
+                "Quadratic"
+              ]
+            },
+            "falloffRange": null,
+            "shadowType": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.ShadowType",
+              "options": [
+                "None",
+                "Projective",
+                "ShadowMap"
+              ]
+            },
+            "castsShadows": false,
+            "shadowDensity": 1,
+            "shadowBlurRadius": 0,
+            "shadowTextureSize": 512,
+            "autoLightSourcePosition": false,
+            "autoShadowFrustumSize": false,
+            "autoShadowFrustumSizeExtend": 2,
+            "shadowFrustumSize": 30,
+            "shadowFrustumNearClipPlane": 1,
+            "shadowFrustumFarClipPlane": 1000,
+            "useEnvmapFromCamera": false,
+            "envmapFromCameraMode": {
+              "value": "Auto",
+              "type": "enum",
+              "enumType": "Editor.Components.EnvmapFromCameraMode",
+              "options": [
+                "Auto",
+                "Face",
+                "Surface"
+              ]
+            },
+            "estimationSharpness": 1,
+            "envmapExposure": 1,
+            "envmapRotation": 0,
+            "diffuseEnvmapTexture": "@asset:Echopark.hdr",
+            "specularEnvmapTexture": "@asset:Echopark.hdr",
+            "color": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowColor": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "dynamicEnvInputTexture": null,
+            "renderLayer": {
+              "value": 1310719,
+              "type": "layer_set_mask"
+            },
+            "name": "Light Source",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Envmap",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "00056e79-b066-62f1-0000-000000001409",
+            "type": "LightSource"
+          }
+        }
+      ]
+    },
+    {
+      "id": "0005641c-028d-4630-0000-000000014b56",
+      "name": "Light",
+      "enabled": true,
+      "parentId": "0005641c-028d-459a-0000-000000014b4d",
+      "transform": {
+        "position": [
+          40,
+          85,
+          20
+        ],
+        "rotation": [
+          70,
+          10,
+          150
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "0005641c-028d-463e-0000-000000014b59",
+          "type": "LightSource",
+          "name": "Light Source",
+          "enabled": true,
+          "properties": {
+            "lightType": {
+              "value": "Directional",
+              "type": "enum",
+              "enumType": "Editor.Components.LightType",
+              "options": [
+                "Point",
+                "Directional",
+                "Spot",
+                "Ambient",
+                "EnvMap",
+                "Estimation"
+              ]
+            },
+            "intensity": 1,
+            "innerConeAngle": 0,
+            "outerConeAngle": 45,
+            "decayType": {
+              "value": "Linear",
+              "type": "enum",
+              "enumType": "Editor.Components.DecayType",
+              "options": [
+                "Linear",
+                "None",
+                "Quadratic"
+              ]
+            },
+            "decayLimit": false,
+            "decayRange": null,
+            "falloffType": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.FalloffType",
+              "options": [
+                "None",
+                "Quadratic"
+              ]
+            },
+            "falloffRange": null,
+            "shadowType": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.ShadowType",
+              "options": [
+                "None",
+                "Projective",
+                "ShadowMap"
+              ]
+            },
+            "castsShadows": false,
+            "shadowDensity": 0.44,
+            "shadowBlurRadius": 4,
+            "shadowTextureSize": 512,
+            "autoLightSourcePosition": true,
+            "autoShadowFrustumSize": true,
+            "autoShadowFrustumSizeExtend": 2,
+            "shadowFrustumSize": 30,
+            "shadowFrustumNearClipPlane": 1,
+            "shadowFrustumFarClipPlane": 1000,
+            "useEnvmapFromCamera": false,
+            "envmapFromCameraMode": {
+              "value": "Auto",
+              "type": "enum",
+              "enumType": "Editor.Components.EnvmapFromCameraMode",
+              "options": [
+                "Auto",
+                "Face",
+                "Surface"
+              ]
+            },
+            "estimationSharpness": 1,
+            "envmapExposure": 1,
+            "envmapRotation": 0,
+            "diffuseEnvmapTexture": null,
+            "specularEnvmapTexture": null,
+            "color": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowColor": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "dynamicEnvInputTexture": null,
+            "renderLayer": {
+              "value": 1310719,
+              "type": "layer_set_mask"
+            },
+            "name": "Light Source",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Light",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "0005641c-028d-463e-0000-000000014b59",
+            "type": "LightSource"
+          }
+        }
+      ]
+    },
+    {
+      "id": "eb534a06-d125-4f5b-b3d7-88518d28a08c",
+      "name": "Alien Gaze Game",
+      "enabled": true,
+      "parentId": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "layers": 1,
+      "components": []
+    },
+    {
+      "id": "f87889a6-1293-4e9b-b15a-1e18ee8d3e07",
+      "name": "Alien Target",
+      "enabled": true,
+      "parentId": "eb534a06-d125-4f5b-b3d7-88518d28a08c",
+      "transform": {
+        "position": [
+          0,
+          0,
+          -120
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          24,
+          24,
+          24
+        ]
+      },
+      "layers": 1,
+      "components": []
+    },
+    {
+      "id": "b76b2bd6-af0e-47e4-9b17-916d39dda6d5",
+      "name": "Alien Body",
+      "enabled": true,
+      "parentId": "f87889a6-1293-4e9b-b15a-1e18ee8d3e07",
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1.1200000047683716,
+          0.8199999928474426
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "af912cd2-c19c-472f-915f-355ff16bd0ff",
+          "type": "RenderMeshVisual",
+          "name": "Render Mesh Visual",
+          "enabled": true,
+          "properties": {
+            "mesh": "@asset:Alien Sphere.mesh",
+            "blendShapesEnabled": true,
+            "blendNormals": false,
+            "materials.0": "@asset:Alien Green.mat",
+            "mainMaterial": "@asset:Alien Green.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Render Mesh Visual",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Alien Body",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "af912cd2-c19c-472f-915f-355ff16bd0ff",
+            "type": "RenderMeshVisual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "caac545b-3c5b-4e8b-8499-ae93bcae55a5",
+      "name": "Alien Eye L",
+      "enabled": true,
+      "parentId": "f87889a6-1293-4e9b-b15a-1e18ee8d3e07",
+      "transform": {
+        "position": [
+          -0.30000001192092896,
+          0.2199999988079071,
+          0.7200000286102295
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.30000001192092896,
+          0.3799999952316284,
+          0.1599999964237213
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "caa6ea80-0256-49c5-8b32-d7e42c5db6d2",
+          "type": "RenderMeshVisual",
+          "name": "Render Mesh Visual",
+          "enabled": true,
+          "properties": {
+            "mesh": "@asset:Alien Sphere.mesh",
+            "blendShapesEnabled": true,
+            "blendNormals": false,
+            "materials.0": "@asset:Alien Eyes.mat",
+            "mainMaterial": "@asset:Alien Eyes.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Render Mesh Visual",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Alien Eye L",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "caa6ea80-0256-49c5-8b32-d7e42c5db6d2",
+            "type": "RenderMeshVisual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d8ffc7d5-b9dd-4135-b45b-3d468fde6282",
+      "name": "Alien Eye R",
+      "enabled": true,
+      "parentId": "f87889a6-1293-4e9b-b15a-1e18ee8d3e07",
+      "transform": {
+        "position": [
+          0.30000001192092896,
+          0.2199999988079071,
+          0.7200000286102295
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.30000001192092896,
+          0.3799999952316284,
+          0.1599999964237213
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "3994563f-8868-4bd2-8539-88da3b2e2e41",
+          "type": "RenderMeshVisual",
+          "name": "Render Mesh Visual",
+          "enabled": true,
+          "properties": {
+            "mesh": "@asset:Alien Sphere.mesh",
+            "blendShapesEnabled": true,
+            "blendNormals": false,
+            "materials.0": "@asset:Alien Eyes.mat",
+            "mainMaterial": "@asset:Alien Eyes.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Render Mesh Visual",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Alien Eye R",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "3994563f-8868-4bd2-8539-88da3b2e2e41",
+            "type": "RenderMeshVisual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "a8b67bb7-0b51-4806-bc17-4b655e51ef98",
+      "name": "Alien Pupil L",
+      "enabled": true,
+      "parentId": "f87889a6-1293-4e9b-b15a-1e18ee8d3e07",
+      "transform": {
+        "position": [
+          -0.30000001192092896,
+          0.2199999988079071,
+          0.875
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.10000000149011612,
+          0.15000000596046448,
+          0.07000000029802322
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "aaa579ef-c2c6-4770-bf82-ec264a50e3ba",
+          "type": "RenderMeshVisual",
+          "name": "Render Mesh Visual",
+          "enabled": true,
+          "properties": {
+            "mesh": "@asset:Alien Sphere.mesh",
+            "blendShapesEnabled": true,
+            "blendNormals": false,
+            "materials.0": "@asset:Alien Pupils.mat",
+            "mainMaterial": "@asset:Alien Pupils.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Render Mesh Visual",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Alien Pupil L",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "aaa579ef-c2c6-4770-bf82-ec264a50e3ba",
+            "type": "RenderMeshVisual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "fbcb373d-b5de-4162-b2d5-7eebf7fe0db1",
+      "name": "Alien Pupil R",
+      "enabled": true,
+      "parentId": "f87889a6-1293-4e9b-b15a-1e18ee8d3e07",
+      "transform": {
+        "position": [
+          0.30000001192092896,
+          0.2199999988079071,
+          0.875
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.10000000149011612,
+          0.15000000596046448,
+          0.07000000029802322
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "5785d2cc-8ce1-4b84-9611-ee77784f0036",
+          "type": "RenderMeshVisual",
+          "name": "Render Mesh Visual",
+          "enabled": true,
+          "properties": {
+            "mesh": "@asset:Alien Sphere.mesh",
+            "blendShapesEnabled": true,
+            "blendNormals": false,
+            "materials.0": "@asset:Alien Pupils.mat",
+            "mainMaterial": "@asset:Alien Pupils.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Render Mesh Visual",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Alien Pupil R",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "5785d2cc-8ce1-4b84-9611-ee77784f0036",
+            "type": "RenderMeshVisual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "430a54b6-3fa9-4bbe-b744-5f3e96fc4278",
+      "name": "Alien Mouth",
+      "enabled": true,
+      "parentId": "f87889a6-1293-4e9b-b15a-1e18ee8d3e07",
+      "transform": {
+        "position": [
+          0,
+          -0.3799999952316284,
+          0.7200000286102295
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.2800000011920929,
+          0.07999999821186066,
+          0.05999999865889549
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "dc8fc8d9-7b25-4117-98aa-6ec5df8157b9",
+          "type": "RenderMeshVisual",
+          "name": "Render Mesh Visual",
+          "enabled": true,
+          "properties": {
+            "mesh": "@asset:Alien Sphere.mesh",
+            "blendShapesEnabled": true,
+            "blendNormals": false,
+            "materials.0": "@asset:Alien Pupils.mat",
+            "mainMaterial": "@asset:Alien Pupils.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Render Mesh Visual",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Alien Mouth",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "dc8fc8d9-7b25-4117-98aa-6ec5df8157b9",
+            "type": "RenderMeshVisual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "571d58b9-a60d-4bc7-9981-63b044501522",
+      "name": "Alien Spot L",
+      "enabled": true,
+      "parentId": "f87889a6-1293-4e9b-b15a-1e18ee8d3e07",
+      "transform": {
+        "position": [
+          -0.5799999833106995,
+          -0.3499999940395355,
+          0.5600000023841858
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.10999999940395355,
+          0.10999999940395355,
+          0.05999999865889549
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "994a2e31-38bf-4a37-a1c3-32fcf267ce24",
+          "type": "RenderMeshVisual",
+          "name": "Render Mesh Visual",
+          "enabled": true,
+          "properties": {
+            "mesh": "@asset:Alien Sphere.mesh",
+            "blendShapesEnabled": true,
+            "blendNormals": false,
+            "materials.0": "@asset:Alien Spots.mat",
+            "mainMaterial": "@asset:Alien Spots.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Render Mesh Visual",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Alien Spot L",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "994a2e31-38bf-4a37-a1c3-32fcf267ce24",
+            "type": "RenderMeshVisual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "92960a5a-90a3-409e-a02a-1144d8a5feff",
+      "name": "Alien Spot R",
+      "enabled": true,
+      "parentId": "f87889a6-1293-4e9b-b15a-1e18ee8d3e07",
+      "transform": {
+        "position": [
+          0.5799999833106995,
+          -0.3499999940395355,
+          0.5600000023841858
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.10999999940395355,
+          0.10999999940395355,
+          0.05999999865889549
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "472e377b-d4c8-464c-a061-63504c3c4733",
+          "type": "RenderMeshVisual",
+          "name": "Render Mesh Visual",
+          "enabled": true,
+          "properties": {
+            "mesh": "@asset:Alien Sphere.mesh",
+            "blendShapesEnabled": true,
+            "blendNormals": false,
+            "materials.0": "@asset:Alien Spots.mat",
+            "mainMaterial": "@asset:Alien Spots.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Render Mesh Visual",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Alien Spot R",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "472e377b-d4c8-464c-a061-63504c3c4733",
+            "type": "RenderMeshVisual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "529b86fd-acf6-4f91-842b-79cce735568b",
+      "name": "Alien Antenna Stem",
+      "enabled": true,
+      "parentId": "f87889a6-1293-4e9b-b15a-1e18ee8d3e07",
+      "transform": {
+        "position": [
+          0,
+          1.0199999809265137,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.07000000029802322,
+          0.3799999952316284,
+          0.07000000029802322
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "404a1fc0-ff0b-4130-8636-cdc34be64154",
+          "type": "RenderMeshVisual",
+          "name": "Render Mesh Visual",
+          "enabled": true,
+          "properties": {
+            "mesh": "@asset:Alien Antenna.mesh",
+            "blendShapesEnabled": true,
+            "blendNormals": false,
+            "materials.0": "@asset:Alien Spots.mat",
+            "mainMaterial": "@asset:Alien Spots.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Render Mesh Visual",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Alien Antenna Stem",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "404a1fc0-ff0b-4130-8636-cdc34be64154",
+            "type": "RenderMeshVisual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "6e376d9b-5b61-4750-93eb-14644d2d45ca",
+      "name": "Alien Antenna Tip",
+      "enabled": true,
+      "parentId": "f87889a6-1293-4e9b-b15a-1e18ee8d3e07",
+      "transform": {
+        "position": [
+          0,
+          1.4199999570846558,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.18000000715255737,
+          0.18000000715255737,
+          0.18000000715255737
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "0b71fa4b-8cee-45ae-89d3-65a466d9b3f0",
+          "type": "RenderMeshVisual",
+          "name": "Render Mesh Visual",
+          "enabled": true,
+          "properties": {
+            "mesh": "@asset:Alien Sphere.mesh",
+            "blendShapesEnabled": true,
+            "blendNormals": false,
+            "materials.0": "@asset:Reticle Cyan.mat",
+            "mainMaterial": "@asset:Reticle Cyan.mat",
+            "stretchMode": {
+              "value": "Stretch",
+              "type": "enum",
+              "enumType": "Editor.Components.StretchMode",
+              "options": [
+                "Fill",
+                "Fit",
+                "Stretch",
+                "FitHeight",
+                "FitWidth",
+                "FillAndCut"
+              ]
+            },
+            "verticalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Vertical",
+              "options": [
+                "Bottom",
+                "Center",
+                "Top"
+              ]
+            },
+            "horizontalAlignment": {
+              "value": "Center",
+              "type": "enum",
+              "enumType": "Editor.Alignment.Horizontal",
+              "options": [
+                "Left",
+                "Center",
+                "Right"
+              ]
+            },
+            "meshShadowMode": {
+              "value": "None",
+              "type": "enum",
+              "enumType": "Editor.Components.MeshShadowMode",
+              "options": [
+                "None",
+                "Caster",
+                "Receiver"
+              ]
+            },
+            "shadowColor": {
+              "x": 1,
+              "y": 1,
+              "z": 1,
+              "w": 1
+            },
+            "shadowDensity": 1,
+            "renderOrder": 0,
+            "name": "Render Mesh Visual",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Alien Antenna Tip",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "0b71fa4b-8cee-45ae-89d3-65a466d9b3f0",
+            "type": "RenderMeshVisual"
+          }
+        }
+      ]
+    },
+    {
+      "id": "fa4ad95d-5507-40ac-81be-9767720cfeed",
+      "name": "Game Manager",
+      "enabled": true,
+      "parentId": "eb534a06-d125-4f5b-b3d7-88518d28a08c",
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "18427097-5038-4282-9073-559be5faff69",
+          "type": "ScriptComponent",
+          "name": "AlienGazeGame",
+          "enabled": true,
+          "properties": {
+            "scoreText": {
+              "isScriptInput": true,
+              "value": {
+                "UUID": "511ec565-c1c4-401a-84d5-c58aeed9f8e4",
+                "name": "Text3D"
+              },
+              "type": "Component.Text3D"
+            },
+            "camera": {
+              "isScriptInput": true,
+              "value": {
+                "UUID": "00000000-0000-0065-0000-000000000065",
+                "name": "Camera"
+              },
+              "type": "Component.Camera"
+            },
+            "messageText": {
+              "isScriptInput": true,
+              "value": {
+                "UUID": "0c4db657-2e0f-4d82-9dc4-40ea8e3dea84",
+                "name": "Text3D"
+              },
+              "type": "Component.Text3D"
+            },
+            "reticle": {
+              "isScriptInput": true,
+              "value": {
+                "UUID": "6f674e51-9b1e-4351-8e22-e16e1dced595",
+                "name": "Gaze Reticle"
+              },
+              "type": "SceneObject"
+            },
+            "target": {
+              "isScriptInput": true,
+              "value": {
+                "UUID": "f87889a6-1293-4e9b-b15a-1e18ee8d3e07",
+                "name": "Alien Target"
+              },
+              "type": "SceneObject"
+            },
+            "timerText": {
+              "isScriptInput": true,
+              "value": {
+                "UUID": "b8481aba-d6fe-4ac6-88d6-b2ea5a0e3a33",
+                "name": "Text3D"
+              },
+              "type": "Component.Text3D"
+            },
+            "scriptAsset": "@asset:Scripts/AlienGazeGame.js",
+            "inputNames.0": "camera",
+            "inputNames.1": "messageText",
+            "inputNames.2": "reticle",
+            "inputNames.3": "scoreText",
+            "inputNames.4": "target",
+            "inputNames.5": "timerText",
+            "name": "AlienGazeGame",
+            "enabled": true,
+            "sceneObject": "@sceneObject:Game Manager",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "18427097-5038-4282-9073-559be5faff69",
+            "type": "ScriptComponent"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b1ef0c13-5967-4434-b004-c337baf5121e",
+      "name": "AiPreviewAgent Handler",
+      "enabled": true,
+      "parentId": null,
+      "transform": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      },
+      "layers": 1,
+      "components": [
+        {
+          "id": "d1f7a41e-1d3e-4b84-8d30-01f654f22715",
+          "type": "ScriptComponent",
+          "name": "AgentInspectScript",
+          "enabled": true,
+          "properties": {
+            "scriptAsset": "@asset:Packages/AiPreviewAgentInspect.lspkg/AgentInspectScript.ts",
+            "name": "AgentInspectScript",
+            "enabled": true,
+            "sceneObject": "@sceneObject:AiPreviewAgent Handler",
+            "isPrefabInstanceRoot": false,
+            "hasPrefabChanges": false,
+            "id": "d1f7a41e-1d3e-4b84-8d30-01f654f22715",
+            "type": "ScriptComponent"
+          }
+        }
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "id": "923415f5-4245-4675-ade1-6d69d6d23e71",
+      "name": "Render Target",
+      "type": "RenderTarget",
+      "path": "Render Target.renderTarget",
+      "properties": {
+        "useScreenResolution": true,
+        "allocateMips": false,
+        "antialiasingMode": {
+          "value": "Disabled",
+          "type": "enum",
+          "enumType": "Editor.Assets.AntialiasingMode",
+          "options": [
+            "Disabled",
+            "MSAA",
+            "TAA"
+          ]
+        },
+        "msaaStrategy": {
+          "value": "OnlyWhenRequired",
+          "type": "enum",
+          "enumType": "Editor.Assets.MSAAStrategy",
+          "options": [
+            "Default",
+            "OnlyWhenRequired"
+          ]
+        },
+        "depthBuffer": {
+          "value": "Auto",
+          "type": "enum",
+          "enumType": "Editor.Assets.DepthBufferStrategy",
+          "options": [
+            "Auto",
+            "ForceOff",
+            "ForceOn"
+          ]
+        },
+        "clearColorOption": {
+          "value": "BackgroundTexture",
+          "type": "enum",
+          "enumType": "Editor.Assets.ClearColorOption",
+          "options": [
+            "None",
+            "BackgroundTexture",
+            "CustomColor",
+            "CustomTexture",
+            "LegacyClearColorEnable"
+          ]
+        },
+        "inputTexture": "@asset:Device Camera Texture.deviceCameraTexture",
+        "clearColor": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "w": 0
+        },
+        "name": "Render Target",
+        "fileMeta.id": "e55b5142-e89b-416c-9290-5cd49af03718",
+        "id": "923415f5-4245-4675-ade1-6d69d6d23e71",
+        "type": "RenderTarget"
+      }
+    },
+    {
+      "id": "173992ca-1c7b-4be0-85be-75adf5d114ae",
+      "name": "Alien Eyes",
+      "type": "Material",
+      "path": "Alien Eyes.mat",
+      "properties": {
+        "passInfos.0.baseColor.value": {
+          "x": 0.949999988079071,
+          "y": 1,
+          "z": 1,
+          "w": 1
+        },
+        "passInfos.0.baseColor.label": "Base Color",
+        "passInfos.0.ENABLE_BASE_TEX": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Base Texture"
+        },
+        "passInfos.0.baseTex.value": null,
+        "passInfos.0.baseTex.hidden": true,
+        "passInfos.0.baseTex.enabledBy": "ENABLE_BASE_TEX",
+        "passInfos.0.baseTex.label": "Texture",
+        "passInfos.0.Texture UV": {
+          "value": "Mesh UV 0",
+          "isDefine": true,
+          "type": "defineSelect",
+          "options": [
+            "Mesh UV 0",
+            "Mesh UV 1",
+            "Transformed UV 2",
+            "Transformed UV 3"
+          ],
+          "label": "Texture UV"
+        },
+        "passInfos.0.ENABLE_OPACITY_TEX": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Opacity Texture"
+        },
+        "passInfos.0.opacityTex.value": null,
+        "passInfos.0.opacityTex.hidden": true,
+        "passInfos.0.opacityTex.enabledBy": "ENABLE_OPACITY_TEX",
+        "passInfos.0.opacityTex.label": "Texture",
+        "passInfos.0.Tweak_N67": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Transformed UV 2"
+        },
+        "passInfos.0.Source": {
+          "value": "Mesh UV 0",
+          "isDefine": true,
+          "type": "defineSelect",
+          "options": [
+            "Mesh UV 0",
+            "Mesh UV 1",
+            "Screen UV",
+            "Transformed UV 2"
+          ],
+          "label": "Source"
+        },
+        "passInfos.0.uv2Scale.value": null,
+        "passInfos.0.uv2Scale.hidden": true,
+        "passInfos.0.uv2Scale.enabledBy": "Tweak_N67",
+        "passInfos.0.uv2Scale.label": "Scale",
+        "passInfos.0.uv2Offset.value": null,
+        "passInfos.0.uv2Offset.hidden": true,
+        "passInfos.0.uv2Offset.enabledBy": "Tweak_N67",
+        "passInfos.0.uv2Offset.label": "Offset",
+        "passInfos.0.uv2EnableAnimation": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Animation"
+        },
+        "passInfos.0.Tweak_N11": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Transformed UV 3"
+        },
+        "passInfos.0.uv3Scale.value": null,
+        "passInfos.0.uv3Scale.hidden": true,
+        "passInfos.0.uv3Scale.enabledBy": "Tweak_N11",
+        "passInfos.0.uv3Scale.label": "Scale",
+        "passInfos.0.uv3Offset.value": null,
+        "passInfos.0.uv3Offset.hidden": true,
+        "passInfos.0.uv3Offset.enabledBy": "Tweak_N11",
+        "passInfos.0.uv3Offset.label": "Offset",
+        "passInfos.0.uv3EnableAnimation": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Animation"
+        },
+        "passInfos.0.alphaTestThreshold.value": null,
+        "passInfos.0.alphaTestThreshold.hidden": true,
+        "passInfos.0.alphaTestThreshold.enabledBy": "uv3EnableAnimation",
+        "passInfos.0.alphaTestThreshold.label": "Alpha Test Threshold",
+        "passInfos.0.alphaTestThreshold.min": 0,
+        "passInfos.0.alphaTestThreshold.max": 1,
+        "passInfos.0.Port_Default_N204": 1,
+        "passInfos.0.Port_Default_N369": {
+          "x": 1,
+          "y": 1,
+          "z": 1,
+          "w": 1
+        },
+        "passInfos.0.PreviewEnabled": 0,
+        "passInfos.0.depthWrite": true,
+        "passInfos.0.depthTest": true,
+        "passInfos.0.depthFunction": {
+          "value": "LessEqual",
+          "type": "enum",
+          "enumType": "Editor.Assets.DepthFunction",
+          "options": [
+            "Never",
+            "Less",
+            "Equal",
+            "LessEqual",
+            "Greater",
+            "NotEqual",
+            "GreaterEqual",
+            "Always"
+          ]
+        },
+        "passInfos.0.twoSided": false,
+        "passInfos.0.cullMode": {
+          "value": "Back",
+          "type": "enum",
+          "enumType": "Editor.Assets.CullMode",
+          "options": [
+            "Front",
+            "Back",
+            "FrontAndBack"
+          ]
+        },
+        "passInfos.0.blendMode": {
+          "value": "Disabled",
+          "type": "enum",
+          "enumType": "Editor.Assets.BlendMode",
+          "options": [
+            "Disabled",
+            "Normal",
+            "Multiply",
+            "MultiplyLegacy",
+            "Add",
+            "AddLegacy",
+            "PremultipliedAlpha",
+            "Glass",
+            "ColoredGlass",
+            "AlphaTest",
+            "AlphaToCoverage",
+            "Screen",
+            "Min",
+            "Max",
+            "PremultipliedAlphaAuto",
+            "Custom",
+            "Darken",
+            "ColorBurn",
+            "Lighten",
+            "ColorDodge",
+            "Overlay",
+            "SoftLight",
+            "HardLight",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
+            "Diff",
+            "Exclusion",
+            "Subtract",
+            "Hue",
+            "Saturation",
+            "Color",
+            "Luminosity",
+            "Average",
+            "Negation",
+            "HardReflect",
+            "HardGlow",
+            "HardPhoenix",
+            "Realistic",
+            "Division",
+            "Bright",
+            "Forgray",
+            "NotBright",
+            "Intense"
+          ]
+        },
+        "passInfos.0.polygonOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "passInfos.0.frustumCulling": {
+          "value": "Auto",
+          "type": "enum",
+          "enumType": "Editor.Assets.FrustumCullMode",
+          "options": [
+            "Auto",
+            "Extend"
+          ]
+        },
+        "passInfos.0.instanceCount": 1,
+        "passInfos.0.id": "f07b1c8f-8e75-4b00-9e1b-ee576f266603",
+        "passInfos.0.type": "PassInfo",
+        "name": "Alien Eyes",
+        "fileMeta.id": "e6241543-a5a3-4b1e-93ec-db4ad2ceb2eb",
+        "id": "173992ca-1c7b-4be0-85be-75adf5d114ae",
+        "type": "Material"
+      }
+    },
+    {
+      "id": "c1616d06-2fb0-4eaa-ae9d-5fce48e5a3a4",
+      "name": "Alien Green",
+      "type": "Material",
+      "path": "Alien Green.mat",
+      "properties": {
+        "passInfos.0.baseColor.value": {
+          "x": 0.18000000715255737,
+          "y": 1,
+          "z": 0.41999998688697815,
+          "w": 1
+        },
+        "passInfos.0.baseColor.label": "Base Color",
+        "passInfos.0.ENABLE_BASE_TEX": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Base Texture"
+        },
+        "passInfos.0.baseTex.value": null,
+        "passInfos.0.baseTex.hidden": true,
+        "passInfos.0.baseTex.enabledBy": "ENABLE_BASE_TEX",
+        "passInfos.0.baseTex.label": "Texture",
+        "passInfos.0.Texture UV": {
+          "value": "Mesh UV 0",
+          "isDefine": true,
+          "type": "defineSelect",
+          "options": [
+            "Mesh UV 0",
+            "Mesh UV 1",
+            "Transformed UV 2",
+            "Transformed UV 3"
+          ],
+          "label": "Texture UV"
+        },
+        "passInfos.0.ENABLE_OPACITY_TEX": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Opacity Texture"
+        },
+        "passInfos.0.opacityTex.value": null,
+        "passInfos.0.opacityTex.hidden": true,
+        "passInfos.0.opacityTex.enabledBy": "ENABLE_OPACITY_TEX",
+        "passInfos.0.opacityTex.label": "Texture",
+        "passInfos.0.Tweak_N67": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Transformed UV 2"
+        },
+        "passInfos.0.Source": {
+          "value": "Mesh UV 0",
+          "isDefine": true,
+          "type": "defineSelect",
+          "options": [
+            "Mesh UV 0",
+            "Mesh UV 1",
+            "Screen UV",
+            "Transformed UV 2"
+          ],
+          "label": "Source"
+        },
+        "passInfos.0.uv2Scale.value": null,
+        "passInfos.0.uv2Scale.hidden": true,
+        "passInfos.0.uv2Scale.enabledBy": "Tweak_N67",
+        "passInfos.0.uv2Scale.label": "Scale",
+        "passInfos.0.uv2Offset.value": null,
+        "passInfos.0.uv2Offset.hidden": true,
+        "passInfos.0.uv2Offset.enabledBy": "Tweak_N67",
+        "passInfos.0.uv2Offset.label": "Offset",
+        "passInfos.0.uv2EnableAnimation": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Animation"
+        },
+        "passInfos.0.Tweak_N11": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Transformed UV 3"
+        },
+        "passInfos.0.uv3Scale.value": null,
+        "passInfos.0.uv3Scale.hidden": true,
+        "passInfos.0.uv3Scale.enabledBy": "Tweak_N11",
+        "passInfos.0.uv3Scale.label": "Scale",
+        "passInfos.0.uv3Offset.value": null,
+        "passInfos.0.uv3Offset.hidden": true,
+        "passInfos.0.uv3Offset.enabledBy": "Tweak_N11",
+        "passInfos.0.uv3Offset.label": "Offset",
+        "passInfos.0.uv3EnableAnimation": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Animation"
+        },
+        "passInfos.0.alphaTestThreshold.value": null,
+        "passInfos.0.alphaTestThreshold.hidden": true,
+        "passInfos.0.alphaTestThreshold.enabledBy": "uv3EnableAnimation",
+        "passInfos.0.alphaTestThreshold.label": "Alpha Test Threshold",
+        "passInfos.0.alphaTestThreshold.min": 0,
+        "passInfos.0.alphaTestThreshold.max": 1,
+        "passInfos.0.Port_Default_N204": 1,
+        "passInfos.0.Port_Default_N369": {
+          "x": 1,
+          "y": 1,
+          "z": 1,
+          "w": 1
+        },
+        "passInfos.0.PreviewEnabled": 0,
+        "passInfos.0.depthWrite": true,
+        "passInfos.0.depthTest": true,
+        "passInfos.0.depthFunction": {
+          "value": "LessEqual",
+          "type": "enum",
+          "enumType": "Editor.Assets.DepthFunction",
+          "options": [
+            "Never",
+            "Less",
+            "Equal",
+            "LessEqual",
+            "Greater",
+            "NotEqual",
+            "GreaterEqual",
+            "Always"
+          ]
+        },
+        "passInfos.0.twoSided": false,
+        "passInfos.0.cullMode": {
+          "value": "Back",
+          "type": "enum",
+          "enumType": "Editor.Assets.CullMode",
+          "options": [
+            "Front",
+            "Back",
+            "FrontAndBack"
+          ]
+        },
+        "passInfos.0.blendMode": {
+          "value": "Disabled",
+          "type": "enum",
+          "enumType": "Editor.Assets.BlendMode",
+          "options": [
+            "Disabled",
+            "Normal",
+            "Multiply",
+            "MultiplyLegacy",
+            "Add",
+            "AddLegacy",
+            "PremultipliedAlpha",
+            "Glass",
+            "ColoredGlass",
+            "AlphaTest",
+            "AlphaToCoverage",
+            "Screen",
+            "Min",
+            "Max",
+            "PremultipliedAlphaAuto",
+            "Custom",
+            "Darken",
+            "ColorBurn",
+            "Lighten",
+            "ColorDodge",
+            "Overlay",
+            "SoftLight",
+            "HardLight",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
+            "Diff",
+            "Exclusion",
+            "Subtract",
+            "Hue",
+            "Saturation",
+            "Color",
+            "Luminosity",
+            "Average",
+            "Negation",
+            "HardReflect",
+            "HardGlow",
+            "HardPhoenix",
+            "Realistic",
+            "Division",
+            "Bright",
+            "Forgray",
+            "NotBright",
+            "Intense"
+          ]
+        },
+        "passInfos.0.polygonOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "passInfos.0.frustumCulling": {
+          "value": "Auto",
+          "type": "enum",
+          "enumType": "Editor.Assets.FrustumCullMode",
+          "options": [
+            "Auto",
+            "Extend"
+          ]
+        },
+        "passInfos.0.instanceCount": 1,
+        "passInfos.0.id": "1708174b-1438-4471-9a6c-08b93a35fe6b",
+        "passInfos.0.type": "PassInfo",
+        "name": "Alien Green",
+        "fileMeta.id": "72532d52-c2f4-4a56-829e-7a66a49da0ec",
+        "id": "c1616d06-2fb0-4eaa-ae9d-5fce48e5a3a4",
+        "type": "Material"
+      }
+    },
+    {
+      "id": "f4e87b48-1eb7-4d69-86b6-5100d84e671b",
+      "name": "Alien Spots",
+      "type": "Material",
+      "path": "Alien Spots.mat",
+      "properties": {
+        "passInfos.0.baseColor.value": {
+          "x": 0.03999999910593033,
+          "y": 0.3499999940395355,
+          "z": 0.12999999523162842,
+          "w": 1
+        },
+        "passInfos.0.baseColor.label": "Base Color",
+        "passInfos.0.ENABLE_BASE_TEX": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Base Texture"
+        },
+        "passInfos.0.baseTex.value": null,
+        "passInfos.0.baseTex.hidden": true,
+        "passInfos.0.baseTex.enabledBy": "ENABLE_BASE_TEX",
+        "passInfos.0.baseTex.label": "Texture",
+        "passInfos.0.Texture UV": {
+          "value": "Mesh UV 0",
+          "isDefine": true,
+          "type": "defineSelect",
+          "options": [
+            "Mesh UV 0",
+            "Mesh UV 1",
+            "Transformed UV 2",
+            "Transformed UV 3"
+          ],
+          "label": "Texture UV"
+        },
+        "passInfos.0.ENABLE_OPACITY_TEX": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Opacity Texture"
+        },
+        "passInfos.0.opacityTex.value": null,
+        "passInfos.0.opacityTex.hidden": true,
+        "passInfos.0.opacityTex.enabledBy": "ENABLE_OPACITY_TEX",
+        "passInfos.0.opacityTex.label": "Texture",
+        "passInfos.0.Tweak_N67": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Transformed UV 2"
+        },
+        "passInfos.0.Source": {
+          "value": "Mesh UV 0",
+          "isDefine": true,
+          "type": "defineSelect",
+          "options": [
+            "Mesh UV 0",
+            "Mesh UV 1",
+            "Screen UV",
+            "Transformed UV 2"
+          ],
+          "label": "Source"
+        },
+        "passInfos.0.uv2Scale.value": null,
+        "passInfos.0.uv2Scale.hidden": true,
+        "passInfos.0.uv2Scale.enabledBy": "Tweak_N67",
+        "passInfos.0.uv2Scale.label": "Scale",
+        "passInfos.0.uv2Offset.value": null,
+        "passInfos.0.uv2Offset.hidden": true,
+        "passInfos.0.uv2Offset.enabledBy": "Tweak_N67",
+        "passInfos.0.uv2Offset.label": "Offset",
+        "passInfos.0.uv2EnableAnimation": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Animation"
+        },
+        "passInfos.0.Tweak_N11": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Transformed UV 3"
+        },
+        "passInfos.0.uv3Scale.value": null,
+        "passInfos.0.uv3Scale.hidden": true,
+        "passInfos.0.uv3Scale.enabledBy": "Tweak_N11",
+        "passInfos.0.uv3Scale.label": "Scale",
+        "passInfos.0.uv3Offset.value": null,
+        "passInfos.0.uv3Offset.hidden": true,
+        "passInfos.0.uv3Offset.enabledBy": "Tweak_N11",
+        "passInfos.0.uv3Offset.label": "Offset",
+        "passInfos.0.uv3EnableAnimation": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Animation"
+        },
+        "passInfos.0.alphaTestThreshold.value": null,
+        "passInfos.0.alphaTestThreshold.hidden": true,
+        "passInfos.0.alphaTestThreshold.enabledBy": "uv3EnableAnimation",
+        "passInfos.0.alphaTestThreshold.label": "Alpha Test Threshold",
+        "passInfos.0.alphaTestThreshold.min": 0,
+        "passInfos.0.alphaTestThreshold.max": 1,
+        "passInfos.0.Port_Default_N204": 1,
+        "passInfos.0.Port_Default_N369": {
+          "x": 1,
+          "y": 1,
+          "z": 1,
+          "w": 1
+        },
+        "passInfos.0.PreviewEnabled": 0,
+        "passInfos.0.depthWrite": true,
+        "passInfos.0.depthTest": true,
+        "passInfos.0.depthFunction": {
+          "value": "LessEqual",
+          "type": "enum",
+          "enumType": "Editor.Assets.DepthFunction",
+          "options": [
+            "Never",
+            "Less",
+            "Equal",
+            "LessEqual",
+            "Greater",
+            "NotEqual",
+            "GreaterEqual",
+            "Always"
+          ]
+        },
+        "passInfos.0.twoSided": false,
+        "passInfos.0.cullMode": {
+          "value": "Back",
+          "type": "enum",
+          "enumType": "Editor.Assets.CullMode",
+          "options": [
+            "Front",
+            "Back",
+            "FrontAndBack"
+          ]
+        },
+        "passInfos.0.blendMode": {
+          "value": "Disabled",
+          "type": "enum",
+          "enumType": "Editor.Assets.BlendMode",
+          "options": [
+            "Disabled",
+            "Normal",
+            "Multiply",
+            "MultiplyLegacy",
+            "Add",
+            "AddLegacy",
+            "PremultipliedAlpha",
+            "Glass",
+            "ColoredGlass",
+            "AlphaTest",
+            "AlphaToCoverage",
+            "Screen",
+            "Min",
+            "Max",
+            "PremultipliedAlphaAuto",
+            "Custom",
+            "Darken",
+            "ColorBurn",
+            "Lighten",
+            "ColorDodge",
+            "Overlay",
+            "SoftLight",
+            "HardLight",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
+            "Diff",
+            "Exclusion",
+            "Subtract",
+            "Hue",
+            "Saturation",
+            "Color",
+            "Luminosity",
+            "Average",
+            "Negation",
+            "HardReflect",
+            "HardGlow",
+            "HardPhoenix",
+            "Realistic",
+            "Division",
+            "Bright",
+            "Forgray",
+            "NotBright",
+            "Intense"
+          ]
+        },
+        "passInfos.0.polygonOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "passInfos.0.frustumCulling": {
+          "value": "Auto",
+          "type": "enum",
+          "enumType": "Editor.Assets.FrustumCullMode",
+          "options": [
+            "Auto",
+            "Extend"
+          ]
+        },
+        "passInfos.0.instanceCount": 1,
+        "passInfos.0.id": "9b2cb011-6e9d-4000-b268-e8376341c5ba",
+        "passInfos.0.type": "PassInfo",
+        "name": "Alien Spots",
+        "fileMeta.id": "f5aaef10-825c-45ae-be15-47d80efa6056",
+        "id": "f4e87b48-1eb7-4d69-86b6-5100d84e671b",
+        "type": "Material"
+      }
+    },
+    {
+      "id": "bfc88e45-eb71-49c8-9eb0-6d9bd874df06",
+      "name": "Alien Pupils",
+      "type": "Material",
+      "path": "Alien Pupils.mat",
+      "properties": {
+        "passInfos.0.baseColor.value": {
+          "x": 0.009999999776482582,
+          "y": 0.019999999552965164,
+          "z": 0.03999999910593033,
+          "w": 1
+        },
+        "passInfos.0.baseColor.label": "Base Color",
+        "passInfos.0.ENABLE_BASE_TEX": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Base Texture"
+        },
+        "passInfos.0.baseTex.value": null,
+        "passInfos.0.baseTex.hidden": true,
+        "passInfos.0.baseTex.enabledBy": "ENABLE_BASE_TEX",
+        "passInfos.0.baseTex.label": "Texture",
+        "passInfos.0.Texture UV": {
+          "value": "Mesh UV 0",
+          "isDefine": true,
+          "type": "defineSelect",
+          "options": [
+            "Mesh UV 0",
+            "Mesh UV 1",
+            "Transformed UV 2",
+            "Transformed UV 3"
+          ],
+          "label": "Texture UV"
+        },
+        "passInfos.0.ENABLE_OPACITY_TEX": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Opacity Texture"
+        },
+        "passInfos.0.opacityTex.value": null,
+        "passInfos.0.opacityTex.hidden": true,
+        "passInfos.0.opacityTex.enabledBy": "ENABLE_OPACITY_TEX",
+        "passInfos.0.opacityTex.label": "Texture",
+        "passInfos.0.Tweak_N67": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Transformed UV 2"
+        },
+        "passInfos.0.Source": {
+          "value": "Mesh UV 0",
+          "isDefine": true,
+          "type": "defineSelect",
+          "options": [
+            "Mesh UV 0",
+            "Mesh UV 1",
+            "Screen UV",
+            "Transformed UV 2"
+          ],
+          "label": "Source"
+        },
+        "passInfos.0.uv2Scale.value": null,
+        "passInfos.0.uv2Scale.hidden": true,
+        "passInfos.0.uv2Scale.enabledBy": "Tweak_N67",
+        "passInfos.0.uv2Scale.label": "Scale",
+        "passInfos.0.uv2Offset.value": null,
+        "passInfos.0.uv2Offset.hidden": true,
+        "passInfos.0.uv2Offset.enabledBy": "Tweak_N67",
+        "passInfos.0.uv2Offset.label": "Offset",
+        "passInfos.0.uv2EnableAnimation": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Animation"
+        },
+        "passInfos.0.Tweak_N11": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Transformed UV 3"
+        },
+        "passInfos.0.uv3Scale.value": null,
+        "passInfos.0.uv3Scale.hidden": true,
+        "passInfos.0.uv3Scale.enabledBy": "Tweak_N11",
+        "passInfos.0.uv3Scale.label": "Scale",
+        "passInfos.0.uv3Offset.value": null,
+        "passInfos.0.uv3Offset.hidden": true,
+        "passInfos.0.uv3Offset.enabledBy": "Tweak_N11",
+        "passInfos.0.uv3Offset.label": "Offset",
+        "passInfos.0.uv3EnableAnimation": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Animation"
+        },
+        "passInfos.0.alphaTestThreshold.value": null,
+        "passInfos.0.alphaTestThreshold.hidden": true,
+        "passInfos.0.alphaTestThreshold.enabledBy": "uv3EnableAnimation",
+        "passInfos.0.alphaTestThreshold.label": "Alpha Test Threshold",
+        "passInfos.0.alphaTestThreshold.min": 0,
+        "passInfos.0.alphaTestThreshold.max": 1,
+        "passInfos.0.Port_Default_N204": 1,
+        "passInfos.0.Port_Default_N369": {
+          "x": 1,
+          "y": 1,
+          "z": 1,
+          "w": 1
+        },
+        "passInfos.0.PreviewEnabled": 0,
+        "passInfos.0.depthWrite": true,
+        "passInfos.0.depthTest": true,
+        "passInfos.0.depthFunction": {
+          "value": "LessEqual",
+          "type": "enum",
+          "enumType": "Editor.Assets.DepthFunction",
+          "options": [
+            "Never",
+            "Less",
+            "Equal",
+            "LessEqual",
+            "Greater",
+            "NotEqual",
+            "GreaterEqual",
+            "Always"
+          ]
+        },
+        "passInfos.0.twoSided": false,
+        "passInfos.0.cullMode": {
+          "value": "Back",
+          "type": "enum",
+          "enumType": "Editor.Assets.CullMode",
+          "options": [
+            "Front",
+            "Back",
+            "FrontAndBack"
+          ]
+        },
+        "passInfos.0.blendMode": {
+          "value": "Disabled",
+          "type": "enum",
+          "enumType": "Editor.Assets.BlendMode",
+          "options": [
+            "Disabled",
+            "Normal",
+            "Multiply",
+            "MultiplyLegacy",
+            "Add",
+            "AddLegacy",
+            "PremultipliedAlpha",
+            "Glass",
+            "ColoredGlass",
+            "AlphaTest",
+            "AlphaToCoverage",
+            "Screen",
+            "Min",
+            "Max",
+            "PremultipliedAlphaAuto",
+            "Custom",
+            "Darken",
+            "ColorBurn",
+            "Lighten",
+            "ColorDodge",
+            "Overlay",
+            "SoftLight",
+            "HardLight",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
+            "Diff",
+            "Exclusion",
+            "Subtract",
+            "Hue",
+            "Saturation",
+            "Color",
+            "Luminosity",
+            "Average",
+            "Negation",
+            "HardReflect",
+            "HardGlow",
+            "HardPhoenix",
+            "Realistic",
+            "Division",
+            "Bright",
+            "Forgray",
+            "NotBright",
+            "Intense"
+          ]
+        },
+        "passInfos.0.polygonOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "passInfos.0.frustumCulling": {
+          "value": "Auto",
+          "type": "enum",
+          "enumType": "Editor.Assets.FrustumCullMode",
+          "options": [
+            "Auto",
+            "Extend"
+          ]
+        },
+        "passInfos.0.instanceCount": 1,
+        "passInfos.0.id": "f43b8ff8-f69d-4fc0-a9a9-2689bcd839c6",
+        "passInfos.0.type": "PassInfo",
+        "name": "Alien Pupils",
+        "fileMeta.id": "cd5726bc-8ba2-4594-a11e-16dbcaf310c8",
+        "id": "bfc88e45-eb71-49c8-9eb0-6d9bd874df06",
+        "type": "Material"
+      }
+    },
+    {
+      "id": "1d176aae-45d0-426a-96c2-1c996c15c95d",
+      "name": "Reticle Cyan",
+      "type": "Material",
+      "path": "Reticle Cyan.mat",
+      "properties": {
+        "passInfos.0.baseColor.value": {
+          "x": 0.05000000074505806,
+          "y": 0.949999988079071,
+          "z": 1,
+          "w": 1
+        },
+        "passInfos.0.baseColor.label": "Base Color",
+        "passInfos.0.ENABLE_BASE_TEX": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Base Texture"
+        },
+        "passInfos.0.baseTex.value": null,
+        "passInfos.0.baseTex.hidden": true,
+        "passInfos.0.baseTex.enabledBy": "ENABLE_BASE_TEX",
+        "passInfos.0.baseTex.label": "Texture",
+        "passInfos.0.Texture UV": {
+          "value": "Mesh UV 0",
+          "isDefine": true,
+          "type": "defineSelect",
+          "options": [
+            "Mesh UV 0",
+            "Mesh UV 1",
+            "Transformed UV 2",
+            "Transformed UV 3"
+          ],
+          "label": "Texture UV"
+        },
+        "passInfos.0.ENABLE_OPACITY_TEX": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Opacity Texture"
+        },
+        "passInfos.0.opacityTex.value": null,
+        "passInfos.0.opacityTex.hidden": true,
+        "passInfos.0.opacityTex.enabledBy": "ENABLE_OPACITY_TEX",
+        "passInfos.0.opacityTex.label": "Texture",
+        "passInfos.0.Tweak_N67": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Transformed UV 2"
+        },
+        "passInfos.0.Source": {
+          "value": "Mesh UV 0",
+          "isDefine": true,
+          "type": "defineSelect",
+          "options": [
+            "Mesh UV 0",
+            "Mesh UV 1",
+            "Screen UV",
+            "Transformed UV 2"
+          ],
+          "label": "Source"
+        },
+        "passInfos.0.uv2Scale.value": null,
+        "passInfos.0.uv2Scale.hidden": true,
+        "passInfos.0.uv2Scale.enabledBy": "Tweak_N67",
+        "passInfos.0.uv2Scale.label": "Scale",
+        "passInfos.0.uv2Offset.value": null,
+        "passInfos.0.uv2Offset.hidden": true,
+        "passInfos.0.uv2Offset.enabledBy": "Tweak_N67",
+        "passInfos.0.uv2Offset.label": "Offset",
+        "passInfos.0.uv2EnableAnimation": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Animation"
+        },
+        "passInfos.0.Tweak_N11": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Transformed UV 3"
+        },
+        "passInfos.0.uv3Scale.value": null,
+        "passInfos.0.uv3Scale.hidden": true,
+        "passInfos.0.uv3Scale.enabledBy": "Tweak_N11",
+        "passInfos.0.uv3Scale.label": "Scale",
+        "passInfos.0.uv3Offset.value": null,
+        "passInfos.0.uv3Offset.hidden": true,
+        "passInfos.0.uv3Offset.enabledBy": "Tweak_N11",
+        "passInfos.0.uv3Offset.label": "Offset",
+        "passInfos.0.uv3EnableAnimation": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "Animation"
+        },
+        "passInfos.0.alphaTestThreshold.value": null,
+        "passInfos.0.alphaTestThreshold.hidden": true,
+        "passInfos.0.alphaTestThreshold.enabledBy": "uv3EnableAnimation",
+        "passInfos.0.alphaTestThreshold.label": "Alpha Test Threshold",
+        "passInfos.0.alphaTestThreshold.min": 0,
+        "passInfos.0.alphaTestThreshold.max": 1,
+        "passInfos.0.Port_Default_N204": 1,
+        "passInfos.0.Port_Default_N369": {
+          "x": 1,
+          "y": 1,
+          "z": 1,
+          "w": 1
+        },
+        "passInfos.0.PreviewEnabled": 0,
+        "passInfos.0.depthWrite": true,
+        "passInfos.0.depthTest": true,
+        "passInfos.0.depthFunction": {
+          "value": "LessEqual",
+          "type": "enum",
+          "enumType": "Editor.Assets.DepthFunction",
+          "options": [
+            "Never",
+            "Less",
+            "Equal",
+            "LessEqual",
+            "Greater",
+            "NotEqual",
+            "GreaterEqual",
+            "Always"
+          ]
+        },
+        "passInfos.0.twoSided": false,
+        "passInfos.0.cullMode": {
+          "value": "Back",
+          "type": "enum",
+          "enumType": "Editor.Assets.CullMode",
+          "options": [
+            "Front",
+            "Back",
+            "FrontAndBack"
+          ]
+        },
+        "passInfos.0.blendMode": {
+          "value": "Disabled",
+          "type": "enum",
+          "enumType": "Editor.Assets.BlendMode",
+          "options": [
+            "Disabled",
+            "Normal",
+            "Multiply",
+            "MultiplyLegacy",
+            "Add",
+            "AddLegacy",
+            "PremultipliedAlpha",
+            "Glass",
+            "ColoredGlass",
+            "AlphaTest",
+            "AlphaToCoverage",
+            "Screen",
+            "Min",
+            "Max",
+            "PremultipliedAlphaAuto",
+            "Custom",
+            "Darken",
+            "ColorBurn",
+            "Lighten",
+            "ColorDodge",
+            "Overlay",
+            "SoftLight",
+            "HardLight",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
+            "Diff",
+            "Exclusion",
+            "Subtract",
+            "Hue",
+            "Saturation",
+            "Color",
+            "Luminosity",
+            "Average",
+            "Negation",
+            "HardReflect",
+            "HardGlow",
+            "HardPhoenix",
+            "Realistic",
+            "Division",
+            "Bright",
+            "Forgray",
+            "NotBright",
+            "Intense"
+          ]
+        },
+        "passInfos.0.polygonOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "passInfos.0.frustumCulling": {
+          "value": "Auto",
+          "type": "enum",
+          "enumType": "Editor.Assets.FrustumCullMode",
+          "options": [
+            "Auto",
+            "Extend"
+          ]
+        },
+        "passInfos.0.instanceCount": 1,
+        "passInfos.0.id": "7d972cb5-79b4-4f70-acf2-0c247d073cd2",
+        "passInfos.0.type": "PassInfo",
+        "name": "Reticle Cyan",
+        "fileMeta.id": "09e9cd4b-ea19-4bf8-b244-dad19cb32b77",
+        "id": "1d176aae-45d0-426a-96c2-1c996c15c95d",
+        "type": "Material"
+      }
+    },
+    {
+      "id": "1a66d90b-5951-4bd8-9aef-5d4e9f2d8414",
+      "name": "Text3D",
+      "type": "Material",
+      "path": "Text3D.mat",
+      "properties": {
+        "passInfos.0.frontCapTex.value": null,
+        "passInfos.0.frontCapTex.hidden": true,
+        "passInfos.0.frontCapTex.label": "Texture",
+        "passInfos.0.Mode": {
+          "value": "Gradient",
+          "isDefine": true,
+          "type": "defineSelect",
+          "options": [
+            "Texture",
+            "Gradient",
+            "Solid"
+          ],
+          "label": "Mode"
+        },
+        "passInfos.0.frontCapTexScale.value": null,
+        "passInfos.0.frontCapTexScale.hidden": true,
+        "passInfos.0.frontCapTexScale.label": "Scale",
+        "passInfos.0.frontCapTexOffset.value": null,
+        "passInfos.0.frontCapTexOffset.hidden": true,
+        "passInfos.0.frontCapTexOffset.label": "Offset",
+        "passInfos.0.frontCapStartingColor.value": {
+          "x": 0.12999999523162842,
+          "y": 1,
+          "z": 0.8199999928474426,
+          "w": 1
+        },
+        "passInfos.0.frontCapStartingColor.label": "Starting Color",
+        "passInfos.0.frontCapEndingColor.value": null,
+        "passInfos.0.frontCapEndingColor.hidden": true,
+        "passInfos.0.frontCapEndingColor.label": "Ending Color",
+        "passInfos.0.frontCapGradientRamp.value": null,
+        "passInfos.0.frontCapGradientRamp.hidden": true,
+        "passInfos.0.frontCapGradientRamp.label": "Gradient Ramp",
+        "passInfos.0.frontCapGradientRamp.min": -1,
+        "passInfos.0.frontCapGradientRamp.max": 1,
+        "passInfos.0.frontCapPBR": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "PBR"
+        },
+        "passInfos.0.frontCapMetallic.value": null,
+        "passInfos.0.frontCapMetallic.hidden": true,
+        "passInfos.0.frontCapMetallic.enabledBy": "frontCapPBR",
+        "passInfos.0.frontCapMetallic.label": "Metallic",
+        "passInfos.0.frontCapMetallic.min": 0,
+        "passInfos.0.frontCapMetallic.max": 1,
+        "passInfos.0.frontCapRoughness.value": null,
+        "passInfos.0.frontCapRoughness.hidden": true,
+        "passInfos.0.frontCapRoughness.enabledBy": "frontCapPBR",
+        "passInfos.0.frontCapRoughness.label": "Roughness",
+        "passInfos.0.frontCapRoughness.min": 0,
+        "passInfos.0.frontCapRoughness.max": 1,
+        "passInfos.0.backCapTex.value": null,
+        "passInfos.0.backCapTex.hidden": true,
+        "passInfos.0.backCapTex.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapTex.label": "Texture",
+        "passInfos.0.backCapTexScale.value": null,
+        "passInfos.0.backCapTexScale.hidden": true,
+        "passInfos.0.backCapTexScale.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapTexScale.label": "Scale",
+        "passInfos.0.backCapTexOffset.value": null,
+        "passInfos.0.backCapTexOffset.hidden": true,
+        "passInfos.0.backCapTexOffset.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapTexOffset.label": "Offset",
+        "passInfos.0.backCapStartingColor.value": {
+          "x": 0.9900000095367432,
+          "y": 0.8199999928474426,
+          "z": 0.10000000149011612,
+          "w": 1
+        },
+        "passInfos.0.backCapStartingColor.label": "Starting Color",
+        "passInfos.0.backCapEndingColor.value": null,
+        "passInfos.0.backCapEndingColor.hidden": true,
+        "passInfos.0.backCapEndingColor.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapEndingColor.label": "Ending Color",
+        "passInfos.0.backCapGradientRamp.value": null,
+        "passInfos.0.backCapGradientRamp.hidden": true,
+        "passInfos.0.backCapGradientRamp.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapGradientRamp.label": "Gradient Ramp",
+        "passInfos.0.backCapGradientRamp.min": -1,
+        "passInfos.0.backCapGradientRamp.max": 1,
+        "passInfos.0.backCapPBR": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "PBR"
+        },
+        "passInfos.0.backCapMetallic.value": null,
+        "passInfos.0.backCapMetallic.hidden": true,
+        "passInfos.0.backCapMetallic.enabledBy": "backCapPBR",
+        "passInfos.0.backCapMetallic.label": "Metallic",
+        "passInfos.0.backCapMetallic.min": 0,
+        "passInfos.0.backCapMetallic.max": 1,
+        "passInfos.0.backCapRoughness.value": null,
+        "passInfos.0.backCapRoughness.hidden": true,
+        "passInfos.0.backCapRoughness.enabledBy": "backCapPBR",
+        "passInfos.0.backCapRoughness.label": "Roughness",
+        "passInfos.0.backCapRoughness.min": 0,
+        "passInfos.0.backCapRoughness.max": 1,
+        "passInfos.0.outerEdgeTex.value": null,
+        "passInfos.0.outerEdgeTex.hidden": true,
+        "passInfos.0.outerEdgeTex.enabledBy": "backCapPBR",
+        "passInfos.0.outerEdgeTex.label": "Texture",
+        "passInfos.0.outerEdgeTexScale.value": null,
+        "passInfos.0.outerEdgeTexScale.hidden": true,
+        "passInfos.0.outerEdgeTexScale.enabledBy": "backCapPBR",
+        "passInfos.0.outerEdgeTexScale.label": "Scale",
+        "passInfos.0.outerEdgeTexOffset.value": null,
+        "passInfos.0.outerEdgeTexOffset.hidden": true,
+        "passInfos.0.outerEdgeTexOffset.enabledBy": "backCapPBR",
+        "passInfos.0.outerEdgeTexOffset.label": "Offset",
+        "passInfos.0.outerEdgeStartingColor.value": {
+          "x": 0.12999999523162842,
+          "y": 1,
+          "z": 0.8199999928474426,
+          "w": 1
+        },
+        "passInfos.0.outerEdgeStartingColor.label": "Starting Color",
+        "passInfos.0.outerEdgeEndingColor.value": {
+          "x": 0.9900000095367432,
+          "y": 0.8199999928474426,
+          "z": 0.10000000149011612,
+          "w": 1
+        },
+        "passInfos.0.outerEdgeEndingColor.label": "Ending Color",
+        "passInfos.0.outerEdgeGradientRamp.value": 0,
+        "passInfos.0.outerEdgeGradientRamp.label": "Gradient Ramp",
+        "passInfos.0.outerEdgeGradientRamp.min": -1,
+        "passInfos.0.outerEdgeGradientRamp.max": 1,
+        "passInfos.0.outerEdgePBR": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "PBR"
+        },
+        "passInfos.0.outerEdgeMetallic.value": null,
+        "passInfos.0.outerEdgeMetallic.hidden": true,
+        "passInfos.0.outerEdgeMetallic.enabledBy": "outerEdgePBR",
+        "passInfos.0.outerEdgeMetallic.label": "Metallic",
+        "passInfos.0.outerEdgeMetallic.min": 0,
+        "passInfos.0.outerEdgeMetallic.max": 1,
+        "passInfos.0.outerRoughness.value": null,
+        "passInfos.0.outerRoughness.hidden": true,
+        "passInfos.0.outerRoughness.enabledBy": "outerEdgePBR",
+        "passInfos.0.outerRoughness.label": "Roughness",
+        "passInfos.0.outerRoughness.min": 0,
+        "passInfos.0.outerRoughness.max": 1,
+        "passInfos.0.InnerEdgeTex.value": null,
+        "passInfos.0.InnerEdgeTex.hidden": true,
+        "passInfos.0.InnerEdgeTex.enabledBy": "outerEdgePBR",
+        "passInfos.0.InnerEdgeTex.label": "Texture",
+        "passInfos.0.InnerEdgeTexScale.value": null,
+        "passInfos.0.InnerEdgeTexScale.hidden": true,
+        "passInfos.0.InnerEdgeTexScale.enabledBy": "outerEdgePBR",
+        "passInfos.0.InnerEdgeTexScale.label": "Scale",
+        "passInfos.0.InnerEdgeTexOffset.value": null,
+        "passInfos.0.InnerEdgeTexOffset.hidden": true,
+        "passInfos.0.InnerEdgeTexOffset.enabledBy": "outerEdgePBR",
+        "passInfos.0.InnerEdgeTexOffset.label": "Offset",
+        "passInfos.0.InnerEdgeStartingColor.value": {
+          "x": 0.12999999523162842,
+          "y": 1,
+          "z": 0.8199999928474426,
+          "w": 1
+        },
+        "passInfos.0.InnerEdgeStartingColor.label": "Starting Color",
+        "passInfos.0.InnerEdgeEndingColor.value": {
+          "x": 0.9900000095367432,
+          "y": 0.8199999928474426,
+          "z": 0.10000000149011612,
+          "w": 1
+        },
+        "passInfos.0.InnerEdgeEndingColor.label": "Ending Color",
+        "passInfos.0.InnerEdgeGradientRamp.value": 0,
+        "passInfos.0.InnerEdgeGradientRamp.label": "Gradient Ramp",
+        "passInfos.0.InnerEdgeGradientRamp.min": -1,
+        "passInfos.0.InnerEdgeGradientRamp.max": 1,
+        "passInfos.0.innerEdgePBR": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "PBR"
+        },
+        "passInfos.0.InnerEdgeMetallic.value": null,
+        "passInfos.0.InnerEdgeMetallic.hidden": true,
+        "passInfos.0.InnerEdgeMetallic.enabledBy": "innerEdgePBR",
+        "passInfos.0.InnerEdgeMetallic.label": "Metallic",
+        "passInfos.0.InnerEdgeMetallic.min": 0,
+        "passInfos.0.InnerEdgeMetallic.max": 1,
+        "passInfos.0.InnerEdgeRoughness.value": null,
+        "passInfos.0.InnerEdgeRoughness.hidden": true,
+        "passInfos.0.InnerEdgeRoughness.enabledBy": "innerEdgePBR",
+        "passInfos.0.InnerEdgeRoughness.label": "Roughness",
+        "passInfos.0.InnerEdgeRoughness.min": 0,
+        "passInfos.0.InnerEdgeRoughness.max": 1,
+        "passInfos.0.alphaTestThreshold.value": null,
+        "passInfos.0.alphaTestThreshold.hidden": true,
+        "passInfos.0.alphaTestThreshold.enabledBy": "innerEdgePBR",
+        "passInfos.0.alphaTestThreshold.label": "Alpha Test Threshold",
+        "passInfos.0.alphaTestThreshold.min": 0,
+        "passInfos.0.alphaTestThreshold.max": 1,
+        "passInfos.0.Port_Center_N025": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "passInfos.0.Port_Center_N047": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "passInfos.0.Port_Import_N017": {
+          "x": 1,
+          "y": 1
+        },
+        "passInfos.0.Port_Import_N024": {
+          "x": 1,
+          "y": 1
+        },
+        "passInfos.0.Port_Import_N026": {
+          "x": 0,
+          "y": -0.5
+        },
+        "passInfos.0.Port_Import_N058": {
+          "x": 0,
+          "y": 0
+        },
+        "passInfos.0.Port_Input0_N035": 0,
+        "passInfos.0.Port_Input0_N066": 0,
+        "passInfos.0.Port_Input1_N014": 0.5,
+        "passInfos.0.Port_Input1_N034": 0,
+        "passInfos.0.Port_Input1_N035": 1,
+        "passInfos.0.Port_Input1_N043": 0.25,
+        "passInfos.0.Port_Input1_N054": 0.5,
+        "passInfos.0.Port_Input1_N065": 0,
+        "passInfos.0.Port_Input1_N066": 1,
+        "passInfos.0.Port_Input2_N034": 1,
+        "passInfos.0.Port_Input2_N065": 1,
+        "passInfos.0.Port_RangeMaxA_N023": 1,
+        "passInfos.0.Port_RangeMaxA_N033": 1,
+        "passInfos.0.Port_RangeMaxA_N153": 1,
+        "passInfos.0.Port_RangeMaxA_N155": 1,
+        "passInfos.0.Port_RangeMaxB_N023": 1,
+        "passInfos.0.Port_RangeMaxB_N033": 1,
+        "passInfos.0.Port_RangeMaxB_N153": -1.0099999904632568,
+        "passInfos.0.Port_RangeMaxB_N155": -1.5099999904632568,
+        "passInfos.0.Port_RangeMinA_N023": 0,
+        "passInfos.0.Port_RangeMinA_N033": 0,
+        "passInfos.0.Port_RangeMinA_N153": -1,
+        "passInfos.0.Port_RangeMinA_N155": -1,
+        "passInfos.0.Port_RangeMinB_N023": -1,
+        "passInfos.0.Port_RangeMinB_N033": -1,
+        "passInfos.0.Port_RangeMinB_N153": -0.009999999776482582,
+        "passInfos.0.Port_RangeMinB_N155": -0.5099999904632568,
+        "passInfos.0.PreviewEnabled": 0,
+        "passInfos.0.depthWrite": true,
+        "passInfos.0.depthTest": true,
+        "passInfos.0.depthFunction": {
+          "value": "LessEqual",
+          "type": "enum",
+          "enumType": "Editor.Assets.DepthFunction",
+          "options": [
+            "Never",
+            "Less",
+            "Equal",
+            "LessEqual",
+            "Greater",
+            "NotEqual",
+            "GreaterEqual",
+            "Always"
+          ]
+        },
+        "passInfos.0.twoSided": false,
+        "passInfos.0.cullMode": {
+          "value": "Back",
+          "type": "enum",
+          "enumType": "Editor.Assets.CullMode",
+          "options": [
+            "Front",
+            "Back",
+            "FrontAndBack"
+          ]
+        },
+        "passInfos.0.blendMode": {
+          "value": "PremultipliedAlphaAuto",
+          "type": "enum",
+          "enumType": "Editor.Assets.BlendMode",
+          "options": [
+            "Disabled",
+            "Normal",
+            "Multiply",
+            "MultiplyLegacy",
+            "Add",
+            "AddLegacy",
+            "PremultipliedAlpha",
+            "Glass",
+            "ColoredGlass",
+            "AlphaTest",
+            "AlphaToCoverage",
+            "Screen",
+            "Min",
+            "Max",
+            "PremultipliedAlphaAuto",
+            "Custom",
+            "Darken",
+            "ColorBurn",
+            "Lighten",
+            "ColorDodge",
+            "Overlay",
+            "SoftLight",
+            "HardLight",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
+            "Diff",
+            "Exclusion",
+            "Subtract",
+            "Hue",
+            "Saturation",
+            "Color",
+            "Luminosity",
+            "Average",
+            "Negation",
+            "HardReflect",
+            "HardGlow",
+            "HardPhoenix",
+            "Realistic",
+            "Division",
+            "Bright",
+            "Forgray",
+            "NotBright",
+            "Intense"
+          ]
+        },
+        "passInfos.0.polygonOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "passInfos.0.frustumCulling": {
+          "value": "Auto",
+          "type": "enum",
+          "enumType": "Editor.Assets.FrustumCullMode",
+          "options": [
+            "Auto",
+            "Extend"
+          ]
+        },
+        "passInfos.0.instanceCount": 1,
+        "passInfos.0.id": "03262ddf-55b3-43a4-9699-a312f46c5c64",
+        "passInfos.0.type": "PassInfo",
+        "name": "Text3D",
+        "fileMeta.id": "07e7c98d-8790-48d9-b0e7-2d4c415a846a",
+        "id": "1a66d90b-5951-4bd8-9aef-5d4e9f2d8414",
+        "type": "Material"
+      }
+    },
+    {
+      "id": "84845607-cd02-48f6-b452-9a357762d34e",
+      "name": "Text3D 2",
+      "type": "Material",
+      "path": "Text3D 2.mat",
+      "properties": {
+        "passInfos.0.frontCapTex.value": null,
+        "passInfos.0.frontCapTex.hidden": true,
+        "passInfos.0.frontCapTex.label": "Texture",
+        "passInfos.0.Mode": {
+          "value": "Gradient",
+          "isDefine": true,
+          "type": "defineSelect",
+          "options": [
+            "Texture",
+            "Gradient",
+            "Solid"
+          ],
+          "label": "Mode"
+        },
+        "passInfos.0.frontCapTexScale.value": null,
+        "passInfos.0.frontCapTexScale.hidden": true,
+        "passInfos.0.frontCapTexScale.label": "Scale",
+        "passInfos.0.frontCapTexOffset.value": null,
+        "passInfos.0.frontCapTexOffset.hidden": true,
+        "passInfos.0.frontCapTexOffset.label": "Offset",
+        "passInfos.0.frontCapStartingColor.value": {
+          "x": 0.12999999523162842,
+          "y": 1,
+          "z": 0.8199999928474426,
+          "w": 1
+        },
+        "passInfos.0.frontCapStartingColor.label": "Starting Color",
+        "passInfos.0.frontCapEndingColor.value": null,
+        "passInfos.0.frontCapEndingColor.hidden": true,
+        "passInfos.0.frontCapEndingColor.label": "Ending Color",
+        "passInfos.0.frontCapGradientRamp.value": null,
+        "passInfos.0.frontCapGradientRamp.hidden": true,
+        "passInfos.0.frontCapGradientRamp.label": "Gradient Ramp",
+        "passInfos.0.frontCapGradientRamp.min": -1,
+        "passInfos.0.frontCapGradientRamp.max": 1,
+        "passInfos.0.frontCapPBR": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "PBR"
+        },
+        "passInfos.0.frontCapMetallic.value": null,
+        "passInfos.0.frontCapMetallic.hidden": true,
+        "passInfos.0.frontCapMetallic.enabledBy": "frontCapPBR",
+        "passInfos.0.frontCapMetallic.label": "Metallic",
+        "passInfos.0.frontCapMetallic.min": 0,
+        "passInfos.0.frontCapMetallic.max": 1,
+        "passInfos.0.frontCapRoughness.value": null,
+        "passInfos.0.frontCapRoughness.hidden": true,
+        "passInfos.0.frontCapRoughness.enabledBy": "frontCapPBR",
+        "passInfos.0.frontCapRoughness.label": "Roughness",
+        "passInfos.0.frontCapRoughness.min": 0,
+        "passInfos.0.frontCapRoughness.max": 1,
+        "passInfos.0.backCapTex.value": null,
+        "passInfos.0.backCapTex.hidden": true,
+        "passInfos.0.backCapTex.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapTex.label": "Texture",
+        "passInfos.0.backCapTexScale.value": null,
+        "passInfos.0.backCapTexScale.hidden": true,
+        "passInfos.0.backCapTexScale.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapTexScale.label": "Scale",
+        "passInfos.0.backCapTexOffset.value": null,
+        "passInfos.0.backCapTexOffset.hidden": true,
+        "passInfos.0.backCapTexOffset.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapTexOffset.label": "Offset",
+        "passInfos.0.backCapStartingColor.value": {
+          "x": 0.9900000095367432,
+          "y": 0.8199999928474426,
+          "z": 0.10000000149011612,
+          "w": 1
+        },
+        "passInfos.0.backCapStartingColor.label": "Starting Color",
+        "passInfos.0.backCapEndingColor.value": null,
+        "passInfos.0.backCapEndingColor.hidden": true,
+        "passInfos.0.backCapEndingColor.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapEndingColor.label": "Ending Color",
+        "passInfos.0.backCapGradientRamp.value": null,
+        "passInfos.0.backCapGradientRamp.hidden": true,
+        "passInfos.0.backCapGradientRamp.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapGradientRamp.label": "Gradient Ramp",
+        "passInfos.0.backCapGradientRamp.min": -1,
+        "passInfos.0.backCapGradientRamp.max": 1,
+        "passInfos.0.backCapPBR": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "PBR"
+        },
+        "passInfos.0.backCapMetallic.value": null,
+        "passInfos.0.backCapMetallic.hidden": true,
+        "passInfos.0.backCapMetallic.enabledBy": "backCapPBR",
+        "passInfos.0.backCapMetallic.label": "Metallic",
+        "passInfos.0.backCapMetallic.min": 0,
+        "passInfos.0.backCapMetallic.max": 1,
+        "passInfos.0.backCapRoughness.value": null,
+        "passInfos.0.backCapRoughness.hidden": true,
+        "passInfos.0.backCapRoughness.enabledBy": "backCapPBR",
+        "passInfos.0.backCapRoughness.label": "Roughness",
+        "passInfos.0.backCapRoughness.min": 0,
+        "passInfos.0.backCapRoughness.max": 1,
+        "passInfos.0.outerEdgeTex.value": null,
+        "passInfos.0.outerEdgeTex.hidden": true,
+        "passInfos.0.outerEdgeTex.enabledBy": "backCapPBR",
+        "passInfos.0.outerEdgeTex.label": "Texture",
+        "passInfos.0.outerEdgeTexScale.value": null,
+        "passInfos.0.outerEdgeTexScale.hidden": true,
+        "passInfos.0.outerEdgeTexScale.enabledBy": "backCapPBR",
+        "passInfos.0.outerEdgeTexScale.label": "Scale",
+        "passInfos.0.outerEdgeTexOffset.value": null,
+        "passInfos.0.outerEdgeTexOffset.hidden": true,
+        "passInfos.0.outerEdgeTexOffset.enabledBy": "backCapPBR",
+        "passInfos.0.outerEdgeTexOffset.label": "Offset",
+        "passInfos.0.outerEdgeStartingColor.value": {
+          "x": 0.12999999523162842,
+          "y": 1,
+          "z": 0.8199999928474426,
+          "w": 1
+        },
+        "passInfos.0.outerEdgeStartingColor.label": "Starting Color",
+        "passInfos.0.outerEdgeEndingColor.value": {
+          "x": 0.9900000095367432,
+          "y": 0.8199999928474426,
+          "z": 0.10000000149011612,
+          "w": 1
+        },
+        "passInfos.0.outerEdgeEndingColor.label": "Ending Color",
+        "passInfos.0.outerEdgeGradientRamp.value": 0,
+        "passInfos.0.outerEdgeGradientRamp.label": "Gradient Ramp",
+        "passInfos.0.outerEdgeGradientRamp.min": -1,
+        "passInfos.0.outerEdgeGradientRamp.max": 1,
+        "passInfos.0.outerEdgePBR": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "PBR"
+        },
+        "passInfos.0.outerEdgeMetallic.value": null,
+        "passInfos.0.outerEdgeMetallic.hidden": true,
+        "passInfos.0.outerEdgeMetallic.enabledBy": "outerEdgePBR",
+        "passInfos.0.outerEdgeMetallic.label": "Metallic",
+        "passInfos.0.outerEdgeMetallic.min": 0,
+        "passInfos.0.outerEdgeMetallic.max": 1,
+        "passInfos.0.outerRoughness.value": null,
+        "passInfos.0.outerRoughness.hidden": true,
+        "passInfos.0.outerRoughness.enabledBy": "outerEdgePBR",
+        "passInfos.0.outerRoughness.label": "Roughness",
+        "passInfos.0.outerRoughness.min": 0,
+        "passInfos.0.outerRoughness.max": 1,
+        "passInfos.0.InnerEdgeTex.value": null,
+        "passInfos.0.InnerEdgeTex.hidden": true,
+        "passInfos.0.InnerEdgeTex.enabledBy": "outerEdgePBR",
+        "passInfos.0.InnerEdgeTex.label": "Texture",
+        "passInfos.0.InnerEdgeTexScale.value": null,
+        "passInfos.0.InnerEdgeTexScale.hidden": true,
+        "passInfos.0.InnerEdgeTexScale.enabledBy": "outerEdgePBR",
+        "passInfos.0.InnerEdgeTexScale.label": "Scale",
+        "passInfos.0.InnerEdgeTexOffset.value": null,
+        "passInfos.0.InnerEdgeTexOffset.hidden": true,
+        "passInfos.0.InnerEdgeTexOffset.enabledBy": "outerEdgePBR",
+        "passInfos.0.InnerEdgeTexOffset.label": "Offset",
+        "passInfos.0.InnerEdgeStartingColor.value": {
+          "x": 0.12999999523162842,
+          "y": 1,
+          "z": 0.8199999928474426,
+          "w": 1
+        },
+        "passInfos.0.InnerEdgeStartingColor.label": "Starting Color",
+        "passInfos.0.InnerEdgeEndingColor.value": {
+          "x": 0.9900000095367432,
+          "y": 0.8199999928474426,
+          "z": 0.10000000149011612,
+          "w": 1
+        },
+        "passInfos.0.InnerEdgeEndingColor.label": "Ending Color",
+        "passInfos.0.InnerEdgeGradientRamp.value": 0,
+        "passInfos.0.InnerEdgeGradientRamp.label": "Gradient Ramp",
+        "passInfos.0.InnerEdgeGradientRamp.min": -1,
+        "passInfos.0.InnerEdgeGradientRamp.max": 1,
+        "passInfos.0.innerEdgePBR": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "PBR"
+        },
+        "passInfos.0.InnerEdgeMetallic.value": null,
+        "passInfos.0.InnerEdgeMetallic.hidden": true,
+        "passInfos.0.InnerEdgeMetallic.enabledBy": "innerEdgePBR",
+        "passInfos.0.InnerEdgeMetallic.label": "Metallic",
+        "passInfos.0.InnerEdgeMetallic.min": 0,
+        "passInfos.0.InnerEdgeMetallic.max": 1,
+        "passInfos.0.InnerEdgeRoughness.value": null,
+        "passInfos.0.InnerEdgeRoughness.hidden": true,
+        "passInfos.0.InnerEdgeRoughness.enabledBy": "innerEdgePBR",
+        "passInfos.0.InnerEdgeRoughness.label": "Roughness",
+        "passInfos.0.InnerEdgeRoughness.min": 0,
+        "passInfos.0.InnerEdgeRoughness.max": 1,
+        "passInfos.0.alphaTestThreshold.value": null,
+        "passInfos.0.alphaTestThreshold.hidden": true,
+        "passInfos.0.alphaTestThreshold.enabledBy": "innerEdgePBR",
+        "passInfos.0.alphaTestThreshold.label": "Alpha Test Threshold",
+        "passInfos.0.alphaTestThreshold.min": 0,
+        "passInfos.0.alphaTestThreshold.max": 1,
+        "passInfos.0.Port_Center_N025": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "passInfos.0.Port_Center_N047": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "passInfos.0.Port_Import_N017": {
+          "x": 1,
+          "y": 1
+        },
+        "passInfos.0.Port_Import_N024": {
+          "x": 1,
+          "y": 1
+        },
+        "passInfos.0.Port_Import_N026": {
+          "x": 0,
+          "y": -0.5
+        },
+        "passInfos.0.Port_Import_N058": {
+          "x": 0,
+          "y": 0
+        },
+        "passInfos.0.Port_Input0_N035": 0,
+        "passInfos.0.Port_Input0_N066": 0,
+        "passInfos.0.Port_Input1_N014": 0.5,
+        "passInfos.0.Port_Input1_N034": 0,
+        "passInfos.0.Port_Input1_N035": 1,
+        "passInfos.0.Port_Input1_N043": 0.25,
+        "passInfos.0.Port_Input1_N054": 0.5,
+        "passInfos.0.Port_Input1_N065": 0,
+        "passInfos.0.Port_Input1_N066": 1,
+        "passInfos.0.Port_Input2_N034": 1,
+        "passInfos.0.Port_Input2_N065": 1,
+        "passInfos.0.Port_RangeMaxA_N023": 1,
+        "passInfos.0.Port_RangeMaxA_N033": 1,
+        "passInfos.0.Port_RangeMaxA_N153": 1,
+        "passInfos.0.Port_RangeMaxA_N155": 1,
+        "passInfos.0.Port_RangeMaxB_N023": 1,
+        "passInfos.0.Port_RangeMaxB_N033": 1,
+        "passInfos.0.Port_RangeMaxB_N153": -1.0099999904632568,
+        "passInfos.0.Port_RangeMaxB_N155": -1.5099999904632568,
+        "passInfos.0.Port_RangeMinA_N023": 0,
+        "passInfos.0.Port_RangeMinA_N033": 0,
+        "passInfos.0.Port_RangeMinA_N153": -1,
+        "passInfos.0.Port_RangeMinA_N155": -1,
+        "passInfos.0.Port_RangeMinB_N023": -1,
+        "passInfos.0.Port_RangeMinB_N033": -1,
+        "passInfos.0.Port_RangeMinB_N153": -0.009999999776482582,
+        "passInfos.0.Port_RangeMinB_N155": -0.5099999904632568,
+        "passInfos.0.PreviewEnabled": 0,
+        "passInfos.0.depthWrite": true,
+        "passInfos.0.depthTest": true,
+        "passInfos.0.depthFunction": {
+          "value": "LessEqual",
+          "type": "enum",
+          "enumType": "Editor.Assets.DepthFunction",
+          "options": [
+            "Never",
+            "Less",
+            "Equal",
+            "LessEqual",
+            "Greater",
+            "NotEqual",
+            "GreaterEqual",
+            "Always"
+          ]
+        },
+        "passInfos.0.twoSided": false,
+        "passInfos.0.cullMode": {
+          "value": "Back",
+          "type": "enum",
+          "enumType": "Editor.Assets.CullMode",
+          "options": [
+            "Front",
+            "Back",
+            "FrontAndBack"
+          ]
+        },
+        "passInfos.0.blendMode": {
+          "value": "PremultipliedAlphaAuto",
+          "type": "enum",
+          "enumType": "Editor.Assets.BlendMode",
+          "options": [
+            "Disabled",
+            "Normal",
+            "Multiply",
+            "MultiplyLegacy",
+            "Add",
+            "AddLegacy",
+            "PremultipliedAlpha",
+            "Glass",
+            "ColoredGlass",
+            "AlphaTest",
+            "AlphaToCoverage",
+            "Screen",
+            "Min",
+            "Max",
+            "PremultipliedAlphaAuto",
+            "Custom",
+            "Darken",
+            "ColorBurn",
+            "Lighten",
+            "ColorDodge",
+            "Overlay",
+            "SoftLight",
+            "HardLight",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
+            "Diff",
+            "Exclusion",
+            "Subtract",
+            "Hue",
+            "Saturation",
+            "Color",
+            "Luminosity",
+            "Average",
+            "Negation",
+            "HardReflect",
+            "HardGlow",
+            "HardPhoenix",
+            "Realistic",
+            "Division",
+            "Bright",
+            "Forgray",
+            "NotBright",
+            "Intense"
+          ]
+        },
+        "passInfos.0.polygonOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "passInfos.0.frustumCulling": {
+          "value": "Auto",
+          "type": "enum",
+          "enumType": "Editor.Assets.FrustumCullMode",
+          "options": [
+            "Auto",
+            "Extend"
+          ]
+        },
+        "passInfos.0.instanceCount": 1,
+        "passInfos.0.id": "8f08fe03-d380-4c4b-8004-49d99ae7dedf",
+        "passInfos.0.type": "PassInfo",
+        "name": "Text3D 2",
+        "fileMeta.id": "dcb6c64e-5e3a-46fa-9f15-e03755ac78a5",
+        "id": "84845607-cd02-48f6-b452-9a357762d34e",
+        "type": "Material"
+      }
+    },
+    {
+      "id": "a05ba742-3f0c-43ea-b18a-a4a80dfd62d2",
+      "name": "Text3D 3",
+      "type": "Material",
+      "path": "Text3D 3.mat",
+      "properties": {
+        "passInfos.0.frontCapTex.value": null,
+        "passInfos.0.frontCapTex.hidden": true,
+        "passInfos.0.frontCapTex.label": "Texture",
+        "passInfos.0.Mode": {
+          "value": "Gradient",
+          "isDefine": true,
+          "type": "defineSelect",
+          "options": [
+            "Texture",
+            "Gradient",
+            "Solid"
+          ],
+          "label": "Mode"
+        },
+        "passInfos.0.frontCapTexScale.value": null,
+        "passInfos.0.frontCapTexScale.hidden": true,
+        "passInfos.0.frontCapTexScale.label": "Scale",
+        "passInfos.0.frontCapTexOffset.value": null,
+        "passInfos.0.frontCapTexOffset.hidden": true,
+        "passInfos.0.frontCapTexOffset.label": "Offset",
+        "passInfos.0.frontCapStartingColor.value": {
+          "x": 0.12999999523162842,
+          "y": 1,
+          "z": 0.8199999928474426,
+          "w": 1
+        },
+        "passInfos.0.frontCapStartingColor.label": "Starting Color",
+        "passInfos.0.frontCapEndingColor.value": null,
+        "passInfos.0.frontCapEndingColor.hidden": true,
+        "passInfos.0.frontCapEndingColor.label": "Ending Color",
+        "passInfos.0.frontCapGradientRamp.value": null,
+        "passInfos.0.frontCapGradientRamp.hidden": true,
+        "passInfos.0.frontCapGradientRamp.label": "Gradient Ramp",
+        "passInfos.0.frontCapGradientRamp.min": -1,
+        "passInfos.0.frontCapGradientRamp.max": 1,
+        "passInfos.0.frontCapPBR": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "PBR"
+        },
+        "passInfos.0.frontCapMetallic.value": null,
+        "passInfos.0.frontCapMetallic.hidden": true,
+        "passInfos.0.frontCapMetallic.enabledBy": "frontCapPBR",
+        "passInfos.0.frontCapMetallic.label": "Metallic",
+        "passInfos.0.frontCapMetallic.min": 0,
+        "passInfos.0.frontCapMetallic.max": 1,
+        "passInfos.0.frontCapRoughness.value": null,
+        "passInfos.0.frontCapRoughness.hidden": true,
+        "passInfos.0.frontCapRoughness.enabledBy": "frontCapPBR",
+        "passInfos.0.frontCapRoughness.label": "Roughness",
+        "passInfos.0.frontCapRoughness.min": 0,
+        "passInfos.0.frontCapRoughness.max": 1,
+        "passInfos.0.backCapTex.value": null,
+        "passInfos.0.backCapTex.hidden": true,
+        "passInfos.0.backCapTex.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapTex.label": "Texture",
+        "passInfos.0.backCapTexScale.value": null,
+        "passInfos.0.backCapTexScale.hidden": true,
+        "passInfos.0.backCapTexScale.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapTexScale.label": "Scale",
+        "passInfos.0.backCapTexOffset.value": null,
+        "passInfos.0.backCapTexOffset.hidden": true,
+        "passInfos.0.backCapTexOffset.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapTexOffset.label": "Offset",
+        "passInfos.0.backCapStartingColor.value": {
+          "x": 0.9900000095367432,
+          "y": 0.8199999928474426,
+          "z": 0.10000000149011612,
+          "w": 1
+        },
+        "passInfos.0.backCapStartingColor.label": "Starting Color",
+        "passInfos.0.backCapEndingColor.value": null,
+        "passInfos.0.backCapEndingColor.hidden": true,
+        "passInfos.0.backCapEndingColor.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapEndingColor.label": "Ending Color",
+        "passInfos.0.backCapGradientRamp.value": null,
+        "passInfos.0.backCapGradientRamp.hidden": true,
+        "passInfos.0.backCapGradientRamp.enabledBy": "frontCapPBR",
+        "passInfos.0.backCapGradientRamp.label": "Gradient Ramp",
+        "passInfos.0.backCapGradientRamp.min": -1,
+        "passInfos.0.backCapGradientRamp.max": 1,
+        "passInfos.0.backCapPBR": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "PBR"
+        },
+        "passInfos.0.backCapMetallic.value": null,
+        "passInfos.0.backCapMetallic.hidden": true,
+        "passInfos.0.backCapMetallic.enabledBy": "backCapPBR",
+        "passInfos.0.backCapMetallic.label": "Metallic",
+        "passInfos.0.backCapMetallic.min": 0,
+        "passInfos.0.backCapMetallic.max": 1,
+        "passInfos.0.backCapRoughness.value": null,
+        "passInfos.0.backCapRoughness.hidden": true,
+        "passInfos.0.backCapRoughness.enabledBy": "backCapPBR",
+        "passInfos.0.backCapRoughness.label": "Roughness",
+        "passInfos.0.backCapRoughness.min": 0,
+        "passInfos.0.backCapRoughness.max": 1,
+        "passInfos.0.outerEdgeTex.value": null,
+        "passInfos.0.outerEdgeTex.hidden": true,
+        "passInfos.0.outerEdgeTex.enabledBy": "backCapPBR",
+        "passInfos.0.outerEdgeTex.label": "Texture",
+        "passInfos.0.outerEdgeTexScale.value": null,
+        "passInfos.0.outerEdgeTexScale.hidden": true,
+        "passInfos.0.outerEdgeTexScale.enabledBy": "backCapPBR",
+        "passInfos.0.outerEdgeTexScale.label": "Scale",
+        "passInfos.0.outerEdgeTexOffset.value": null,
+        "passInfos.0.outerEdgeTexOffset.hidden": true,
+        "passInfos.0.outerEdgeTexOffset.enabledBy": "backCapPBR",
+        "passInfos.0.outerEdgeTexOffset.label": "Offset",
+        "passInfos.0.outerEdgeStartingColor.value": {
+          "x": 0.12999999523162842,
+          "y": 1,
+          "z": 0.8199999928474426,
+          "w": 1
+        },
+        "passInfos.0.outerEdgeStartingColor.label": "Starting Color",
+        "passInfos.0.outerEdgeEndingColor.value": {
+          "x": 0.9900000095367432,
+          "y": 0.8199999928474426,
+          "z": 0.10000000149011612,
+          "w": 1
+        },
+        "passInfos.0.outerEdgeEndingColor.label": "Ending Color",
+        "passInfos.0.outerEdgeGradientRamp.value": 0,
+        "passInfos.0.outerEdgeGradientRamp.label": "Gradient Ramp",
+        "passInfos.0.outerEdgeGradientRamp.min": -1,
+        "passInfos.0.outerEdgeGradientRamp.max": 1,
+        "passInfos.0.outerEdgePBR": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "PBR"
+        },
+        "passInfos.0.outerEdgeMetallic.value": null,
+        "passInfos.0.outerEdgeMetallic.hidden": true,
+        "passInfos.0.outerEdgeMetallic.enabledBy": "outerEdgePBR",
+        "passInfos.0.outerEdgeMetallic.label": "Metallic",
+        "passInfos.0.outerEdgeMetallic.min": 0,
+        "passInfos.0.outerEdgeMetallic.max": 1,
+        "passInfos.0.outerRoughness.value": null,
+        "passInfos.0.outerRoughness.hidden": true,
+        "passInfos.0.outerRoughness.enabledBy": "outerEdgePBR",
+        "passInfos.0.outerRoughness.label": "Roughness",
+        "passInfos.0.outerRoughness.min": 0,
+        "passInfos.0.outerRoughness.max": 1,
+        "passInfos.0.InnerEdgeTex.value": null,
+        "passInfos.0.InnerEdgeTex.hidden": true,
+        "passInfos.0.InnerEdgeTex.enabledBy": "outerEdgePBR",
+        "passInfos.0.InnerEdgeTex.label": "Texture",
+        "passInfos.0.InnerEdgeTexScale.value": null,
+        "passInfos.0.InnerEdgeTexScale.hidden": true,
+        "passInfos.0.InnerEdgeTexScale.enabledBy": "outerEdgePBR",
+        "passInfos.0.InnerEdgeTexScale.label": "Scale",
+        "passInfos.0.InnerEdgeTexOffset.value": null,
+        "passInfos.0.InnerEdgeTexOffset.hidden": true,
+        "passInfos.0.InnerEdgeTexOffset.enabledBy": "outerEdgePBR",
+        "passInfos.0.InnerEdgeTexOffset.label": "Offset",
+        "passInfos.0.InnerEdgeStartingColor.value": {
+          "x": 0.12999999523162842,
+          "y": 1,
+          "z": 0.8199999928474426,
+          "w": 1
+        },
+        "passInfos.0.InnerEdgeStartingColor.label": "Starting Color",
+        "passInfos.0.InnerEdgeEndingColor.value": {
+          "x": 0.9900000095367432,
+          "y": 0.8199999928474426,
+          "z": 0.10000000149011612,
+          "w": 1
+        },
+        "passInfos.0.InnerEdgeEndingColor.label": "Ending Color",
+        "passInfos.0.InnerEdgeGradientRamp.value": 0,
+        "passInfos.0.InnerEdgeGradientRamp.label": "Gradient Ramp",
+        "passInfos.0.InnerEdgeGradientRamp.min": -1,
+        "passInfos.0.InnerEdgeGradientRamp.max": 1,
+        "passInfos.0.innerEdgePBR": {
+          "value": false,
+          "isDefine": true,
+          "type": "define",
+          "label": "PBR"
+        },
+        "passInfos.0.InnerEdgeMetallic.value": null,
+        "passInfos.0.InnerEdgeMetallic.hidden": true,
+        "passInfos.0.InnerEdgeMetallic.enabledBy": "innerEdgePBR",
+        "passInfos.0.InnerEdgeMetallic.label": "Metallic",
+        "passInfos.0.InnerEdgeMetallic.min": 0,
+        "passInfos.0.InnerEdgeMetallic.max": 1,
+        "passInfos.0.InnerEdgeRoughness.value": null,
+        "passInfos.0.InnerEdgeRoughness.hidden": true,
+        "passInfos.0.InnerEdgeRoughness.enabledBy": "innerEdgePBR",
+        "passInfos.0.InnerEdgeRoughness.label": "Roughness",
+        "passInfos.0.InnerEdgeRoughness.min": 0,
+        "passInfos.0.InnerEdgeRoughness.max": 1,
+        "passInfos.0.alphaTestThreshold.value": null,
+        "passInfos.0.alphaTestThreshold.hidden": true,
+        "passInfos.0.alphaTestThreshold.enabledBy": "innerEdgePBR",
+        "passInfos.0.alphaTestThreshold.label": "Alpha Test Threshold",
+        "passInfos.0.alphaTestThreshold.min": 0,
+        "passInfos.0.alphaTestThreshold.max": 1,
+        "passInfos.0.Port_Center_N025": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "passInfos.0.Port_Center_N047": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "passInfos.0.Port_Import_N017": {
+          "x": 1,
+          "y": 1
+        },
+        "passInfos.0.Port_Import_N024": {
+          "x": 1,
+          "y": 1
+        },
+        "passInfos.0.Port_Import_N026": {
+          "x": 0,
+          "y": -0.5
+        },
+        "passInfos.0.Port_Import_N058": {
+          "x": 0,
+          "y": 0
+        },
+        "passInfos.0.Port_Input0_N035": 0,
+        "passInfos.0.Port_Input0_N066": 0,
+        "passInfos.0.Port_Input1_N014": 0.5,
+        "passInfos.0.Port_Input1_N034": 0,
+        "passInfos.0.Port_Input1_N035": 1,
+        "passInfos.0.Port_Input1_N043": 0.25,
+        "passInfos.0.Port_Input1_N054": 0.5,
+        "passInfos.0.Port_Input1_N065": 0,
+        "passInfos.0.Port_Input1_N066": 1,
+        "passInfos.0.Port_Input2_N034": 1,
+        "passInfos.0.Port_Input2_N065": 1,
+        "passInfos.0.Port_RangeMaxA_N023": 1,
+        "passInfos.0.Port_RangeMaxA_N033": 1,
+        "passInfos.0.Port_RangeMaxA_N153": 1,
+        "passInfos.0.Port_RangeMaxA_N155": 1,
+        "passInfos.0.Port_RangeMaxB_N023": 1,
+        "passInfos.0.Port_RangeMaxB_N033": 1,
+        "passInfos.0.Port_RangeMaxB_N153": -1.0099999904632568,
+        "passInfos.0.Port_RangeMaxB_N155": -1.5099999904632568,
+        "passInfos.0.Port_RangeMinA_N023": 0,
+        "passInfos.0.Port_RangeMinA_N033": 0,
+        "passInfos.0.Port_RangeMinA_N153": -1,
+        "passInfos.0.Port_RangeMinA_N155": -1,
+        "passInfos.0.Port_RangeMinB_N023": -1,
+        "passInfos.0.Port_RangeMinB_N033": -1,
+        "passInfos.0.Port_RangeMinB_N153": -0.009999999776482582,
+        "passInfos.0.Port_RangeMinB_N155": -0.5099999904632568,
+        "passInfos.0.PreviewEnabled": 0,
+        "passInfos.0.depthWrite": true,
+        "passInfos.0.depthTest": true,
+        "passInfos.0.depthFunction": {
+          "value": "LessEqual",
+          "type": "enum",
+          "enumType": "Editor.Assets.DepthFunction",
+          "options": [
+            "Never",
+            "Less",
+            "Equal",
+            "LessEqual",
+            "Greater",
+            "NotEqual",
+            "GreaterEqual",
+            "Always"
+          ]
+        },
+        "passInfos.0.twoSided": false,
+        "passInfos.0.cullMode": {
+          "value": "Back",
+          "type": "enum",
+          "enumType": "Editor.Assets.CullMode",
+          "options": [
+            "Front",
+            "Back",
+            "FrontAndBack"
+          ]
+        },
+        "passInfos.0.blendMode": {
+          "value": "PremultipliedAlphaAuto",
+          "type": "enum",
+          "enumType": "Editor.Assets.BlendMode",
+          "options": [
+            "Disabled",
+            "Normal",
+            "Multiply",
+            "MultiplyLegacy",
+            "Add",
+            "AddLegacy",
+            "PremultipliedAlpha",
+            "Glass",
+            "ColoredGlass",
+            "AlphaTest",
+            "AlphaToCoverage",
+            "Screen",
+            "Min",
+            "Max",
+            "PremultipliedAlphaAuto",
+            "Custom",
+            "Darken",
+            "ColorBurn",
+            "Lighten",
+            "ColorDodge",
+            "Overlay",
+            "SoftLight",
+            "HardLight",
+            "VividLight",
+            "LinearLight",
+            "PinLight",
+            "HardMix",
+            "Diff",
+            "Exclusion",
+            "Subtract",
+            "Hue",
+            "Saturation",
+            "Color",
+            "Luminosity",
+            "Average",
+            "Negation",
+            "HardReflect",
+            "HardGlow",
+            "HardPhoenix",
+            "Realistic",
+            "Division",
+            "Bright",
+            "Forgray",
+            "NotBright",
+            "Intense"
+          ]
+        },
+        "passInfos.0.polygonOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "passInfos.0.frustumCulling": {
+          "value": "Auto",
+          "type": "enum",
+          "enumType": "Editor.Assets.FrustumCullMode",
+          "options": [
+            "Auto",
+            "Extend"
+          ]
+        },
+        "passInfos.0.instanceCount": 1,
+        "passInfos.0.id": "054dd9ae-9dcb-4db9-b2e3-65871dba62d6",
+        "passInfos.0.type": "PassInfo",
+        "name": "Text3D 3",
+        "fileMeta.id": "62c3c355-395c-40f8-8649-5bf6c3561cca",
+        "id": "a05ba742-3f0c-43ea-b18a-a4a80dfd62d2",
+        "type": "Material"
+      }
+    }
+  ]
+}
