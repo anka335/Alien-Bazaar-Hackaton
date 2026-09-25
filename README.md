@@ -71,7 +71,7 @@ uv run python -m sorter run --sim         # the whole loop on the simulator
 uv run pytest                             # tests
 ```
 
-`run --sim` starts the loop and the dashboard at http://127.0.0.1:8000. Press START there, or pass `--autostart`. Ctrl+C holds the arm and shuts down. Other flags: `--no-dashboard`, `--config-dir`, `-v`. Every run is logged to `data/runs/<run_id>/` (turn off with `state_machine.save_runs: false`).
+`run --sim` starts the loop and the dashboard at http://127.0.0.1:8000. Press Start there, or pass `--autostart`. The red Hold button (or Space / Esc on the page) freezes the arm; Reset continues. Ctrl+C holds the arm and shuts down. To open the dashboard from another device, set `dashboard.host: 0.0.0.0` in `config/local.yaml`. The simulator is paced to be watched (about 10 s per item); lower `sim.motion_s` and `sim.vision_s` in `config/local.yaml` to speed it up. Other flags: `--no-dashboard`, `--config-dir`, `-v`. Every run is logged to `data/runs/<run_id>/` (turn off with `state_machine.save_runs: false`).
 
 **Config** is in `config/`: `default.yaml` (all sections), `rig.yaml` (poses, zones, ROIs of the physical rig), `hand_eye.yaml` (calibration result), and your own `local.yaml` (gitignored, machine overrides). `backends` chooses `real` or `sim` per component, for example in `config/local.yaml`:
 
