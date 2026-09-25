@@ -54,3 +54,4 @@ _None yet._
 - 2026-09-25: runs on the same laptop in the same process (D-005); main panel is the decision frame (wrist camera, D-006); e-stop is HOLD (D-009); HTTP API fixed.
 - 2026-09-25: dashboard implemented (D-012). Contract changes: `create_app(hub, cfg.dashboard, views=cfg.views)`; `/api/status` and `/ws` add `now`; new `/snapshot/{decision,live}.jpg`; config keys `stream_fps`, `jpeg_quality`, `status_hz`. Added the `websockets` dependency.
 - 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/dashboard/config.py` (placeholder). A placeholder server is in `sorter/dashboard/server.py` (`create_app(hub, cfg)`: page, `/api/status`, `/api/command`); replace it, keep the entry point. See architecture.md → Wiring.
+- 2026-09-25 (SO-101, D-014): frames may have `depth_mm = None`; the dashboard only draws `color`, so nothing changes.

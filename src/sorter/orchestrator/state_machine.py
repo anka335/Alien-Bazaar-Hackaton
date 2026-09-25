@@ -290,7 +290,8 @@ class StateMachine:
                 assert box.grasp is not None
                 self.empty_streak = 0
                 g = box.grasp
-                summary = f"grasp ({g.px.u}, {g.px.v}) depth {g.depth_mm:.0f} mm"
+                depth = "" if g.depth_mm is None else f" depth {g.depth_mm:.0f} mm"
+                summary = f"grasp ({g.px.u}, {g.px.v}){depth}"
                 return self._decide(box, summary, Phase.PICK_FROM_BOX)
             case BoxStatus.EMPTY:
                 self.empty_streak += 1

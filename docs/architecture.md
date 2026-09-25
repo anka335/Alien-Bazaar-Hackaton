@@ -4,8 +4,8 @@ Single source of truth for the contracts between blocks. Block 0 implements the 
 
 ## Physical setup
 
-- **Arm:** Seeed reBot Arm B601-RS (RobStride motors: RS-06 on joints 1–3, RS-00 on joints 4–6 and the gripper; 6 DoF + parallel gripper; reach roughly 0.6–0.7 m from the shoulder axis, from the URDF; see [D-011](decisions.md)). USB→CAN (PEAK PCAN-USB, SocketCAN `can0` at 1 Mbit/s on Linux), Python SDK [`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py) (Pinocchio IK/FK, metres + radians).
-- **Camera:** Intel RealSense D435i RGB-D, **mounted on the wrist** behind the gripper, looking along the gripper axis (eye-in-hand, [D-006](decisions.md)).
+- **Arm:** SO-101 (LeRobot, [D-014](decisions.md)): 5 revolute joints + gripper, Feetech STS3215 servos (ids 1–5 joints, 6 gripper) on a USB serial bus at 1 Mbit/s (`/dev/cu.usbmodem*` on macOS). Calibrated with LeRobot: joint zero is the middle of each servo's EEPROM range. Top-down reach ≈ 10–30 cm from the base, up to z ≈ 80 mm.
+- **Camera:** UVC webcam (RGB, **no depth**) mounted on the gripper, looking along the approach axis; the fingers are visible at the bottom of the frame. Read with OpenCV.
 - **Zones at fixed positions** ([D-007](decisions.md)): mixed box, background area (mid-gray), 3 bins (light / dark / colored). The clothes inside the box lie arbitrarily.
 - The arm looks at a zone from a fixed **look pose** (`look_box`, `look_bg`). Because look poses are repeatable, pixel ROIs of each zone are constants in config.
 
@@ -14,8 +14,8 @@ Single source of truth for the contracts between blocks. Block 0 implements the 
 | Component | Block | Responsibility |
 | --- | --- | --- |
 | Camera | 1 | Background capture thread. `latest()` for the live feed, `fresh()` for decisions |
-| Calibration | 2 | Hand-eye transform. Pixel + depth + camera pose → arm point, and back. The only place where this conversion happens |
-| Box detector | 3 | Grasp point in the box (pixels), or "box empty" |
+| Calibration | 2 | Per-zone plane homography: pixel at the look pose → arm point on the zone's plane, and back ([D-014](decisions.md)). The only place where this conversion happens |
+| Box detector | 3 | Grasp point in the box (pixels), or "box empty". Masks from the SAM3 service ([D-015](decisions.md)) |
 | Color classifier | 4 | All items on the background: color, re-grasp point (pixels), area. Empty list = background empty. Masks from the remote SAM3 service ([D-013](decisions.md)) |
 | Arm controller | 5 | Named poses, `look` / `pick` / `place_on_background` / `drop_to_bin`, workspace checks, hold, recover |
 | Observer | 0 | `observe(zone)`: move to look pose, take a fresh frame, attach camera pose |
@@ -28,17 +28,17 @@ Single source of truth for the contracts between blocks. Block 0 implements the 
 
 | Frame | Units | Notes |
 | --- | --- | --- |
-| Pixel `(u, v)` | px, int | Color stream, origin top-left. Depth is aligned to color |
+| Pixel `(u, v)` | px, int | Color stream, origin top-left. Depth (sim only) is aligned to color |
 | Camera | mm | Optical frame (x right, y down, z forward). **Depth values are Z along the optical axis**, not ray length |
-| Flange | mm | SDK `end_link`. `ee_pose()` returns `T_base_flange` from FK |
-| TCP | mm | Midpoint between the fingertips. `T_flange_tcp` = `arm.tcp_offset_mm` (config) |
-| Arm base | mm | What `pick()` targets are expressed in |
+| Flange | mm | URDF `gripper_frame_link`, between the fingertips, +Z = approach. `ee_pose()` returns `T_base_flange` from FK |
+| TCP | mm | Fingertip point: the flange moved `arm.tcp_extend_mm` along the approach |
+| Arm base | mm | URDF `base_link`, +Z up, origin on the base plate. What `pick()` targets are expressed in |
 
 - `Pose` = `np.ndarray` 4×4 float64, homogeneous transform, translation in **mm**.
-- Joint angles in **radians** (raw SDK values). Durations in seconds. Time is `time.monotonic()`.
-- Only the arm driver converts to SDK units (m, rad).
-- `T_base_cam = T_base_flange(q at capture) · T_flange_cam`, where `T_flange_cam` is the hand-eye result (block 2).
-- **Rule ([D-002](decisions.md)):** vision outputs pixels + depth only. Calibration owns every pixel ↔ arm conversion.
+- Joint angles in **radians** (URDF convention, 5 arm joints). Durations in seconds. Time is `time.monotonic()`.
+- Only the arm driver converts to servo ticks (4096 per turn).
+- `T_base_cam` is informational (run logs): the real calibration returns `T_base_flange`, the sim one its camera pose. Pixel → arm goes through the zone homography ([D-014](decisions.md)).
+- **Rule ([D-002](decisions.md)):** vision outputs pixels (+ depth when the camera has it). Calibration owns every pixel ↔ arm conversion.
 
 ## Main loop (state machine walkthrough)
 
@@ -104,7 +104,7 @@ class CameraError(SorterError): ...  # no frame within timeout, device lost
 class CalibrationError(SorterError): ...  # no camera pose, invalid depth, file missing
 
 
-class ArmError(SorterError): ...  # SDK/bus fault, motion failed or timed out
+class ArmError(SorterError): ...  # bus fault, motion failed or timed out
 
 
 class TargetRejected(ArmError): ...  # outside the zone workspace or IK failed; NO motion happened
@@ -162,7 +162,7 @@ class Intrinsics:
 @dataclass(frozen=True)
 class Frame:
     color: np.ndarray  # HxWx3 uint8, BGR
-    depth_mm: np.ndarray  # HxW uint16, Z in mm, aligned to color; 0 = no data
+    depth_mm: np.ndarray | None  # HxW uint16 Z mm, aligned; 0 = no data; None = RGB only
     intrinsics: Intrinsics
     timestamp: float  # monotonic, when the frame arrived
     seq: int
@@ -177,8 +177,9 @@ class Camera(Protocol):
     # Blocks until a frame whose exposure started AFTER the call. Raises CameraError on timeout.
 ```
 
-- The camera runs its own capture thread and keeps only the newest frame.
-- Auto exposure and white balance are locked after warm-up if the SDK allows.
+- The camera runs its own capture thread and keeps only the newest frame. `fresh()` skips `camera.fresh_skip_frames` frames after the call. A lost device is reopened.
+- `UvcCamera` reads OpenCV in a child process (`ProcessCapture`, shared memory): after a USB drop, macOS OpenCV can't reopen the device in the same process, a new process can. The child is started with `spawn`, so any script that uses the real camera needs an `if __name__ == "__main__":` guard.
+- The real camera (`UvcCamera`) has no depth (`depth_mm = None`) and approximate intrinsics from `camera.hfov_deg`. Exposure and white balance can't be locked through OpenCV on macOS.
 - The camera module knows nothing about the arm.
 
 ### Observation and Observer (block 0)
@@ -205,7 +206,7 @@ class Observer:
 @dataclass(frozen=True)
 class GraspPoint:
     px: PixelPoint
-    depth_mm: float  # robust (median over a small window) Z of the cloth SURFACE at px; never 0
+    depth_mm: float | None  # robust Z of the cloth SURFACE at px, never 0; None without depth
 
 
 @dataclass
@@ -248,6 +249,7 @@ class BoxDetector(Protocol):
 ```
 
 - **Stateless.** Failed grasps are passed as `avoid`. Candidates within `box_detector.avoid_radius_px` of any of them are skipped.
+- The real backend ([D-015](decisions.md)) unions the SAM3 masks in the box ROI: `coverage` below `empty_coverage` → `EMPTY`; the grasp is the cloth pixel farthest from a cloth edge, `wall_margin_px` inside the ROI; `depth_mm` is `None`.
 - `NO_GRASP` = cloth is present, but no valid candidate is left.
 - The grasp point keeps a margin from the box walls that covers the gripper **and the camera** footprint (the camera descends with the gripper).
 - The ROI excludes the gripper fingers. They sit at fixed pixels in every frame.
@@ -277,6 +279,7 @@ class ColorClassifier(Protocol):
 
 - The real backend sends the color image to the SAM3 service ([D-013](decisions.md)). If the service fails, `classify` raises `SegmentationError` (`sorter.color_classifier.segmenter`, a `SorterError`), so the state machine goes to `ERROR`.
 - `stats` holds `L` (0..100), `a`, `b`, `chroma` (median over the eroded mask), `px` (pixels used), `score` (SAM3 instance score).
+- Without depth, the re-grasp point is the pixel deepest inside the blob and `depth_mm` is `None`.
 
 ### Calibration (block 2)
 
@@ -289,9 +292,9 @@ class Calibration(Protocol):
     ) -> PixelPoint | None: ...  # None if outside the image
 ```
 
-- `to_arm`: deproject `(u, v, depth)` with `obs.frame.intrinsics`, then apply `obs.T_base_cam`. It raises `CalibrationError` if `T_base_cam` is `None` or depth is 0.
-- The hand-eye result `T_flange_cam` is stored in `config/hand_eye.yaml`: 4×4 in mm, `rmse_mm`, `method`, `camera_serial`, `created`. It is **committed** ([D-007](decisions.md)), because it depends only on the camera mount, which travels with the arm.
-- It must be computed against the same flange frame (`end_link`) that `ee_pose()` returns.
+- Real backend (`PlaneCalibration`, [D-014](decisions.md)): `to_arm` maps the pixel through `calibration.zones.<obs.zone>.H` and returns z = `plane_z_mm + surface_offset_mm`; `to_pixel` inverts it. It raises `CalibrationError` if the zone isn't calibrated. `obs` must come from that zone's look pose; depth is ignored.
+- The result is stored in `config/calibration.yaml` (`calibration.zones.<zone>`: `H` 3×3, `plane_z_mm`, `surface_offset_mm`, `rmse_mm`, `n_points`, `created`) by `python -m sorter.calibration.setup <zone>`. It is **committed** ([D-007](decisions.md)): it depends on the camera mount and the look poses.
+- The sim backend deprojects with depth, as before.
 
 ### Arm controller (block 5)
 
@@ -318,15 +321,16 @@ class ArmController(Protocol):
     ) -> None: ...  # leave hold: lift to safe Z, open gripper above the background, home
 ```
 
-- **Blocking:** every motion method returns only once the arm is still (joint velocity below tolerance). A motion that doesn't finish within its timeout raises `ArmError`. The SDK's `move_to_traj` is non-blocking, so the driver waits for it itself.
+- **Blocking:** every motion method returns only once the arm is still (positions unchanged for `arm.still_ticks` reads, at most `arm.settle_s`). A joint left more than `arm.max_error_deg` from its goal raises `ArmError` (blocked), except on the descent into the cloth.
 - **`pick(target, zone)`, with `target` = the cloth surface point where the TCP should go:**
-  1. Reject (`TargetRejected`, no motion) if `target` XY is outside `zones.<zone>.workspace_mm` or IK fails.
-  2. Go to `target.z + approach_mm` with the top-down orientation (`arm.grasp_rpy_deg`), open the gripper.
-  3. Descend linearly to `max(target.z - grasp_depth_mm, z_floor_mm)`. Z is clamped, XY is never clamped: a clamped XY means grasping a box wall.
-  4. Close the gripper, lift linearly to `arm.safe_z_mm`.
-- **`place_on_background` / `drop_to_bin`:** fixed joint poses (`place_bg`, `bin_<color>`), open the gripper, lift. Release from `arm.place_release_height_mm` above the background so the cloth lands crumpled, which makes the re-grasp easier.
-- **Hold vs disable:** the SDK's `estop()` disables the motors, and **the arm falls**. The software stop (dashboard button, Ctrl+C) is `hold()`: freeze the joint targets at the current position. After `hold()`, every motion raises `EStopped` until `recover()`. Cutting power is the job of the hardware e-stop switch ([D-009](decisions.md)).
-- Low-level `ArmDriver` (SDK wrapper) and its mock are internal to block 5. Block 2 uses the driver for FK and gravity-compensation teaching, not the state machine.
+  1. Reject (`TargetRejected`, no motion) if `target` XY is outside `zones.<zone>.workspace_mm` or IK fails anywhere on the path (the whole path is planned before moving).
+  2. Joint move to `target.z + approach_mm`, tool down (tilt ≤ `arm.grasp_max_tilt_deg`, roll `arm.roll_deg`), open the gripper (`gripper.open`).
+  3. Descend in a straight line to `max(target.z - grasp_depth_mm, z_floor_mm)`. Z is clamped, XY is never clamped: a clamped XY means grasping a box wall. Being stopped by cloth is fine.
+  4. Close the gripper (stalls on the cloth at `gripper.torque_limit`), read its opening, go back up the same line.
+- **`place_on_background` / `drop_to_bin`:** fixed joint poses (`place_bg`, `bin_<color>`), open the gripper. Teach `place_bg` high enough that the cloth lands crumpled.
+- **`look(zone)`** also sets the gripper to `gripper.look`, so the fingers are at the same pixels in every look frame.
+- **Hold vs disable:** with the motors off, **the arm falls**. The software stop (dashboard button, Ctrl+C) is `hold()`: freeze the goals at the measured position. After `hold()`, every motion raises `EStopped` until `recover()`. Cutting power is the job of the hardware switch ([D-009](decisions.md)). `shutdown()` disables only after reaching `rest`; if it can't, the arm stays held.
+- The bus (`FeetechBus`, `MockBus`), kinematics and `So101Arm` live in `sorter.arm`. The setup tools use `So101Arm` directly (`connect`, `enable`, `disable`, `read_q`, `tcp`, `solve_down`, `plan_line`, `follow`).
 
 ### Hub: state machine ↔ dashboard (block 0)
 
@@ -412,8 +416,8 @@ The decision frame is the main panel: the wrist feed moves with the arm, and ove
 
 One Python process ([D-005](decisions.md)):
 
-- camera capture thread (block 1);
-- SDK control loop thread, 500 Hz, inside the arm driver (block 5);
+- camera capture thread (block 1), fed by an OpenCV child process;
+- no arm thread: motions are streamed from the calling thread (the state machine), at `arm.control_hz`;
 - state machine thread (block 6);
 - web server, uvicorn (block 7).
 
@@ -435,7 +439,7 @@ Package `__init__.py` files stay empty: `sorter.core.config` imports every block
 
 ## Config
 
-YAML, loaded and deep-merged in this order: `config/default.yaml` → `config/rig.yaml` → `config/hand_eye.yaml` → `config/local.yaml` (gitignored, machine overrides). Missing files are skipped, except `default.yaml`. Validated with pydantic by `sorter.core.config.load_config()`: unknown top-level sections are an error.
+YAML, loaded and deep-merged in this order: `config/default.yaml` → `config/rig.yaml` → `config/calibration.yaml` → `config/local.yaml` (gitignored, machine overrides). Missing files are skipped, except `default.yaml`. Validated with pydantic by `sorter.core.config.load_config()`: unknown top-level sections are an error.
 
 Each block defines the model for its own section in `src/sorter/<package>/config.py` (e.g. `BoxDetectorConfig` in `sorter/box_detector/config.py`). Block 0 created them as placeholders that accept any key; the owner adds typed fields.
 
@@ -443,20 +447,20 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 | --- | --- | --- |
 | `backends` | 0 | Per component `real` \| `sim`: `camera`, `arm`, `calibration`, `box_detector`, `color_classifier`. Swap stubs one at a time during integration |
 | `sim` | 0 | Simulator world: `seed`, `items` (colors in the box), `miss_prob`, `double_prob`, `motion_s` (per path segment), `vision_s` (sim vision delay), image size, `cam_height_mm`, `item_radius_mm`, `zones.<zone>` (`center_mm`, `width_mm`, `surface_z_mm`) |
-| `camera` | 1 | Device type, serial, resolution, fps, exposure / white balance |
+| `camera` | 1 | `index` (OpenCV device), `name` (macOS: must be among the plugged-in cameras), `width`, `height`, `fps`, `hfov_deg`, `fresh_skip_frames`, `warmup_s`, `reconnect_s` |
 | `views.<zone>.roi` | 1 | Pixel polygon of the zone in its look pose, excluding the gripper fingers (`rig.yaml`) |
-| `calibration` | 2 | `hand_eye` (the transform, from `hand_eye.yaml`) |
-| `box_detector` | 3 | Thresholds, `avoid_radius_px`, wall margin |
+| `calibration` | 2 | `zones.<zone>` (homography, plane height, from `calibration.yaml`), `marker_dict` |
+| `box_detector` | 3 | `avoid_radius_px`, `min_area_px`, `empty_coverage`, `wall_margin_px`, `min_inset_px` (SAM3 settings shared with `color_classifier.sam`) |
 | `color_classifier` | 4 | `sam` (SAM3 service: `url`, `api_key`, `prompts`, `threshold`, `mask_threshold`, `timeout_s`), class thresholds (`lightness_dark`, `chroma_colored`, `lightness_light`, `confidence_margin`), `erode_px`, `min_area_px`, `max_area_frac`, `overlap_max`, re-grasp (`grasp_inset_px`, `grasp_depth_tol_mm`, `depth_window_px`). The API key goes in `local.yaml` or env `SAM3_API_KEY`, never committed |
-| `arm` | 5 | SDK config path, speeds, `tcp_offset_mm`, `grasp_rpy_deg`, `safe_z_mm`, `place_release_height_mm`, gripper (`open`, `close_kp`, `empty_below`), timeouts |
-| `poses` | 5 | Joint angles (rad): `rest`, `home`, `look_box`, `look_bg`, `place_bg`, `bin_light`, `bin_dark`, `bin_colored` (`rig.yaml`) |
-| `zones.<zone>` | 5 | `workspace_mm` (XY polygon, arm frame), `z_floor_mm`, `grasp_depth_mm`, `approach_mm` (`rig.yaml`) |
+| `arm` | 5 | Bus (`port`, `baudrate`, `ids`, `gripper_id`), joint mapping (`signs`, `offsets_deg`, `limit_margin_deg`), speeds (`control_hz`, `joint_speed_deg_s`, `linear_speed_mm_s`, `step_mm`), settling (`settle_s`, `still_ticks`, `max_error_deg`, sag correction `sag_passes`, `sag_tol_deg`), `tcp_extend_mm`, `grasp_max_tilt_deg`, `roll_deg`, `recover_lift_mm`, `table_z_mm`, `gripper` (`open`, `closed`, `look`, `torque_limit`, `close_s`, `empty_below`, `reversed`) |
+| `poses` | 5 | Joint angles (rad, 5 joints): `rest`, `home`, `look_box`, `look_bg`, `place_bg`, `bin_light`, `bin_dark`, `bin_colored` (`rig.yaml`, by `python -m sorter.arm.teach`) |
+| `zones.<zone>` | 5 | `workspace_mm` (XY polygon, arm frame), `z_floor_mm`, `grasp_depth_mm`, `approach_mm` (`rig.yaml`, by `python -m sorter.calibration.setup`) |
 | `state_machine` | 6 | `empty_confirmations`, `max_consecutive_failures`, `low_confidence`, `save_runs`, `runs_dir` |
 | `dashboard` | 7 | `host`, `port`, `stream_fps`, `jpeg_quality`, `status_hz` |
 
 ## Recording format (block 0)
 
-`sorter.core.io.save_observation(path, obs)` / `load_observation(path)`: one `.npz` per observation (`color`, `depth_mm`, intrinsics, `timestamp`, `zone`, `T_base_cam`, `joints`), plus a `.png` of the color image for browsing.
+`sorter.core.io.save_observation(path, obs)` / `load_observation(path)`: one `.npz` per observation (`color`, `depth_mm` (empty = none), intrinsics, `timestamp`, `zone`, `T_base_cam`, `joints`), plus a `.png` of the color image for browsing.
 
 - **Datasets** (block 1): `data/datasets/<name>/`. Record from the real look poses so the viewpoint matches runtime.
 - **Run logs** (block 6, `sorter.orchestrator.runlog`): one record per sense phase in `data/runs/<run_id>/`: `<cycle:04d>_<phase>.npz` (+ `.png`) and a `.json` with the vision result (without arrays), the resolved `pending`, `avoid`, counters, the summary, and `next_phase`. A phase repeated within a cycle gets a suffix (`0003_sense_box_2`); a re-sense of the same observation writes only a `.json` whose `observation` names the existing `.npz`. `run.json` holds the config at start and the counters and `end_reason` (`done` / `stopped`) at the end. Run logs double as test data for blocks 3 and 4.
@@ -468,7 +472,7 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 
 - `SimArm` implements `ArmController` directly: `pick` grabs the highest item near the target, misses with `sim.miss_prob`, grabs two items from the box with `sim.double_prob`; `place_on_background` / `drop_to_bin` move the gripper content. A target outside the zone view raises `TargetRejected`. `hold()` interrupts a motion and blocks motions until `recover()`. Each motion is a camera path of one or more segments (a pick: above the target, down, up), `sim.motion_s` seconds each. `start()` puts every item back in the box when all of them are in bins, so the next run has something to sort.
 - `SimCamera` renders what the wrist camera sees wherever the arm is (`sorter.sim.scene`): a table rendered once (wood, a cardboard box, the gray mat, three bins), crumpled cloth sprites with shadows, the gripper fingers at the bottom of the frame (no depth there) and the item they hold, plus depth. The camera follows the arm's path smoothly, so the live feed moves between poses. At a look pose the image matches `ZoneView` exactly, which sim vision and sim calibration use.
-- `SimCalibration` is a fixed linear pixel ↔ XY mapping per zone; Z comes from depth.
+- `SimCalibration` is a fixed linear pixel ↔ XY mapping per zone; Z comes from depth. The sim camera keeps depth, so sim frames exercise the depth paths of vision.
 - Sim vision (`SimBoxDetector`, `SimColorClassifier`) reads the world directly and returns pixels, with perfect colors, after `sim.vision_s`.
 
 Each sim component is selected independently through `backends`, so a real component can run against the rest of the sim (e.g. real vision on sim frames).
@@ -481,11 +485,11 @@ Each sim component is selected independently through `backends`, so a real compo
 | `src/sorter/core/` (types, protocols, errors, config loader, io, hub, observer, `HubLogHandler`, `System`) | 0 |
 | `src/sorter/app.py`, `src/sorter/__main__.py` (wiring, CLI) | 0 |
 | `src/sorter/sim/` | 0 |
-| `src/sorter/camera/` (drivers, record tool, ROI tool) | 1 |
-| `src/sorter/calibration/` (hand-eye, verification tool) | 2 |
+| `src/sorter/camera/` (UVC camera, probe tool) | 1 |
+| `src/sorter/calibration/` (plane homography, markers, zone setup and touch-test tool) | 2 |
 | `src/sorter/box_detector/` | 3 |
 | `src/sorter/color_classifier/` (incl. stats tool) | 4 |
-| `src/sorter/arm/` (driver, mock driver, controller, pose teaching tool) | 5 |
+| `src/sorter/arm/` (Feetech bus + mock, kinematics, controller, pose teaching tool) | 5 |
 | `src/sorter/orchestrator/` (state machine, run log) | 6 |
 | `src/sorter/dashboard/` (server, renderer, `static/` page) | 7 |
 | `src/sorter/<package>/config.py` | The block that owns the package |
@@ -493,5 +497,5 @@ Each sim component is selected independently through `backends`, so a real compo
 | `tests/conftest.py` (shared fixtures) | 0 |
 | `config/default.yaml` | Each block its own section; structure by 0 |
 | `config/rig.yaml` | `views`: 1; `poses`, `zones`: 5 |
-| `config/hand_eye.yaml` | 2 |
+| `config/calibration.yaml` | 2 |
 | `docs/demo.md` | 8 |

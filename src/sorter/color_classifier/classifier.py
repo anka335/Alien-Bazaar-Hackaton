@@ -72,14 +72,22 @@ def _conf(distance: float, margin: float) -> float:
 
 
 def regrasp_point(
-    mask: np.ndarray, depth_mm: np.ndarray, inset_px: int, window_px: int, tol_mm: float = 5.0
+    mask: np.ndarray,
+    depth_mm: np.ndarray | None,
+    inset_px: int,
+    window_px: int,
+    tol_mm: float = 5.0,
 ) -> GraspPoint | None:
     """The highest cloth point (smallest depth) at least `inset_px` inside the blob.
 
     Points within `tol_mm` of the highest are equally good; of those, the one deepest inside the
-    blob wins, so a flat cloth is grasped in its middle, not at the inset line.
+    blob wins, so a flat cloth is grasped in its middle, not at the inset line. Without depth
+    (RGB-only camera) it is the point deepest inside the blob, with `depth_mm` None.
     """
     dist = cv2.distanceTransform(mask.astype(np.uint8), cv2.DIST_L2, 5)
+    if depth_mm is None:
+        v, u = np.unravel_index(int(np.argmax(dist)), dist.shape)
+        return GraspPoint(PixelPoint(int(u), int(v)), None)
     inner = dist >= min(inset_px, 0.5 * float(dist.max()))
     k = max(1, window_px) | 1
     # a median over the window rejects single-pixel depth spikes; 0 = no data stays out
@@ -126,15 +134,17 @@ class Sam3ColorClassifier:
         self.roi = list(roi)
 
     def blobs(self, frame: Frame) -> list[tuple[np.ndarray, float]]:
-        """Instance masks inside the ROI with depth data, de-duplicated, largest first."""
+        """Instance masks inside the ROI (with depth data, if any), de-duplicated, largest first."""
         shape = frame.color.shape[:2]
         roi = roi_mask(shape, self.roi)
         max_area = self.cfg.max_area_frac * roi.sum()
         seen = np.zeros(shape, dtype=bool)
         out = []
         for inst in sorted(self.segment(frame.color), key=lambda i: i.score, reverse=True):
-            # pixels without depth are the gripper fingers (too close) or glare: not cloth
-            m = inst.mask & roi & (frame.depth_mm > 0)
+            m = inst.mask & roi
+            if frame.depth_mm is not None:
+                # pixels without depth are the gripper fingers (too close) or glare: not cloth
+                m &= frame.depth_mm > 0
             area = int(m.sum())
             if area < self.cfg.min_area_px or area > max_area:
                 continue

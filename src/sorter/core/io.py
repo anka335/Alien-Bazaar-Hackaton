@@ -18,7 +18,7 @@ def save_observation(path: str | Path, obs: Observation) -> Path:
     np.savez_compressed(
         path,
         color=f.color,
-        depth_mm=f.depth_mm,
+        depth_mm=np.empty(0, np.uint16) if f.depth_mm is None else f.depth_mm,
         intrinsics=np.array([k.fx, k.fy, k.cx, k.cy, k.width, k.height], dtype=np.float64),
         coeffs=np.array(k.coeffs, dtype=np.float64),
         timestamp=np.float64(f.timestamp),
@@ -43,9 +43,10 @@ def load_observation(path: str | Path) -> Observation:
             height=int(height),
             coeffs=tuple(d["coeffs"].tolist()),
         )
+        depth = d["depth_mm"]
         frame = Frame(
             color=d["color"],
-            depth_mm=d["depth_mm"],
+            depth_mm=depth if depth.size else None,
             intrinsics=intrinsics,
             timestamp=float(d["timestamp"]),
             seq=int(d["seq"]),

@@ -2,7 +2,7 @@
 
 An autonomous robotic system that takes clothes from a mixed pile and sorts them by color.
 
-A robotic arm picks items one by one from a box of mixed clothing, using a depth camera mounted on its wrist to locate a grasp point. Each item is placed on a uniform background area, where a color classifier determines whether it is **light**, **dark**, or **colored**. The arm then picks the item up again and drops it into the matching bin, repeating the cycle until the box is empty. A live dashboard shows the camera feed, detected grasp points and colors, the current system state, and item counts per bin.
+A robotic arm picks items one by one from a box of mixed clothing, using a camera mounted on its wrist to locate a grasp point. Each item is placed on a uniform background area, where a color classifier determines whether it is **light**, **dark**, or **colored**. The arm then picks the item up again and drops it into the matching bin, repeating the cycle until the box is empty. A live dashboard shows the camera feed, detected grasp points and colors, the current system state, and item counts per bin.
 
 This demo addresses the core challenge of automated laundry handling — picking and sorting deformable clothing items from a cluttered pile — as the first step toward a fully automated wash–dry–sort pipeline.
 
@@ -10,8 +10,8 @@ This demo addresses the core challenge of automated laundry handling — picking
 
 | Component | Details |
 | --- | --- |
-| Robot arm | Seeed reBot Arm B601-RS (RobStride motors): 6 DoF + parallel gripper, Python SDK [`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py) |
-| Camera | RGB-D (depth) camera mounted on the arm's wrist (eye-in-hand), model: _TBD_ |
+| Robot arm | SO-101 (LeRobot): 5 joints + gripper, Feetech STS3215 servos on a USB serial bus, calibrated with LeRobot |
+| Camera | USB (UVC) webcam on the gripper, RGB only, no depth ([D-014](docs/decisions.md)) |
 | Work area | at fixed positions: mixed-clothes box, uniform background area (mid-gray), 3 bins (light / dark / colored) |
 | Lighting | dedicated lamp for stable lighting |
 
@@ -25,7 +25,7 @@ This demo addresses the core challenge of automated laundry handling — picking
       └──────────────── verify drop, repeat until box is empty ─────────┘
 ```
 
-1. **Pick from box.** The arm looks at the box from a fixed pose → depth + color frame → grasp point in pixels → arm coordinates → pick.
+1. **Pick from box.** The arm looks at the box from a fixed pose → color frame → grasp point in pixels → arm coordinates (per-zone plane calibration) → pick.
 2. **Place on background.** An item on the background proves the grasp worked. An empty background means a missed grasp.
 3. **Classify.** Segment the item, classify it as light, dark, or colored, and find a re-grasp point.
 4. **Pick from background → drop into bin.**
@@ -73,7 +73,7 @@ uv run pytest                             # tests
 
 `run --sim` starts the loop and the dashboard at http://127.0.0.1:8000. Press Start there, or pass `--autostart`. The red Hold button (or Space / Esc on the page) freezes the arm; Reset continues. Ctrl+C holds the arm and shuts down. To open the dashboard from another device, set `dashboard.host: 0.0.0.0` in `config/local.yaml`. The simulator is paced to be watched (about 10 s per item); lower `sim.motion_s` and `sim.vision_s` in `config/local.yaml` to speed it up. Other flags: `--no-dashboard`, `--config-dir`, `-v`. Every run is logged to `data/runs/<run_id>/` (turn off with `state_machine.save_runs: false`).
 
-**Config** is in `config/`: `default.yaml` (all sections), `rig.yaml` (poses, zones, ROIs of the physical rig), `hand_eye.yaml` (calibration result), and your own `local.yaml` (gitignored, machine overrides). `backends` chooses `real` or `sim` per component, for example in `config/local.yaml`:
+**Config** is in `config/`: `default.yaml` (all sections), `rig.yaml` (poses, zones, ROIs of the physical rig), `calibration.yaml` (pixel → arm homography per zone), and your own `local.yaml` (gitignored, machine overrides). `backends` chooses `real` or `sim` per component, for example in `config/local.yaml`:
 
 ```yaml
 backends:
@@ -82,7 +82,24 @@ backends:
 
 **Color classifier** (block 4) segments the background with a remote SAM3 service ([D-013](docs/decisions.md)). To use it (`backends.color_classifier: real`), put the API key in `config/local.yaml` (`color_classifier: {sam: {api_key: ...}}`) or in the `SAM3_API_KEY` env var. On the simulator, set `sam.prompts: [blob]` and `sam.threshold: 0.3`, since SAM3 doesn't see the rendered cloth as clothing. Tuning tool: `uv run python -m sorter.color_classifier.stats <observation.npz ...>` or `--sim 3` (`--prompts a,b`, `--threshold`); it prints the color stats of every item (`--save DIR` writes overlays).
 
-**Real hardware:** the arm SDK ([`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py)) is not a dependency yet. Block 5 adds it with the real arm backend ([D-010](docs/decisions.md)).
+## Real hardware (SO-101)
+
+Plug in the arm's USB cable and its power supply, and the wrist camera. On macOS, allow camera access for the terminal / VS Code (System Settings → Privacy & Security → Camera). Set everything to `real` in `config/local.yaml`:
+
+```yaml
+backends: {camera: real, arm: real, calibration: real, box_detector: real, color_classifier: real}
+color_classifier: {sam: {api_key: ...}}   # SAM3 serves both vision blocks (D-013, D-015)
+```
+
+One-time setup, in this order ([D-014](docs/decisions.md)):
+
+1. `uv run python -m sorter.camera.probe`: snapshots per camera index in `data/probe/`; the wrist camera (fingers at the bottom) goes into `camera.index`.
+2. `uv run python -m sorter.arm.teach`: `free` (hold the arm, the motors go off), move it by hand, `lock`, `save <pose>` for `home`, `look_bg`, `look_box`, `place_bg`, `bin_light`, `bin_dark`, `bin_colored`, `rest`. Look poses: camera straight down, the whole zone in view.
+3. `uv run python -m sorter.calibration.markers`: print `data/markers.png` at 100 %, cut out the markers, put ≥ 4 flat in a zone.
+4. `uv run python -m sorter.calibration.setup background` (then `box`): the arm looks, finds the markers, you touch each marker center and then the zone corners with the fingertips while holding the arm. It writes `config/calibration.yaml` and the zone's ROI, workspace and floor to `config/rig.yaml`. `... setup <zone> snap` only takes a look image; `... setup <zone> verify` is the touch test.
+5. `uv run python -m sorter run` and press Start.
+
+The arm reaches straight down only ≈ 10–30 cm from its base: the box, the background mat, and the three bins all have to fit in that circle.
 
 ## Working with AI agents
 

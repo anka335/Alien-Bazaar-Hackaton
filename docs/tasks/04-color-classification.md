@@ -61,3 +61,4 @@ _None yet._
 - 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/color_classifier/config.py` (placeholder). Real backend: `sorter/color_classifier/backend.py` → `create(cfg) -> ColorClassifier`. See architecture.md → Wiring.
 - 2026-09-25 (block 6): run logs are written: `data/runs/<run_id>/<cycle:04d>_<phase>.npz` + `.json` per sense phase (vision result, decision). Usable as test data; format in architecture.md → Recording format.
 - 2026-09-25 (block 4): real backend on the SAM3 service (D-013). New config section `color_classifier` (typed, `extra="forbid"`); the API key goes in `config/local.yaml` or `SAM3_API_KEY`. `classify` can raise `SegmentationError` (a `SorterError`).
+- 2026-09-25 (SO-101, D-014): the wrist camera has no depth. `classify` accepts `frame.depth_mm = None`: no depth filter, re-grasp at the pixel deepest inside the blob, `grasp.depth_mm = None`. The box detector (block 3) now also uses `SamSegmenter` (D-015).

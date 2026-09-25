@@ -8,11 +8,11 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | # | Block | Status | Owner | Branch | Blocked by / notes |
 | --- | --- | --- | --- | --- | --- |
 | 0 | [Contracts & skeleton](tasks/00-contracts.md) | done | Softjey + Claude | `block/00-contracts` | — |
-| 1 | [Setup & camera](tasks/01-setup-camera.md) | todo | — | — | — |
-| 2 | [Calibration](tasks/02-calibration.md) | todo | — | — | — |
-| 3 | [Box detection](tasks/03-box-detection.md) | todo | — | — | — |
+| 1 | [Setup & camera](tasks/01-setup-camera.md) | in progress | Softjey + Claude | `block/so101-integration` | SO-101 code done; rig setup and tuning on hardware (D-014) |
+| 2 | [Calibration](tasks/02-calibration.md) | in progress | Softjey + Claude | `block/so101-integration` | SO-101 code done; rig setup and tuning on hardware (D-014) |
+| 3 | [Box detection](tasks/03-box-detection.md) | in progress | Softjey + Claude | `block/so101-integration` | SO-101 code done; rig setup and tuning on hardware (D-014) |
 | 4 | [Color classification](tasks/04-color-classification.md) | in progress | Maciej | `block/04-color-classification` | tuning on real frames needs block 1 |
-| 5 | [Arm control](tasks/05-arm-control.md) | todo | — | — | — |
+| 5 | [Arm control](tasks/05-arm-control.md) | in progress | Softjey + Claude | `block/so101-integration` | SO-101 code done; rig setup and tuning on hardware (D-014) |
 | 6 | [State machine](tasks/06-state-machine.md) | review | Softjey + Claude | `block/06-state-machine` | — |
 | 7 | [Dashboard](tasks/07-dashboard.md) | review | Softjey + Claude | `block/07-dashboard` | — |
 | 8 | [Demo preparation](tasks/08-demo.md) | todo | — | — | — |
@@ -41,8 +41,8 @@ graph LR
 ```
 
 - **Block 0 comes first and is short.** It fixes the stack, the repo layout, the interfaces, and the stubs. After it, blocks 3–7 run fully in parallel.
-- **Block 1 is physical work** (zones, wrist camera mount, lamp) and runs in parallel with block 0. Its ROIs and datasets need the look poses from block 5.
-- **Block 2** needs the camera mount from block 1 and FK + motion from block 5. It reuses the Seeed hand-eye script (D-006).
+- **Block 1 is physical work** (zones, lamp; the SO-101 camera is already on the wrist) and runs in parallel with block 0. Its ROIs and datasets need the look poses from block 5.
+- **Block 2** needs the look poses and FK + motion from block 5. It fits a plane homography per zone from touched ArUco markers (D-014).
 - **Blocks 3 and 4** start on photos or recorded frames and switch to look-pose recordings and live frames once blocks 1 and 5 are ready.
 - **Block 6** is developed against the simulator. Real integration needs 2–5.
 - **Block 8** starts early for one thing: choose the demo clothes on day 1, since thresholds and grasp depth are tuned on them.

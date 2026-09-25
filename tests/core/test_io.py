@@ -34,3 +34,13 @@ def test_roundtrip(tmp_path):
 def test_roundtrip_without_arm(tmp_path):
     back = load_observation(save_observation(tmp_path / "x", _obs(None, None)))
     assert back.T_base_cam is None and back.joints is None
+
+
+def test_roundtrip_without_depth(tmp_path):
+    obs = _obs(None, None)
+    rgb = Observation(
+        Frame(obs.frame.color, None, obs.frame.intrinsics, 1.0, 1), Zone.BACKGROUND, None, None
+    )
+    back = load_observation(save_observation(tmp_path / "rgb", rgb))
+    assert back.frame.depth_mm is None
+    assert np.array_equal(back.frame.color, rgb.frame.color)

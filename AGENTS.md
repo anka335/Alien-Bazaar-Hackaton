@@ -15,10 +15,10 @@ A robotic arm sorts clothes by color: it picks an item from a mixed box, uses an
 
 ## Ground rules (already decided, don't relitigate without a new entry in decisions.md)
 
-- Vision uses **classic CV plus depth**, not trained models, unless a block's task file says otherwise. Exception: block 4 gets its masks from a remote SAM3 service ([D-013](docs/decisions.md)).
+- Vision uses **classic CV**, not trained models, unless a block's task file says otherwise. Exception: blocks 3 and 4 get their masks from a remote SAM3 service ([D-013](docs/decisions.md), [D-015](docs/decisions.md)). The wrist camera has no depth ([D-014](docs/decisions.md)); depth-dependent code must also work with `depth_mm = None`.
 - Vision outputs **pixel coordinates**. Only the calibration module converts pixels to arm coordinates.
 - Every hardware-facing module has a **stub/mock** so other blocks can develop and test without hardware.
-- Safety comes first: every arm target is checked against workspace limits, and a stop (hold) is always available. Never disable the motors except at the rest pose: the arm falls.
+- Safety comes first: every arm target is checked against workspace limits, and a stop (hold) is always available. Never disable the motors except at the rest pose, or in an interactive setup tool after asking the person to hold the arm: the arm falls.
 
 ## Parallel workflow
 

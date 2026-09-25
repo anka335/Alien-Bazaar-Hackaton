@@ -23,7 +23,7 @@ from sorter.orchestrator.config import StateMachineConfig
 from sorter.sim.config import SimConfig
 
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[3] / "config"
-CONFIG_FILES = ("default.yaml", "rig.yaml", "hand_eye.yaml", "local.yaml")
+CONFIG_FILES = ("default.yaml", "rig.yaml", "calibration.yaml", "local.yaml")
 
 
 class Backend(StrEnum):
@@ -86,3 +86,20 @@ def load_config(
     if overrides:
         data = deep_merge(data, overrides)
     return Config.model_validate(data)
+
+
+def update_yaml(path: str | Path, updates: dict[str, Any]) -> None:
+    """Deep-merge `updates` into a YAML file (created if missing), keeping its leading comments.
+
+    Used by the setup tools to write `rig.yaml` and `calibration.yaml`. Other comments are lost.
+    """
+    path = Path(path)
+    text = path.read_text() if path.is_file() else ""
+    header = []
+    for line in text.splitlines():
+        if not line.startswith("#"):
+            break
+        header.append(line)
+    data = deep_merge(yaml.safe_load(text) or {}, updates)
+    body = yaml.safe_dump(data, sort_keys=False, default_flow_style=None, width=100)
+    path.write_text("\n".join(header) + ("\n" if header else "") + body)

@@ -201,3 +201,16 @@ def test_loop_with_real_classifier(sim_config, monkeypatch, seed):
     assert all(it.location == "bin" and it.bin is it.color for it in system.world.items)
     expected = {c: sum(it.color is c for it in system.world.items) for c in ColorClass}
     assert status.counters == expected
+
+
+def test_rgb_only_frame_classifies_and_grasps_the_middle():
+    """The SO-101 wrist camera has no depth (D-014): grasp = deepest point inside the blob."""
+    f = _synthetic()
+    rgb = Frame(f.color, None, f.intrinsics, 0.0, 0)
+    bg = Sam3ColorClassifier(
+        ColorClassifierConfig(min_area_px=100), _const([(_rect(30, 90, 40, 120), 0.9)])
+    ).classify(rgb)
+    (it,) = bg.items
+    assert it.color is ColorClass.COLORED
+    assert it.grasp.depth_mm is None
+    assert (it.grasp.px.u, it.grasp.px.v) == (pytest.approx(80, abs=12), pytest.approx(60, abs=2))

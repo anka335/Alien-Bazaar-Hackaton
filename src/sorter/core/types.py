@@ -61,14 +61,16 @@ class Intrinsics:
 @dataclass(frozen=True)
 class Frame:
     color: np.ndarray  # HxWx3 uint8, BGR
-    depth_mm: np.ndarray  # HxW uint16, Z in mm, aligned to color; 0 = no data
+    depth_mm: np.ndarray | None  # HxW uint16, Z in mm, aligned to color; 0 = no data.
+    # None = RGB-only camera (the SO-101 wrist camera, D-014)
     intrinsics: Intrinsics
     timestamp: float  # monotonic, when the frame arrived
     seq: int
 
     def __post_init__(self) -> None:
         readonly(self.color)
-        readonly(self.depth_mm)
+        if self.depth_mm is not None:
+            readonly(self.depth_mm)
 
 
 # --- Observation (block 0) ---------------------------------------------------
@@ -92,7 +94,7 @@ class Observation:
 @dataclass(frozen=True)
 class GraspPoint:
     px: PixelPoint
-    depth_mm: float  # robust Z of the cloth SURFACE at px; never 0
+    depth_mm: float | None  # robust Z of the cloth SURFACE at px, never 0; None without depth
 
 
 @dataclass

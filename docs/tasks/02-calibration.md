@@ -1,7 +1,7 @@
 # Block 2: Calibration
 
-**Status:** todo · **Owner:** — · **Branch:** —
-**Owned paths:** `src/sorter/calibration/`, `tests/calibration/`, `config/hand_eye.yaml`, `config/default.yaml` → `calibration`
+**Status:** in progress · **Owner:** Softjey + Claude · **Branch:** `block/so101-integration`
+**Owned paths:** `src/sorter/calibration/`, `tests/calibration/`, `config/calibration.yaml`, `config/default.yaml` → `calibration`
 
 ## Goal
 
@@ -9,30 +9,28 @@ Convert camera observations into arm coordinates accurately enough to grasp clot
 
 ## Scope
 
-- [ ] Hand-eye calibration, eye-in-hand ([D-006](../decisions.md)): get `T_flange_cam`. Start from the Seeed script (`collect_handeye_eih.py`: ArUco marker, automatic poses, Tsai) and port or wrap it. Its output is in metres; convert to mm.
-- [ ] Make sure the result is relative to the same flange frame (`end_link`) that `ArmController.ee_pose()` returns.
-- [ ] Save to `config/hand_eye.yaml`: 4×4 in mm, `rmse_mm`, `method`, `camera_serial`, `created`. The file is committed ([D-007](../decisions.md)).
-- [ ] Implement the `Calibration` contract: `cam_pose`, `to_arm`, `to_pixel`.
-- [ ] Verification tool (touch test): from a look pose, click a point in the image (or detect a marker), move the TCP there with the arm, and measure the error. Cover box corners, box center, and background.
+- [x] Plane calibration ([D-014](../decisions.md)): one homography per zone, pixel at the look pose → arm XY on the zone's plane; `PlaneCalibration` implements `cam_pose` (informational), `to_arm`, `to_pixel`.
+- [x] Markers: `python -m sorter.calibration.markers` writes a printable ArUco sheet (`DICT_4X4_50`, 40 mm).
+- [x] Zone setup tool, `python -m sorter.calibration.setup <zone>`: look pose → detect markers → touch each marker center with the fingertips (motors off, arm held) → fit H → touch the zone corners → write `config/calibration.yaml` and the zone's ROI, workspace (corners shrunk by 35 mm box / 20 mm background) and `z_floor_mm` to `config/rig.yaml`. `snap` step: look image only.
+- [x] Touch test: `... setup <zone> verify` moves the tip 15 mm above every visible marker.
+- [ ] Calibrate both zones on the rig; record the RMSE and touch-test error here.
 
 ## Depends on / Unblocks
 
-- Depends on: 1 (camera, rigid wrist mount), 5 (FK, moving the arm, TCP offset), 0 (contract).
+- Depends on: 1 (camera), 5 (FK, look poses), 0 (contract).
 - Unblocks: integration.
 
 ## Acceptance criteria
 
-- Touch-test error ≤ _N_ mm over the box and the background, from the look poses. Set N from the gripper tolerance, e.g. 10 mm.
-- Recalibration takes ≤ 15 minutes, and the steps are written in this file.
+- Touch-test error ≤ 10 mm over the box and the background, from the look poses.
+- Recalibration of a zone takes ≤ 10 minutes (setup tool), steps in README → Real hardware.
 
 ## Notes & risks
 
-- The error budget includes FK accuracy, hand-eye accuracy, and depth noise. Depth error grows with distance, so the look poses should be as low as the camera's minimum range allows.
-- Only a change of the camera mount invalidates the hand-eye result. Moving the rig doesn't, as long as the zones stay at their positions.
-
-## Open questions
-
-- Does the Seeed script run with our camera model as is?
+- The homography is valid only at the zone's look pose and on its plane. Re-run the setup after re-teaching a look pose or moving a zone.
+- **Pile parallax in the box:** points on top of the pile map as if on the box floor. The XY error grows with pile height and distance from the image center. If it matters, calibrate the box on a raised sheet (markers on a book at the typical pile height) and set `surface_offset_mm` accordingly.
+- Lens distortion is not modeled; use markers spread over the whole zone. A large RMSE (> 5 mm) at the edges means distortion matters.
+- The error budget includes FK accuracy (servo backlash, sag under load), the touch itself, and look-pose repeatability.
 
 ## Requests from other blocks
 
@@ -40,5 +38,6 @@ _None yet._
 
 ## Log
 
-- 2026-09-25: method changed to eye-in-hand hand-eye calibration (D-006); API now `cam_pose` / `to_arm(obs, point)` / `to_pixel`; result committed in `config/hand_eye.yaml` (D-007).
-- 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/calibration/config.py` (placeholder). Real backend: `sorter/calibration/backend.py` → `create(cfg) -> Calibration`. See architecture.md → Wiring.
+- 2026-09-25: method changed to eye-in-hand hand-eye calibration (D-006); API now `cam_pose` / `to_arm(obs, point)` / `to_pixel`; result committed (D-007).
+- 2026-09-25 (block 0): skeleton ready. See architecture.md → Wiring.
+- 2026-09-25: no depth on the SO-101 camera (D-014): hand-eye replaced by per-zone plane homographies in `config/calibration.yaml` (was `hand_eye.yaml`). `to_arm` no longer needs depth or `T_base_cam`.

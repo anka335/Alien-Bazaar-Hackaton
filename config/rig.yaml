@@ -1,5 +1,10 @@
-# Fixed rig, committed (D-007). Empty until measured on the real rig:
-# views: block 1 (ROI tool); poses and zones: block 5 (pose teaching tool).
+# Fixed rig, committed (D-007). Poses: `python -m sorter.arm.teach`. Views (ROIs) and zones
+# (workspace, floor): `python -m sorter.calibration.setup <zone>`.
 views: {}
-poses: {}
+poses:
+  rest: [0.0, -1.8151, 1.6232, 1.4312, 1.6389]
+  home: [0.0, -0.1745, -0.8727, 1.7453, 1.6389]
+  look_box: [-0.7713, 0.32, -0.7626, 1.8531, 1.6389]
+  look_bg: [-1.5086, 0.2117, -0.54, 1.8797, 1.6389]
+  place_bg: [-1.5086, 0.0897, -0.5236, 1.8664, 1.6389]
 zones: {}

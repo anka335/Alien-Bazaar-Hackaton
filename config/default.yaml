@@ -1,4 +1,4 @@
-# Defaults for every section. Merge order: default.yaml → rig.yaml → hand_eye.yaml → local.yaml.
+# Defaults for every section. Merge order: default.yaml → rig.yaml → calibration.yaml → local.yaml.
 # Each block owns its section (docs/architecture.md → Config). Put machine overrides in
 # config/local.yaml (gitignored), e.g. `backends: {camera: real}`.
 
@@ -26,10 +26,21 @@ sim:
     box: {center_mm: [350, -200], width_mm: 300, surface_z_mm: 40}
     background: {center_mm: [350, 150], width_mm: 300, surface_z_mm: 0}
 
-camera: {}           # block 1
-calibration: {}      # block 2
-box_detector:        # block 3
+camera:              # block 1: SO-101 wrist camera, UVC, RGB only (D-014)
+  index: 0           # OpenCV device; `python -m sorter.camera.probe` shows which is which
+  name: HD Camera    # macOS: refuse to open if no camera with this name is plugged in
+  width: 1280
+  height: 720
+  fps: 30
+  hfov_deg: 70       # approximate intrinsics only; pixel → arm uses the zone homography
+  fresh_skip_frames: 2
+calibration: {}      # block 2: zones are written to calibration.yaml by the setup tool
+box_detector:        # block 3: SAM3 masks, same service as color_classifier.sam (D-015)
   avoid_radius_px: 30
+  min_area_px: 800
+  empty_coverage: 0.02         # cloth share of the box ROI below this → EMPTY
+  wall_margin_px: 40           # grasp this far inside the ROI (walls, camera)
+  min_inset_px: 12             # and this far inside the cloth
 color_classifier:    # block 4 (D-013)
   sam:                         # remote SAM3 segmentation service
     url: https://exes-shape-zoning.ngrok-free.dev
@@ -49,7 +60,19 @@ color_classifier:    # block 4 (D-013)
   grasp_inset_px: 15           # the re-grasp point is at least this far inside the blob
   grasp_depth_tol_mm: 5        # points this close to the highest count as the highest
   depth_window_px: 5           # window for the robust depth of the grasp point
-arm: {}              # block 5
+arm:                 # block 5: SO-101, Feetech STS3215 bus (D-014)
+  port: auto                   # the only /dev/cu.usbmodem*; set it if there are several
+  signs: [1, 1, 1, 1, 1]       # joint direction vs the URDF, per joint
+  joint_speed_deg_s: 60
+  linear_speed_mm_s: 80
+  tcp_extend_mm: 0             # fingertips beyond the URDF gripper frame
+  grasp_max_tilt_deg: 25
+  roll_deg: 93.9               # wrist roll of the rig: camera image up = away from the base
+  table_z_mm: -20              # the table is ≈ 17 mm below the URDF base origin
+  gripper:
+    open: 0.7
+    torque_limit: 500          # of 1000: squeeze on cloth
+    empty_below: 0.03          # opening after closing below this → likely empty
 
 state_machine:       # block 6
   empty_confirmations: 2       # EMPTY box results in a row before DONE
