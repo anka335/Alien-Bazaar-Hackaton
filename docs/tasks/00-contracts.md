@@ -1,6 +1,6 @@
 # Block 0: Contracts & Skeleton
 
-**Status:** review · **Owner:** Softjey + Claude · **Branch:** `block/00-contracts`
+**Status:** done · **Owner:** Softjey + Claude · **Branch:** `block/00-contracts`
 **Owned paths:** `pyproject.toml`, `uv.lock`, `.python-version`, `.gitignore`, tooling config, `src/sorter/core/`, `src/sorter/sim/`, `src/sorter/app.py`, `src/sorter/__main__.py`, `tests/conftest.py`, `tests/core/`, `tests/sim/`, structure of `config/default.yaml`, `docs/architecture.md`
 
 ## Goal
