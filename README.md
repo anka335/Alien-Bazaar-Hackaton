@@ -63,7 +63,24 @@ The dependency graph and the live status board are in [docs/plan.md](docs/plan.m
 
 ## Getting started
 
-_TBD. Filled in by block 0 once the stack and repo layout are fixed._
+Requires [uv](https://docs.astral.sh/uv/). It installs Python 3.11 and the dependencies itself.
+
+```bash
+uv sync                                   # install
+uv run python -m sorter run --sim         # the whole loop on the simulator
+uv run pytest                             # tests
+```
+
+`run --sim` starts the loop and the dashboard at http://127.0.0.1:8000. Press START there, or pass `--autostart`. Ctrl+C holds the arm and shuts down. Other flags: `--no-dashboard`, `--config-dir`, `-v`.
+
+**Config** is in `config/`: `default.yaml` (all sections), `rig.yaml` (poses, zones, ROIs of the physical rig), `hand_eye.yaml` (calibration result), and your own `local.yaml` (gitignored, machine overrides). `backends` chooses `real` or `sim` per component, for example in `config/local.yaml`:
+
+```yaml
+backends:
+  camera: real
+```
+
+**Real hardware:** the arm SDK ([`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py)) is not a dependency yet. Block 5 adds it with the real arm backend ([D-010](docs/decisions.md)).
 
 ## Working with AI agents
 

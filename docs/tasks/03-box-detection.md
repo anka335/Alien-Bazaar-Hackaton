@@ -49,3 +49,4 @@ _None yet._
 ## Log
 
 - 2026-09-25: contract fixed: stateless `detect(frame, avoid)` with `BoxStatus` GRASP / EMPTY / NO_GRASP; frames come from the wrist camera at `look_box` (D-006, D-008).
+- 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/box_detector/config.py` (placeholder). Real backend: `sorter/box_detector/backend.py` → `create(cfg) -> BoxDetector`. `avoid_radius_px` is already a field (the simulator uses it). See architecture.md → Wiring.

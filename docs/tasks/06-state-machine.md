@@ -47,3 +47,4 @@ _None yet._
 ## Log
 
 - 2026-09-25: loop redesigned: background first, blob-count drop verification, `avoid` list, `look(zone)` via the Observer, `HELD` phase (D-006, D-008, D-009).
+- 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/orchestrator/config.py` (placeholder). A placeholder loop is in `sorter/orchestrator/state_machine.py` (`StateMachine(system).run(stop)`, used by `app.py` and the smoke test `tests/sim/test_smoke.py`); replace it, keep the entry point. See architecture.md → Wiring.

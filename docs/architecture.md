@@ -90,17 +90,27 @@ IDLE ─START─► STARTING ─► LOOK_BG ─► SENSE_BG ──items──►
 
 ## Contracts
 
-All shared types live in `sorter.core.types`, errors in `sorter.core.errors`. Data types are frozen dataclasses unless they carry mutable debug data. Array fields are read-only (`flags.writeable = False`); consumers never modify them.
+All shared types live in `sorter.core.types`, errors in `sorter.core.errors`, the `Protocol`s (`Camera`, `BoxDetector`, `ColorClassifier`, `Calibration`, `ArmController`) in `sorter.core.protocols`. Data types are frozen dataclasses unless they carry mutable debug data. Array fields are read-only (`flags.writeable = False`); consumers never modify them.
 
 ### Errors
 
 ```python
 class SorterError(Exception): ...
-class CameraError(SorterError): ...        # no frame within timeout, device lost
-class CalibrationError(SorterError): ...   # no camera pose, invalid depth, file missing
-class ArmError(SorterError): ...           # SDK/bus fault, motion failed or timed out
-class TargetRejected(ArmError): ...        # outside the zone workspace or IK failed; NO motion happened
-class EStopped(ArmError): ...              # arm is held; every motion raises this until recover()
+
+
+class CameraError(SorterError): ...  # no frame within timeout, device lost
+
+
+class CalibrationError(SorterError): ...  # no camera pose, invalid depth, file missing
+
+
+class ArmError(SorterError): ...  # SDK/bus fault, motion failed or timed out
+
+
+class TargetRejected(ArmError): ...  # outside the zone workspace or IK failed; NO motion happened
+
+
+class EStopped(ArmError): ...  # arm is held; every motion raises this until recover()
 ```
 
 "Nothing found" is never an exception. Vision returns it as a result value.
@@ -108,16 +118,31 @@ class EStopped(ArmError): ...              # arm is held; every motion raises th
 ### Basic types
 
 ```python
-Pose = np.ndarray                    # 4x4 float64, mm
+Pose = np.ndarray  # 4x4 float64, mm
 
-class Zone(StrEnum):       BOX = "box"; BACKGROUND = "background"
-class ColorClass(StrEnum): LIGHT = "light"; DARK = "dark"; COLORED = "colored"
+
+class Zone(StrEnum):
+    BOX = "box"
+    BACKGROUND = "background"
+
+
+class ColorClass(StrEnum):
+    LIGHT = "light"
+    DARK = "dark"
+    COLORED = "colored"
+
 
 @dataclass(frozen=True)
-class PixelPoint: u: int; v: int
+class PixelPoint:
+    u: int
+    v: int
+
 
 @dataclass(frozen=True)
-class ArmPoint: x: float; y: float; z: float   # mm, arm base frame
+class ArmPoint:
+    x: float
+    y: float
+    z: float  # mm, arm base frame
 ```
 
 ### Camera (block 1)
@@ -125,22 +150,30 @@ class ArmPoint: x: float; y: float; z: float   # mm, arm base frame
 ```python
 @dataclass(frozen=True)
 class Intrinsics:
-    fx: float; fy: float; cx: float; cy: float; width: int; height: int
-    coeffs: tuple[float, ...] = ()   # distortion; empty = already rectified
+    fx: float
+    fy: float
+    cx: float
+    cy: float
+    width: int
+    height: int
+    coeffs: tuple[float, ...] = ()  # distortion; empty = already rectified
+
 
 @dataclass(frozen=True)
 class Frame:
-    color: np.ndarray      # HxWx3 uint8, BGR
-    depth_mm: np.ndarray   # HxW uint16, Z in mm, aligned to color; 0 = no data
+    color: np.ndarray  # HxWx3 uint8, BGR
+    depth_mm: np.ndarray  # HxW uint16, Z in mm, aligned to color; 0 = no data
     intrinsics: Intrinsics
-    timestamp: float       # monotonic, when the frame arrived
+    timestamp: float  # monotonic, when the frame arrived
     seq: int
+
 
 class Camera(Protocol):
     def start(self) -> None: ...
     def close(self) -> None: ...
-    def latest(self) -> Frame | None: ...               # non-blocking; for the live feed
+    def latest(self) -> Frame | None: ...  # non-blocking; for the live feed
     def fresh(self, timeout_s: float = 2.0) -> Frame: ...
+
     # Blocks until a frame whose exposure started AFTER the call. Raises CameraError on timeout.
 ```
 
@@ -172,16 +205,21 @@ class Observer:
 @dataclass(frozen=True)
 class GraspPoint:
     px: PixelPoint
-    depth_mm: float        # robust (median over a small window) Z of the cloth SURFACE at px; never 0
+    depth_mm: float  # robust (median over a small window) Z of the cloth SURFACE at px; never 0
+
 
 @dataclass
-class Marker: px: PixelPoint; label: str; kind: Literal["grasp", "candidate", "avoid", "info"]
+class Marker:
+    px: PixelPoint
+    label: str
+    kind: Literal["grasp", "candidate", "avoid", "info"]
+
 
 @dataclass
-class Overlay:             # drawn by the dashboard on top of the frame it came from
+class Overlay:  # drawn by the dashboard on top of the frame it came from
     markers: list[Marker] = field(default_factory=list)
     polygons: list[tuple[list[PixelPoint], str]] = field(default_factory=list)
-    mask: np.ndarray | None = None      # HxW bool
+    mask: np.ndarray | None = None  # HxW bool
     text: list[str] = field(default_factory=list)
 ```
 
@@ -191,14 +229,19 @@ class Overlay:             # drawn by the dashboard on top of the frame it came 
 ### Box detector (block 3)
 
 ```python
-class BoxStatus(StrEnum): GRASP = "grasp"; EMPTY = "empty"; NO_GRASP = "no_grasp"
+class BoxStatus(StrEnum):
+    GRASP = "grasp"
+    EMPTY = "empty"
+    NO_GRASP = "no_grasp"
+
 
 @dataclass
 class BoxResult:
     status: BoxStatus
-    grasp: GraspPoint | None   # set only when status == GRASP
-    coverage: float            # 0..1, share of the ROI covered by cloth
+    grasp: GraspPoint | None  # set only when status == GRASP
+    coverage: float  # 0..1, share of the ROI covered by cloth
     overlay: Overlay
+
 
 class BoxDetector(Protocol):
     def detect(self, frame: Frame, avoid: Sequence[PixelPoint] = ()) -> BoxResult: ...
@@ -215,16 +258,18 @@ class BoxDetector(Protocol):
 @dataclass
 class ItemResult:
     color: ColorClass
-    confidence: float          # 0..1
-    grasp: GraspPoint          # re-grasp point
+    confidence: float  # 0..1
+    grasp: GraspPoint  # re-grasp point
     area_px: int
-    touches_roi_edge: bool     # item partly outside the background ROI
-    stats: dict[str, float]    # e.g. median L, a, b, chroma, for tuning and the dashboard
+    touches_roi_edge: bool  # item partly outside the background ROI
+    stats: dict[str, float]  # e.g. median L, a, b, chroma, for tuning and the dashboard
+
 
 @dataclass
 class BackgroundResult:
-    items: list[ItemResult]    # one per blob, largest first; [] = background empty
+    items: list[ItemResult]  # one per blob, largest first; [] = background empty
     overlay: Overlay
+
 
 class ColorClassifier(Protocol):
     def classify(self, frame: Frame) -> BackgroundResult: ...
@@ -234,9 +279,11 @@ class ColorClassifier(Protocol):
 
 ```python
 class Calibration(Protocol):
-    def cam_pose(self, ee_pose: Pose) -> Pose: ...                    # T_base_flange → T_base_cam
+    def cam_pose(self, ee_pose: Pose) -> Pose: ...  # T_base_flange → T_base_cam
     def to_arm(self, obs: Observation, point: GraspPoint) -> ArmPoint: ...
-    def to_pixel(self, obs: Observation, p: ArmPoint) -> PixelPoint | None: ...  # None if outside the image
+    def to_pixel(
+        self, obs: Observation, p: ArmPoint
+    ) -> PixelPoint | None: ...  # None if outside the image
 ```
 
 - `to_arm`: deproject `(u, v, depth)` with `obs.frame.intrinsics`, then apply `obs.T_base_cam`. It raises `CalibrationError` if `T_base_cam` is `None` or depth is 0.
@@ -248,21 +295,24 @@ class Calibration(Protocol):
 ```python
 @dataclass(frozen=True)
 class PickResult:
-    gripper_opening: float     # 0 = fully closed .. 1 = fully open, after closing
-    likely_empty: bool         # gripper_opening < arm.gripper.empty_below; a hint, the camera is the truth
+    gripper_opening: float  # 0 = fully closed .. 1 = fully open, after closing
+    likely_empty: bool  # gripper_opening < arm.gripper.empty_below; a hint, the camera is the truth
+
 
 class ArmController(Protocol):
-    def start(self) -> None: ...        # connect, enable motors, hold the current position
-    def shutdown(self) -> None: ...     # move to the `rest` pose, then disable motors
+    def start(self) -> None: ...  # connect, enable motors, hold the current position
+    def shutdown(self) -> None: ...  # move to the `rest` pose, then disable motors
     def home(self) -> None: ...
-    def look(self, zone: Zone) -> None: ...       # go to look_box / look_bg; no-op if already there
+    def look(self, zone: Zone) -> None: ...  # go to look_box / look_bg; no-op if already there
     def pick(self, target: ArmPoint, zone: Zone) -> PickResult: ...
     def place_on_background(self) -> None: ...
     def drop_to_bin(self, color: ColorClass) -> None: ...
-    def ee_pose(self) -> Pose: ...                # T_base_flange from FK of the measured joints
+    def ee_pose(self) -> Pose: ...  # T_base_flange from FK of the measured joints
     def joints(self) -> tuple[float, ...]: ...
-    def hold(self) -> None: ...                   # thread-safe; freeze in place; see below
-    def recover(self) -> None: ...                # leave hold: lift to safe Z, open gripper above the background, home
+    def hold(self) -> None: ...  # thread-safe; freeze in place; see below
+    def recover(
+        self,
+    ) -> None: ...  # leave hold: lift to safe Z, open gripper above the background, home
 ```
 
 - **Blocking:** every motion method returns only once the arm is still (joint velocity below tolerance). A motion that doesn't finish within its timeout raises `ArmError`. The SDK's `move_to_traj` is non-blocking, so the driver waits for it itself.
@@ -279,34 +329,51 @@ class ArmController(Protocol):
 
 ```python
 class Phase(StrEnum):
-    IDLE, STARTING, LOOK_BG, SENSE_BG, PICK_FROM_BG, DROP_TO_BIN,
+    (
+        IDLE,
+        STARTING,
+        LOOK_BG,
+        SENSE_BG,
+        PICK_FROM_BG,
+        DROP_TO_BIN,
+    )
     LOOK_BOX, SENSE_BOX, PICK_FROM_BOX, PLACE_ON_BG, DONE, HELD, ERROR
 
-class Command(StrEnum): START, PAUSE, RESUME, STEP, STOP, HOLD, RESET
+
+class Command(StrEnum):
+    START, PAUSE, RESUME, STEP, STOP, HOLD, RESET
+
 
 @dataclass(frozen=True)
-class Event: t: float; level: Literal["info", "warning", "error"]; source: str; msg: str
+class Event:
+    t: float
+    level: Literal["info", "warning", "error"]
+    source: str
+    msg: str
+
 
 @dataclass(frozen=True)
 class Status:
     phase: Phase
-    next_phase: Phase | None          # what STEP will run
+    next_phase: Phase | None  # what STEP will run
     mode: Literal["idle", "running", "paused"]
     run_id: str | None
     cycle: int
     counters: dict[ColorClass, int]
-    failures: int                     # consecutive
+    failures: int  # consecutive
     last_cycle_s: float | None
     error: str | None
-    health: list[str]                 # startup problems; empty = OK
-    events: list[Event]               # last ~50
+    health: list[str]  # startup problems; empty = OK
+    events: list[Event]  # last ~50
+
 
 @dataclass(frozen=True)
-class Decision:                       # what the state machine decided on, for the dashboard
+class Decision:  # what the state machine decided on, for the dashboard
     phase: Phase
     obs: Observation
     overlay: Overlay
-    summary: str                      # e.g. "grasp (412, 230) depth 540 mm" / "colored 0.93"
+    summary: str  # e.g. "grasp (412, 230) depth 540 mm" / "colored 0.93"
+
 
 class Hub:
     def __init__(self, camera: Camera, on_hold: Callable[[], None]): ...
@@ -317,8 +384,8 @@ class Hub:
     # dashboard side
     def status(self) -> Status: ...
     def decision(self) -> Decision | None: ...
-    def live_frame(self) -> Frame | None: ...        # proxy to camera.latest()
-    def send(self, cmd: Command) -> None: ...        # HOLD → on_hold() immediately; others → queue
+    def live_frame(self) -> Frame | None: ...  # proxy to camera.latest()
+    def send(self, cmd: Command) -> None: ...  # HOLD → on_hold() immediately; others → queue
 ```
 
 - Modules log with the standard `logging` module. `HubLogHandler` turns warnings and errors into `Event`s, so no module needs a Hub reference.
@@ -348,14 +415,30 @@ One Python process ([D-005](decisions.md)):
 
 `python -m sorter run [--sim]` wires everything (block 0, `sorter/app.py`). Ctrl+C → `arm.hold()`, stop the loop, `arm.shutdown()` (rest pose, then disable).
 
+## Wiring (block 0)
+
+`sorter.app.build_system(cfg, sim=False) -> System` creates every component per `backends` (`--sim` forces all of them to sim). `System` (`sorter.core.system`) holds `cfg`, `camera`, `arm`, `calibration`, `box_detector`, `color_classifier`, `observer`, `hub`, and `world` (the `SimWorld`, or `None` when nothing is simulated).
+
+Entry points each block provides:
+
+| Block | Entry point |
+| --- | --- |
+| 1, 2, 3, 4, 5 | `sorter.<package>.backend.create(cfg: Config) -> <Protocol>`: the real backend. Until the module exists, `backends.<name>: real` fails with a clear error |
+| 6 | `sorter.orchestrator.state_machine.StateMachine(system)` with `run(stop: threading.Event)`, the loop for the state machine thread |
+| 7 | `sorter.dashboard.server.create_app(hub, cfg.dashboard) -> FastAPI` |
+
+Package `__init__.py` files stay empty: `sorter.core.config` imports every block's config model, so an import in an `__init__` can create a cycle. Import driver SDKs inside `backend.create`, so sim runs don't need them.
+
 ## Config
 
-YAML, loaded and deep-merged in this order: `config/default.yaml` → `config/rig.yaml` → `config/hand_eye.yaml` → `config/local.yaml` (gitignored, machine overrides). Validated with pydantic. Each block defines the model for its own section.
+YAML, loaded and deep-merged in this order: `config/default.yaml` → `config/rig.yaml` → `config/hand_eye.yaml` → `config/local.yaml` (gitignored, machine overrides). Missing files are skipped, except `default.yaml`. Validated with pydantic by `sorter.core.config.load_config()`: unknown top-level sections are an error.
+
+Each block defines the model for its own section in `src/sorter/<package>/config.py` (e.g. `BoxDetectorConfig` in `sorter/box_detector/config.py`). Block 0 created them as placeholders that accept any key; the owner adds typed fields.
 
 | Key | Owner | Content |
 | --- | --- | --- |
 | `backends` | 0 | Per component `real` \| `sim`: `camera`, `arm`, `calibration`, `box_detector`, `color_classifier`. Swap stubs one at a time during integration |
-| `sim` | 0 | Simulator world: items, miss probability, seed |
+| `sim` | 0 | Simulator world: `seed`, `items` (colors in the box), `miss_prob`, `double_prob`, `motion_s`, image size, `cam_height_mm`, `item_radius_mm`, `zones.<zone>` (`center_mm`, `width_mm`, `surface_z_mm`) |
 | `camera` | 1 | Device type, serial, resolution, fps, exposure / white balance |
 | `views.<zone>.roi` | 1 | Pixel polygon of the zone in its look pose, excluding the gripper fingers (`rig.yaml`) |
 | `calibration` | 2 | `hand_eye` (the transform, from `hand_eye.yaml`) |
@@ -377,21 +460,21 @@ YAML, loaded and deep-merged in this order: `config/default.yaml` → `config/ri
 
 ## Simulator (block 0)
 
-`SimWorld` holds items (position in arm frame, color), the background slot, the bins, and the zone the arm currently looks at.
+`SimWorld` holds items (position in arm frame, color, height), the bins, and the zone whose look pose the arm is at. All sim components share one world. No physics, no 3D.
 
-- `SimArm` implements `ArmController` directly: `pick` grabs the item nearest the target, with a configurable miss probability; `place` / `drop` move it.
-- `SimCamera` renders simple frames of the current zone: colored blobs on gray, plus depth.
-- `SimCalibration` is a fixed mapping per zone.
-- Sim vision reads the world directly.
+- `SimArm` implements `ArmController` directly: `pick` grabs the highest item near the target, misses with `sim.miss_prob`, grabs two items from the box with `sim.double_prob`; `place_on_background` / `drop_to_bin` move the gripper content. A target outside the zone view raises `TargetRejected`. `hold()` interrupts a motion and blocks motions until `recover()`. Each motion takes `sim.motion_s` seconds.
+- `SimCamera` renders the zone the arm looks at: colored discs on the zone surface (gray background, brown box), plus depth. Between look poses it returns a dark frame with no depth.
+- `SimCalibration` is a fixed linear pixel ↔ XY mapping per zone; Z comes from depth.
+- Sim vision (`SimBoxDetector`, `SimColorClassifier`) reads the world directly and returns pixels, with perfect colors.
 
-Each sim component is selected independently through `backends`.
+Each sim component is selected independently through `backends`, so a real component can run against the rest of the sim (e.g. real vision on sim frames).
 
 ## Repo layout
 
 | Path | Owner |
 | --- | --- |
 | `pyproject.toml`, `uv.lock`, `.gitignore`, tooling config | 0 |
-| `src/sorter/core/` (types, errors, config loader, io, hub, observer, logging) | 0 |
+| `src/sorter/core/` (types, protocols, errors, config loader, io, hub, observer, `HubLogHandler`, `System`) | 0 |
 | `src/sorter/app.py`, `src/sorter/__main__.py` (wiring, CLI) | 0 |
 | `src/sorter/sim/` | 0 |
 | `src/sorter/camera/` (drivers, record tool, ROI tool) | 1 |
@@ -399,9 +482,11 @@ Each sim component is selected independently through `backends`.
 | `src/sorter/box_detector/` | 3 |
 | `src/sorter/color_classifier/` (incl. stats tool) | 4 |
 | `src/sorter/arm/` (driver, mock driver, controller, pose teaching tool) | 5 |
-| `src/sorter/orchestrator/` (state machine) | 6 |
-| `src/sorter/dashboard/` (server, static page) | 7 |
+| `src/sorter/orchestrator/` (state machine; block 0 left a placeholder) | 6 |
+| `src/sorter/dashboard/` (server, static page; block 0 left a placeholder) | 7 |
+| `src/sorter/<package>/config.py` | The block that owns the package |
 | `tests/<package>/` | Same as the package |
+| `tests/conftest.py` (shared fixtures) | 0 |
 | `config/default.yaml` | Each block its own section; structure by 0 |
 | `config/rig.yaml` | `views`: 1; `poses`, `zones`: 5 |
 | `config/hand_eye.yaml` | 2 |
