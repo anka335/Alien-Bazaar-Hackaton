@@ -34,7 +34,7 @@ color_classifier:    # block 4 (D-013)
   sam:                         # remote SAM3 segmentation service
     url: https://exes-shape-zoning.ngrok-free.dev
     api_key: ""                # secret: set it in config/local.yaml or the SAM3_API_KEY env var
-    prompt: clothing           # "blob" finds the cloth of the sim scene
+    prompts: [clothing, sock]  # object categories, one request each; [blob] for the sim scene
     threshold: 0.5             # instance score
     mask_threshold: 0.5
     timeout_s: 10

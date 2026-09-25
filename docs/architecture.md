@@ -447,7 +447,7 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 | `views.<zone>.roi` | 1 | Pixel polygon of the zone in its look pose, excluding the gripper fingers (`rig.yaml`) |
 | `calibration` | 2 | `hand_eye` (the transform, from `hand_eye.yaml`) |
 | `box_detector` | 3 | Thresholds, `avoid_radius_px`, wall margin |
-| `color_classifier` | 4 | `sam` (SAM3 service: `url`, `api_key`, `prompt`, `threshold`, `mask_threshold`, `timeout_s`), class thresholds (`lightness_dark`, `chroma_colored`, `lightness_light`, `confidence_margin`), `erode_px`, `min_area_px`, `max_area_frac`, `overlap_max`, re-grasp (`grasp_inset_px`, `grasp_depth_tol_mm`, `depth_window_px`). The API key goes in `local.yaml` or env `SAM3_API_KEY`, never committed |
+| `color_classifier` | 4 | `sam` (SAM3 service: `url`, `api_key`, `prompts`, `threshold`, `mask_threshold`, `timeout_s`), class thresholds (`lightness_dark`, `chroma_colored`, `lightness_light`, `confidence_margin`), `erode_px`, `min_area_px`, `max_area_frac`, `overlap_max`, re-grasp (`grasp_inset_px`, `grasp_depth_tol_mm`, `depth_window_px`). The API key goes in `local.yaml` or env `SAM3_API_KEY`, never committed |
 | `arm` | 5 | SDK config path, speeds, `tcp_offset_mm`, `grasp_rpy_deg`, `safe_z_mm`, `place_release_height_mm`, gripper (`open`, `close_kp`, `empty_below`), timeouts |
 | `poses` | 5 | Joint angles (rad): `rest`, `home`, `look_box`, `look_bg`, `place_bg`, `bin_light`, `bin_dark`, `bin_colored` (`rig.yaml`) |
 | `zones.<zone>` | 5 | `workspace_mm` (XY polygon, arm frame), `z_floor_mm`, `grasp_depth_mm`, `approach_mm` (`rig.yaml`) |

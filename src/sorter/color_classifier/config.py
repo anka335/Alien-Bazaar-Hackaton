@@ -10,7 +10,7 @@ class SamConfig(BaseModel):
 
     url: str = "https://exes-shape-zoning.ngrok-free.dev"
     api_key: str = ""  # empty = env var SAM3_API_KEY; put a real key only in config/local.yaml
-    prompt: str = "clothing"
+    prompts: list[str] = Field(default=["clothing", "sock"], min_length=1)  # one request each
     threshold: float = 0.5  # instance score
     mask_threshold: float = 0.5
     timeout_s: float = 10.0

@@ -85,7 +85,7 @@ def test_segment_request_and_answer(monkeypatch):
         return _Resp(json.dumps(answer).encode())
 
     monkeypatch.setattr(seg.urllib.request, "urlopen", urlopen)
-    s = SamSegmenter(SamConfig(url="http://sam/", api_key="k", prompt="clothing"))
+    s = SamSegmenter(SamConfig(url="http://sam/", api_key="k", prompts=["clothing"]))
     out = s.segment(np.zeros((48, 64, 3), np.uint8))
 
     assert sent["url"] == "http://sam/segment"
@@ -93,6 +93,23 @@ def test_segment_request_and_answer(monkeypatch):
     assert b'name="prompt"\r\n\r\nclothing' in sent["body"]
     assert b"\x89PNG" in sent["body"]
     assert len(out) == 1 and out[0].score == 0.8 and np.array_equal(out[0].mask, mask)
+
+
+def test_one_request_per_prompt(monkeypatch):
+    masks = {"clothing": _random_mask(1), "sock": _random_mask(2)}
+
+    def urlopen(req, timeout):
+        prompt = req.data.split(b'name="prompt"\r\n\r\n')[1].split(b"\r\n")[0].decode()
+        answer = {"instances": [{"score": 0.9, "mask_rle": encode_rle(masks[prompt])}]}
+        return _Resp(json.dumps(answer).encode())
+
+    monkeypatch.setattr(seg.urllib.request, "urlopen", urlopen)
+    out = SamSegmenter(SamConfig(api_key="k", prompts=["clothing", "sock"])).segment(
+        np.zeros((48, 64, 3), np.uint8)
+    )
+    assert len(out) == 2
+    assert np.array_equal(out[0].mask, masks["clothing"])
+    assert np.array_equal(out[1].mask, masks["sock"])
 
 
 @pytest.mark.parametrize(
@@ -122,5 +139,5 @@ def test_bad_answer_raises(monkeypatch):
 def test_live_service():
     img = np.full((240, 320, 3), 124, np.uint8)
     cv2.circle(img, (160, 120), 50, (40, 40, 200), -1)
-    out = SamSegmenter(SamConfig(prompt="blob", threshold=0.2)).segment(img)
+    out = SamSegmenter(SamConfig(prompts=["blob"], threshold=0.2)).segment(img)
     assert all(i.mask.shape == (240, 320) for i in out)

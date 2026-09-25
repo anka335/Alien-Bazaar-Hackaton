@@ -49,13 +49,14 @@ def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("paths", nargs="*", type=Path, help="observation .npz files")
     p.add_argument("--sim", type=int, nargs="?", const=3, metavar="N", help="N sim items")
-    p.add_argument("--prompt", help="override color_classifier.sam.prompt")
+    p.add_argument("--prompts", help="override color_classifier.sam.prompts, comma-separated")
     p.add_argument("--threshold", type=float, help="override color_classifier.sam.threshold")
     p.add_argument("--save", type=Path, help="write frames with the overlay here")
     args = p.parse_args(argv)
 
     over = {"sim": {"motion_s": 0.0, "vision_s": 0.0}}
-    sam = {"prompt": args.prompt, "threshold": args.threshold}
+    prompts = [s.strip() for s in args.prompts.split(",")] if args.prompts else None
+    sam = {"prompts": prompts, "threshold": args.threshold}
     over["color_classifier"] = {"sam": {k: v for k, v in sam.items() if v is not None}}
     cfg = load_config(overrides=over)
     classifier = create(cfg)

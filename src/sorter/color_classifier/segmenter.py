@@ -1,4 +1,4 @@
-"""Client of the remote SAM3 segmentation service (D-012): image + text prompt → instance masks."""
+"""Client of the remote SAM3 segmentation service (D-013): image + text prompts → instance masks."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import os
 import urllib.error
 import urllib.request
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import cv2
@@ -67,7 +68,11 @@ def _counts_from_string(s: str) -> list[int]:
 
 
 class SamSegmenter:
-    """`segment(bgr)` → instances found for `cfg.prompt`. Raises SegmentationError on failure."""
+    """`segment(bgr)` → instances for any of `cfg.prompts`, one request per prompt, in parallel.
+
+    SAM3 prompts are object categories: `clothing` finds a T-shirt but not a sock. Duplicates across
+    prompts are left to the classifier (`overlap_max`). Raises SegmentationError on any failure.
+    """
 
     def __init__(self, cfg: SamConfig):
         self.cfg = cfg
@@ -82,13 +87,21 @@ class SamSegmenter:
         ok, png = cv2.imencode(".png", bgr)
         if not ok:
             raise SegmentationError("could not encode the frame")
+        prompts = self.cfg.prompts
+        if len(prompts) == 1:
+            return self._request(png.tobytes(), prompts[0], bgr.shape[:2])
+        with ThreadPoolExecutor(len(prompts)) as pool:
+            parts = pool.map(lambda p: self._request(png.tobytes(), p, bgr.shape[:2]), prompts)
+            return [inst for part in parts for inst in part]
+
+    def _request(self, png: bytes, prompt: str, shape: tuple[int, int]) -> list[Instance]:
         fields = {
-            "prompt": self.cfg.prompt,
+            "prompt": prompt,
             "threshold": str(self.cfg.threshold),
             "mask_threshold": str(self.cfg.mask_threshold),
             "output": "json",
         }
-        body, content_type = _multipart(fields, "image", "frame.png", png.tobytes())
+        body, content_type = _multipart(fields, "image", "frame.png", png)
         req = urllib.request.Request(
             self.cfg.url.rstrip("/") + "/segment",
             data=body,
@@ -105,7 +118,7 @@ class SamSegmenter:
             raise SegmentationError(f"SAM3 service unreachable: {e}") from None
         except ValueError as e:
             raise SegmentationError(f"SAM3 service: bad JSON: {e}") from None
-        return self._parse(data, bgr.shape[:2])
+        return self._parse(data, shape)
 
     @staticmethod
     def _parse(data: dict, shape: tuple[int, int]) -> list[Instance]:
