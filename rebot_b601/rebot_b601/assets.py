@@ -2,8 +2,8 @@
 
 The meshes are Seeed's reBot Arm CAD as published (together with the URDF) by
 Motorbridge Studio: https://motorbridge.github.io/motorbridge-studio/ .  They
-are fetched on demand into ``rebot_b601/viewer_assets/`` and are *not* part of
-this package (third-party files, ~37 MB); the directory is git-ignored.
+are stored in ``rebot_b601/viewer_assets/`` (committed, ~36 MB) so the viewer works
+out of the box; this command re-downloads them.
 
 Only the meshes referenced by ``<visual>`` elements are downloaded; the
 collision-only meshes (about 30 MB) are skipped.

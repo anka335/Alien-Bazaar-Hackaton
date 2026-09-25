@@ -127,7 +127,7 @@ więc `arm_stop` działa w trakcie trwającego ruchu. Gdy serwer się kończy, r
 (symulowany albo zmierzony z prawdziwego ramienia). Widok tylko odczytuje stan, niczego nie steruje.
 
 ```bash
-python -m rebot_b601 fetch-assets      # jednorazowo: siatki CAD (37 MB) + three.js do rebot_b601/viewer_assets/
+python -m rebot_b601 fetch-assets      # opcjonalnie: ponowne pobranie siatek CAD i three.js (są już w repo, rebot_b601/viewer_assets/, ok. 36 MB)
 ```
 
 * **Z siatkami CAD:** prawdziwy model (WebGL / three.js), kolory jak na ramieniu, osie TCP na końcówce chwytaka,
