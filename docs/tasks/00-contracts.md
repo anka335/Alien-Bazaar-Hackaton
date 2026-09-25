@@ -42,7 +42,7 @@ Real implementations of any block.
 
 ## Open questions
 
-- Camera model? It decides the camera SDK dependency (Orbbec / RealSense).
+_None._
 
 ## Requests from other blocks
 
