@@ -115,6 +115,15 @@ ros2 launch cloth_task task.launch.py hardware:=real enable_motors:=true run_tas
 ngrok http 127.0.0.1:9100   # by hand, in another terminal, with your own token
 ```
 
+Simulated run with the arm twin: the driver's simulated arm (no CAN) and RViz showing its measured joints (`/joint_states` from `arm_bridge`, through `robot_state_publisher`) moving under the lens commands. Start ngrok as above.
+
+```bash
+ros2 launch cloth_task task.launch.py hardware:=real driver_sim:=true enable_motors:=true run_task:=false spectacles:=true use_rviz:=true
+```
+
+- `enable_motors:=true` is needed even with the simulated arm: without it `arm_bridge` refuses teleop mode and every lens is closed with 1013.
+- Stop the Lens Studio Preview before testing on the glasses: each new socket replaces the previous one (closed with 1000), so the Preview and the glasses keep replacing each other.
+
 - `spectacles:=true` needs `hardware:=real` and `run_task:=false`; with the cloth task (or `run_stack:=false`) the launch fails. The leader arm is not started. MoveIt and the camera or simulated detector come up but don't command the arm: `arm_bridge` refuses MoveIt goals while teleop mode is on.
 - With the motors on and the arm folded at home, `arm_bridge` first unfolds it to `park_via_deg` (as for the task), because MoveIt can't move it once teleop mode is on. Clear the space around the arm before launching.
 - At start the bridge turns `arm_bridge`'s teleop mode on and leaves it on; every stop below just stops publishing to `/arm_bridge/teleop_command`. With `enable_motors:=false`, or a driver already faulted, teleop mode is refused and every lens is refused (closed with 1013).
