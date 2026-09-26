@@ -18,8 +18,10 @@ All public numbers are in metres (Cartesian, base frame) and degrees (joints).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -144,6 +146,33 @@ class SimBackend:
         return Measurement(self.q.copy(), self.dq.copy(), np.zeros(6), np.full(7, self.temp), self.grip, self.grip_vel)
 
 
+class _Timing:
+    """Time spent per part of a control tick since the last report: calls, total, worst."""
+
+    def __init__(self):
+        self._t: dict[str, list[float]] = {}
+
+    @contextlib.contextmanager
+    def __call__(self, part: str):
+        t0 = time.perf_counter()
+        try:
+            yield
+        finally:
+            dt = time.perf_counter() - t0
+            n_total_worst = self._t.setdefault(part, [0, 0.0, 0.0])
+            n_total_worst[0] += 1
+            n_total_worst[1] += dt
+            n_total_worst[2] = max(n_total_worst[2], dt)
+
+    def report(self) -> str:
+        """The parts, slowest first, and a reset."""
+        parts = sorted(self._t.items(), key=lambda kv: -kv[1][1])
+        self._t = {}
+        return ", ".join(
+            f"{p} {n}x avg {tot / n * 1000:.1f} ms max {worst * 1000:.0f} ms" for p, (n, tot, worst) in parts
+        )
+
+
 class HardwareBackend:
     """RobStride motors 1-7 over SocketCAN through the ``motorbridge`` SDK."""
 
@@ -154,6 +183,14 @@ class HardwareBackend:
     _SPD_KP = 0x701F
     _SPD_KI = 0x7020
     _MECH_POS = 0x7019
+    _VEL_MAX = 0x7024      # the Position mode's speed limit (motorbridge's POS_VEL writes it)
+    # A USB-CAN adapter on macOS takes ~10-25 ms per frame, and motorbridge's send_pos_vel is
+    # 2-3 parameter writes per motor: a 50 Hz tick then takes ~200 ms and the arm jerks. So
+    # the mode and speed limit are set once at enable, and a tick writes only the position
+    # reference of the motors whose setpoint changed, plus one motor in turn (its reply keeps
+    # its feedback fresh). REBOT_SEND=pos_vel restores send_pos_vel for every motor, every tick.
+    _SEND_ALL = os.environ.get("REBOT_SEND", "") == "pos_vel"
+    _RESEND_S = 0.2        # the gripper torque is resent at least this often
 
     def __init__(self, channel: str = C.CAN_CHANNEL):
         self.channel = channel
@@ -161,21 +198,27 @@ class HardwareBackend:
         self.arm_motors: list = []
         self.gripper = None
         self._enabled = False
+        self.timing = _Timing()  # where the control loop's time goes (see Arm._loop)
+        self._sent_q: np.ndarray | None = None  # the position references last written
+        self._turn = 0  # the motor whose reference is written this tick regardless
+        self._sent_tau: tuple[float, float] | None = None  # gripper torque, when
 
     # -- helpers ---------------------------------------------------------
     def _all(self):
         return self.arm_motors + ([self.gripper] if self.gripper is not None else [])
 
     def _poll(self) -> None:
-        for m in self._all():
+        with self.timing("request"):
+            for m in self._all():
+                try:
+                    m.request_feedback()
+                except Exception:
+                    pass
+        with self.timing("poll"):
             try:
-                m.request_feedback()
+                self.ctrl.poll_feedback_once()
             except Exception:
                 pass
-        try:
-            self.ctrl.poll_feedback_once()
-        except Exception:
-            pass
 
     def connect(self, enable: bool) -> Measurement:
         try:
@@ -209,10 +252,13 @@ class HardwareBackend:
         st = motor.get_state()
         if st is not None:
             return st.pos, st.vel, st.torq, st.t_mos
-        try:
-            return float(motor.robstride_get_param_f32(self._MECH_POS)), 0.0, 0.0, float("nan")
-        except Exception:
-            return None
+        # no feedback frame from this motor: a blocking parameter read (up to its timeout)
+        i = self._all().index(motor) + 1
+        with self.timing(f"param read motor {i}"):
+            try:
+                return float(motor.robstride_get_param_f32(self._MECH_POS)), 0.0, 0.0, float("nan")
+            except Exception:
+                return None
 
     def _try_read(self) -> Measurement | None:
         q, dq, tau, temps = [], [], [], []
@@ -251,6 +297,7 @@ class HardwareBackend:
                 m.robstride_write_param_f32(self._SPD_KI, p["vel_ki"]); time.sleep(0.01)
                 m.robstride_write_param_f32(self._LOC_KP, p["pos_kp"]); time.sleep(0.01)
                 m.ensure_mode(Mode.POS_VEL, 1000)
+                m.robstride_write_param_f32(self._VEL_MAX, C.MOTOR_VLIM_RAD_S); time.sleep(0.01)
                 # without this the motor could slew towards a stale (or zero) reference when enabled
                 m.robstride_write_param_f32(self._LOC_REF, float(q_hold[i]))
             except Exception as e:
@@ -265,6 +312,7 @@ class HardwareBackend:
             m.enable()
             time.sleep(0.02)
         self._enabled = True
+        self._sent_q, self._sent_tau = None, None
         self.send_arm(q_hold)                 # immediately hold the current pose
         self.send_gripper_torque(0.0)
 
@@ -277,13 +325,33 @@ class HardwareBackend:
         self._enabled = False
 
     def send_arm(self, q_cmd: np.ndarray) -> None:
-        for i, m in enumerate(self.arm_motors):
-            m.send_pos_vel(float(q_cmd[i]), float(C.MOTOR_VLIM_RAD_S))
+        q_cmd = np.asarray(q_cmd, dtype=float)
+        with self.timing("send arm"):
+            if self._SEND_ALL:
+                for i, m in enumerate(self.arm_motors):
+                    m.send_pos_vel(float(q_cmd[i]), float(C.MOTOR_VLIM_RAD_S))
+                return
+            n = len(self.arm_motors)
+            if self._sent_q is None:
+                self._sent_q = np.full(n, np.nan)
+            changed = ~(np.abs(q_cmd - self._sent_q) < 1e-5)  # NaN (never sent) counts as changed
+            changed[self._turn % n] = True
+            self._turn += 1
+            for i in np.flatnonzero(changed):
+                self.arm_motors[i].robstride_write_param_f32(self._LOC_REF, float(q_cmd[i]))
+                self._sent_q[i] = q_cmd[i]
 
     def send_gripper_torque(self, tau: float) -> None:
         if self.gripper is not None:
             # like Seeed's follower: no position term, light damping, feed-forward torque
-            self.gripper.send_mit(0.0, 0.0, 0.0, 1.5, float(tau))
+            now = time.monotonic()
+            last = self._sent_tau
+            if not self._SEND_ALL and last is not None:
+                if abs(tau - last[0]) < 1e-3 and now - last[1] < self._RESEND_S:
+                    return
+            with self.timing("send gripper"):
+                self.gripper.send_mit(0.0, 0.0, 0.0, 1.5, float(tau))
+            self._sent_tau = (float(tau), now)
 
     def close(self) -> None:
         if self.ctrl is None:
@@ -534,7 +602,23 @@ class Arm:
     def _loop(self) -> None:
         period = 1.0 / self.hz
         nxt = time.monotonic()
+        last = nxt
+        late, worst, reported = 0, 0.0, nxt  # ticks over 3 periods apart since the last report
         while not self._stop_thread.is_set():
+            now = time.monotonic()
+            gap = now - last
+            last = now
+            if gap > 3 * period:  # the setpoint jumps ahead by the gap: the arm jerks
+                late, worst = late + 1, max(worst, gap)
+            if late and now - reported > 2.0:
+                timing = getattr(self.backend, "timing", None)
+                log.warning(
+                    "control loop late %d times in %.1f s, worst gap %.0f ms (expected %.0f): "
+                    "jerky motion, tracking-error faults. Tick parts: %s",
+                    late, now - reported, worst * 1000, period * 1000,
+                    timing.report() if timing is not None else "n/a",
+                )
+                late, worst, reported = 0, 0.0, now
             self.tick()
             nxt += period
             d = nxt - time.monotonic()

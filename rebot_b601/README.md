@@ -156,7 +156,7 @@ python -m rebot_b601 fetch-assets      # opcjonalnie: ponowne pobranie siatek CA
 
 ## Zmienne środowiskowe
 
-`REBOT_CAN_CHANNEL` (can0), `REBOT_DRY_RUN`, `REBOT_DEFAULT_SPEED`, `REBOT_MAX_SPEED`, `REBOT_Z_MIN`,
+`REBOT_CAN_CHANNEL` (can0), `REBOT_SEND` (`pos_vel`: `send_pos_vel` z motorbridge dla każdego silnika w każdym takcie, jak wcześniej; domyślnie: tylko zmienione pozycje zadane, zob. `HardwareBackend`), `REBOT_DRY_RUN`, `REBOT_DEFAULT_SPEED`, `REBOT_MAX_SPEED`, `REBOT_Z_MIN`,
 `REBOT_MOTOR_VLIM`, `REBOT_TRACKING_ERR_DEG`, `REBOT_GRIPPER_OPEN_DEG`, `REBOT_GRIPPER_TORQUE`,
 `REBOT_DISABLE_GRIPPER`, `REBOT_ON_EXIT`. Pozostałe stałe: `rebot_b601/config.py`.
 
