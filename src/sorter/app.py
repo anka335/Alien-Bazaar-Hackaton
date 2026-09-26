@@ -63,7 +63,9 @@ def build_system(cfg: Config, sim: bool = False) -> System:
         from sorter.sim.physics import backend as physics_backend
         from sorter.sim.physics.world import PhysicsWorld
 
-        world = PhysicsWorld(cfg.sim, cfg.poses, board=cfg.sim.board)
+        world = PhysicsWorld(
+            cfg.sim, cfg.poses, board=cfg.sim.board, board_z_mm=cfg.calibration.board_z_mm
+        )
         make_sim = physics_backend.create
     elif simulated:
         world = SimWorld(cfg.sim, cfg.poses)

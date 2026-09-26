@@ -398,8 +398,9 @@ def _cloth(parent: ET.Element, it: ItemSpec, rng: np.random.Generator) -> None:
     )
 
 
-def build_xml(cfg: SimConfig, board: bool = False) -> str:
-    """MJCF of the whole scene. `board`: a ChArUco board lies on the mat (hand-eye calibration)."""
+def build_xml(cfg: SimConfig, board: bool = False, board_z_mm: float = 1.0) -> str:
+    """MJCF of the whole scene. `board`: a ChArUco board over the mat center, its top at
+    `board_z_mm` (hand-eye calibration)."""
     root = ET.Element("mujoco", model="sorter")
     ET.SubElement(root, "compiler", angle="radian", meshdir=str(ASSETS_DIR), autolimits="true")
     ET.SubElement(
@@ -504,7 +505,7 @@ def build_xml(cfg: SimConfig, board: bool = False) -> str:
             name="board",
             type="box",
             size=_f(w / 2, h / 2, 0.0005),
-            pos=_f(bg.center_mm[0] / 1000, bg.center_mm[1] / 1000, 0.0015),
+            pos=_f(bg.center_mm[0] / 1000, bg.center_mm[1] / 1000, board_z_mm / 1000 - 0.0005),
             material="board",
             contype="0",
             conaffinity="0",

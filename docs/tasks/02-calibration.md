@@ -38,6 +38,7 @@ Convert camera observations into arm coordinates accurately enough to grasp clot
 ## Open questions
 
 - Does the board detection hold up under the rig's lamp (glare on a laminated print)?
+- `calibration.board_z_mm` goes straight into the camera's height in the result: measure it (board + paper) and change it if the board moves to another support.
 
 ## Requests from other blocks
 
@@ -49,5 +50,6 @@ _None yet._
 - 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/calibration/config.py` (placeholder). Real backend: `sorter/calibration/backend.py` → `create(cfg) -> Calibration`. See architecture.md → Wiring.
 - 2026-09-26 (block 5): the flange that `ee_pose()` returns is the URDF `link6` frame; FK in mm is `sorter.arm.kinematics.fk_flange(q)` (on `rebot_b601`, D-014). Compute the hand-eye result against it. The sim calibration now applies the sim camera mount in `cam_pose`.
 - 2026-09-26 (Softjey + Claude): real backend `HandEyeCalibration` and the hand-eye tool. `--sim` runs it on the physics simulator with a rendered board and reports the error against the true mount. On the physics sim the calibration uses the exact sim mount, not `hand_eye.yaml`. Not yet run on the rig.
+- 2026-09-26 (Softjey + Claude): the board tool is for the printed board (7 × 5, 45 mm squares, 32 mm DICT_6X6 markers) and refines Park's result by corner reprojection with the board flat at `calibration.board_z_mm` (D-023): on the sim 0.1 mm / 0.1° from the true mount, against ~17 mm for Park alone. The `/calibrate` page is unchanged.
 - 2026-09-26 (Softjey + Claude): hand-eye from tape marks on the `/calibrate` page (D-021): `sorter.calibration.marks` (marks, `deproject`, `fit_mount` Kabsch, `project`); config key `calibration.marks_z_mm`. Result format unchanged (`method: marks (...)`).
 - 2026-09-26 (Softjey + Claude): the camera is on `link5`, not the flange (D-022): `ee_pose()` is `T_base_link5`, the hand-eye key is `T_link5_cam` (was `T_flange_cam`; old files fail to load, recalibrate). The views no longer turn the wrist.

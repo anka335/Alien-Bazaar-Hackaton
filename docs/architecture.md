@@ -297,7 +297,7 @@ class Calibration(Protocol):
 - It must be computed against the same frame that `ee_pose()` returns: `link5`. A file with the old key `T_flange_cam` (link6) fails to load: recalibrate.
 - Two ways to compute it:
   - the **calibration page** (`/calibrate`, setup mode, [D-021](decisions.md)), no printed board: the tip points at spots around the mat center (`sorter.calibration.marks`, `calibration.marks_z_mm` high) and tape marks go under it, where the tip really stopped (FK of the measured joints); marks clicked in the live image + depth give camera-frame points, and a rigid fit (Kabsch) of all clicks, from any poses, gives `T_link5_cam`;
-  - `python -m sorter.calibration.hand_eye`: a ChArUco board (`python -m sorter.calibration.board` prints it) on the mat, `calibration.poses` views around `look_bg`, Park's method.
+  - `python -m sorter.calibration.hand_eye` ([D-023](decisions.md)): a ChArUco board (7 × 5 squares of 45 mm, 32 mm 6×6 markers; `python -m sorter.calibration.board` prints it) flat under `look_bg`, its top `calibration.board_z_mm` above the table; `calibration.poses` views around `look_bg`, Park's method as the start, then a fit of every corner's reprojection over the mount and the board lying flat at that height.
 - The real backend (`HandEyeCalibration`) raises `CalibrationError` at start if there is no result. Setup mode starts without one, on the nominal mount (`sim.camera_mount_mm`).
 
 ### Arm controller (block 5)

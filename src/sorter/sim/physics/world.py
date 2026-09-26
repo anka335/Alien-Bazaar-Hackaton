@@ -40,11 +40,20 @@ GRIP_SETTLE_S = 0.3  # after a close command starts (the fingers are at rest at 
 
 
 class PhysicsWorld:
-    def __init__(self, cfg: SimConfig, poses: dict[str, list[float]], *, board: bool = False):
+    def __init__(
+        self,
+        cfg: SimConfig,
+        poses: dict[str, list[float]],
+        *,
+        board: bool = False,
+        board_z_mm: float = 1.0,
+    ):
         self.cfg = cfg
         self.layout = cfg.layout
         self.poses = {k: np.asarray(v, dtype=float) for k, v in poses.items()}
-        self.model = mujoco.MjModel.from_xml_string(build_xml(cfg, board=board))
+        self.model = mujoco.MjModel.from_xml_string(
+            build_xml(cfg, board=board, board_z_mm=board_z_mm)
+        )
         self.data = mujoco.MjData(self.model)
         self.lock = threading.RLock()
         m = self.model

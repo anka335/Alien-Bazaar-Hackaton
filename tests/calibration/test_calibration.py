@@ -62,3 +62,41 @@ def test_hand_eye_recovers_the_mount():
 def test_hand_eye_needs_views():
     with pytest.raises(SorterError):
         solve([(np.eye(4), np.eye(4))] * 3)
+
+
+def test_board_refine_recovers_the_mount_from_small_tilts():
+    """Views tilted only a few degrees leave Park's translation off; the reprojection fit with
+    the board flat at its known height recovers the mount."""
+    import cv2
+
+    from sorter.calibration.board import BOARD, Detection
+    from sorter.calibration.hand_eye import refine
+
+    X = pose(0.0, math.pi / 2, 0.02, (70, 5, -15))  # link5 → camera, looking along link5's +x
+    board = pose(math.pi, 0, 0.3, (150, 200, 16))  # face up, its z axis down, top at 16 mm
+    corners = np.asarray(BOARD.board().getChessboardCorners(), dtype=float)
+    K = np.array([[615.0, 0, 320], [0, 615, 240], [0, 0, 1]])
+    cx, cy = (board @ [157.5, 112.5, 0, 1])[:2]  # the board's center
+    rng = np.random.default_rng(1)
+    views = []
+    for _ in range(12):
+        cam = pose(
+            math.pi + rng.uniform(-0.1, 0.1),
+            rng.uniform(-0.1, 0.1),
+            rng.uniform(-0.2, 0.2),
+            (cx + rng.uniform(-30, 30), cy + rng.uniform(-30, 30), 250),
+        )
+        ee = cam @ np.linalg.inv(X)
+        T = np.linalg.inv(cam) @ board
+        uv, _ = cv2.projectPoints(corners, cv2.Rodrigues(T[:3, :3])[0], T[:3, 3], K, np.zeros(5))
+        uv = uv.reshape(-1, 2)
+        seen = (uv[:, 0] > 0) & (uv[:, 0] < 640) & (uv[:, 1] > 0) & (uv[:, 1] < 480)
+        uv += rng.normal(0, 0.2, uv.shape)
+        if seen.sum() >= 6:  # as `detect` asks
+            views.append((ee, Detection(T, corners[seen], uv[seen], K, np.zeros(5))))
+    assert len(views) >= 8
+    X0 = X @ pose(0.02, -0.02, 0.01, (8, -6, 10))  # a start as far off as Park's on the sim
+    T, B, rmse_px = refine(views, X0, 16.0)
+    assert np.allclose(T[:3, 3], X[:3, 3], atol=1.0) and rmse_px < 0.4
+    assert np.allclose(T[:3, :3], X[:3, :3], atol=0.005)
+    assert np.allclose(B[:3, 3], board[:3, 3], atol=1.0)
