@@ -112,9 +112,14 @@ ros2 run rover_nav make_keepout ~/rover_nav_maps/room.yaml --line 0 -3.5 1 -3.5 
 
 ## 3. Navigate
 
+Start the OAK-D **first, on its own**, and navigation once it says "Camera ready!" (started together with everything else it can connect and never stream):
+
 ```bash
-ros2 launch rover_nav navigation.launch.py                # same nav_camera as for mapping
+ros2 launch rover_nav camera.launch.py                     # terminal 1: wait for "Camera ready!"
+ros2 launch rover_nav navigation.launch.py camera:=external  # terminal 2
 ```
+
+The same works for mapping (`mapping.launch.py camera:=external`). Navigation can then be restarted without touching the camera.
 
 RViz: wait until the rover appears on the map (RTAB-Map has to recognise a place first; if it doesn't, drive a little with teleop where it was mapped), then **Nav2 Goal**. A goal in the forbidden half is refused. Without `keepout.yaml` the launch says so and the whole map is allowed.
 
@@ -140,6 +145,7 @@ cd ros2_ws/src/rover_nav && python3 -m pytest test -q      # keepout mask tool, 
 
 - One camera looking forward (~70° OAK-D, ~87° D435i): the sides are blind while turning, and obstacles closer than ~20 cm aren't seen. The saved map covers the fixed room; keep people and new objects away on the first runs.
 - OAK-D: on the test laptop it ran at **USB 2** speed (`USB SPEED: HIGH` in the log) and still delivered 640×360 color + depth at ~15 Hz. Prefer a USB 3 port and cable (`USB SPEED: SUPER`). The original OAK-D has a separate 5 V power input; if it resets or drops out on USB power alone, give it its own supply.
+- Started in the same launch as RTAB-Map (loading its database), Nav2 and RViz, the OAK-D has connected, said "Camera ready!" and then streamed nothing (driver at ~1–6 % CPU, no `camera_info`); started alone it streams at once. Hence `camera.launch.py` + `camera:=external`.
 - After the driver is killed hard, the next start can take ~40 s (`Device already closed or disconnected`, once `Device crashed`) before it reconnects by itself. Stop it with Ctrl+C and wait; replug the camera if it never reconnects.
 - `wrist`: the arm must not move while driving (map and localization assume a fixed camera).
 - RTAB-Map needs texture: a bare wall or a dark room gives few features. Keep the room lit as when mapping.

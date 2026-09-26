@@ -156,7 +156,7 @@ def generate_launch_description():
         (
             "camera",
             "start",
-            "wrist only. start: run the RealSense driver; external: use cloth_task's",
+            "start: run the camera driver; external: use a running one (camera.launch.py)",
         ),
         (
             "camera_tf",

@@ -86,18 +86,26 @@ def _static_tf(name: str, parent: str, child: str, xyz, rpy) -> Node:
 
 def camera_setup(nav_camera: str, camera: str, camera_tf: str, serial: str, profile: str) -> list:
     """Driver + TF of the navigation camera, and the rover -> arm mount (always: the arm rides
-    on the rover whichever camera navigates). `camera` and `camera_tf` apply to wrist only."""
+    on the rover whichever camera navigates). camera:=external uses a driver that is already
+    running (camera.launch.py for the OAK-D, cloth_task's for the wrist camera). `camera_tf`
+    applies to wrist only."""
     check_choice("nav_camera", nav_camera, tuple(TOPICS))
+    check_choice("camera", camera, ("start", "external"))
     with open(share("config", "mounts.yaml")) as f:
         mounts = yaml.safe_load(f)
     actions = [_static_tf("arm_mount_tf", ROVER_LINK, ARM_BASE, **mounts["arm_mount"])]
     if nav_camera == "oak":
-        return actions + oak_actions(mounts["oak_mount"])
+        return actions + (oak_actions(mounts["oak_mount"]) if camera == "start" else [])
     return (
         actions
         + wrist_tf_actions(camera_tf, mounts)
         + wrist_camera_actions(camera, serial, profile)
     )
+
+
+def oak_mount() -> dict:
+    with open(share("config", "mounts.yaml")) as f:
+        return yaml.safe_load(f)["oak_mount"]
 
 
 def oak_actions(mount: dict) -> list:
