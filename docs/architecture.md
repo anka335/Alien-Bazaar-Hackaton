@@ -327,7 +327,7 @@ class ArmController(Protocol):
   2. Joint move to `target.z + approach_mm`, tool down (tilt ≤ `arm.grasp_max_tilt_deg`, roll `arm.roll_deg`), open the gripper (`gripper.open`).
   3. Descend in a straight line to `max(target.z - grasp_depth_mm, z_floor_mm)`. Z is clamped, XY is never clamped: a clamped XY means grasping a box wall. Being stopped by cloth is fine.
   4. Close the gripper (stalls on the cloth at `gripper.torque_limit`), read its opening, go back up the same line.
-- **`place_on_background` / `drop_to_bin`:** fixed joint poses (`place_bg`, `bin_<color>`), open the gripper. Teach `place_bg` high enough that the cloth lands crumpled.
+- **`place_on_background` / `drop_to_bin`:** fixed joint poses (`place_bg`, `bin_<color>`), open the gripper. Teach `place_bg` high enough that the cloth lands crumpled. `drop_to_bin` goes through `home` on the way there and back, since the bins are off the table and the swing must clear it.
 - **`look(zone)`** also sets the gripper to `gripper.look`, so the fingers are at the same pixels in every look frame.
 - **Hold vs disable:** with the motors off, **the arm falls**. The software stop (dashboard button, Ctrl+C) is `hold()`: freeze the goals at the measured position. After `hold()`, every motion raises `EStopped` until `recover()`. Cutting power is the job of the hardware switch ([D-009](decisions.md)). `shutdown()` disables only after reaching `rest`; if it can't, the arm stays held.
 - The bus (`FeetechBus`, `MockBus`), kinematics and `So101Arm` live in `sorter.arm`. The setup tools use `So101Arm` directly (`connect`, `enable`, `disable`, `read_q`, `tcp`, `solve_down`, `plan_line`, `follow`).

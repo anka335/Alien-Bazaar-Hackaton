@@ -388,8 +388,12 @@ class So101Arm:
         self.set_gripper(self.cfg.gripper.open)
 
     def drop_to_bin(self, color: ColorClass) -> None:
+        """Bins are off the table: go there and back through the high `home` pose, so the swing
+        clears everything on the table."""
+        self.goto("home")
         self.goto(f"bin_{color.value}")
         self.set_gripper(self.cfg.gripper.open)
+        self.goto("home")
 
     def ee_pose(self) -> Pose:
         return kin.fk(self.read_q())

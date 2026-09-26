@@ -173,3 +173,15 @@ def test_sag_is_commanded_away():
     bus.sag[2] = 60  # ≈ 5° short under load
     arm.goto("home")
     assert arm.read_q() == pytest.approx(HOME, abs=np.radians(1.0))
+
+
+def test_drop_to_bin_goes_through_home():
+    arm, bus = _arm()
+    arm.start()
+    arm.look(Zone.BACKGROUND)
+    visited = []
+    orig = arm.goto
+    arm.goto = lambda name, speed_scale=1.0: (visited.append(name), orig(name, speed_scale))
+    arm.drop_to_bin(ColorClass.DARK)
+    assert visited == ["home", "bin_dark", "home"]
+    assert arm.read_gripper() == pytest.approx(0.7, abs=0.01)
