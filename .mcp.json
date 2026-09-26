@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "so101-arm": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "sorter.arm.mcp_server"]
+    }
+  }
+}

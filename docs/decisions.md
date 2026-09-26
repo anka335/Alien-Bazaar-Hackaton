@@ -106,3 +106,9 @@ Template:
 **Context:** Block 3 was meant to use depth (pile top, empty box by height), which the SO-101 camera doesn't have (D-014). Color differencing against an empty-box reference breaks when the cloth has the box's color and needs a reference image per session.
 **Decision:** The box detector gets cloth masks from the same SAM3 service and prompts as block 4 (`color_classifier.sam`). The union of masks in the box ROI gives coverage (`EMPTY` below `box_detector.empty_coverage`). The grasp point is the cloth pixel farthest from any cloth edge, at least `wall_margin_px` inside the ROI and `avoid_radius_px` away from failed grasps.
 **Consequences:** The demo depends on the SAM3 service for both zones. The grasp goes to the thickest part of the cloth, not the top of the pile. Supersedes the classic-CV part of D-001 for block 3.
+
+## D-016: An MCP server drives the SO-101 for AI agents (2026-09-26)
+
+**Context:** Agents (Claude Code) need to move the arm for setup, debugging and demos without writing scripts. `rebot_b601/` had an MCP server, but for the old arm.
+**Decision:** `sorter.arm.mcp_server` (official `mcp` SDK, FastMCP, stdio) wraps `So101Arm`, so every move goes through the same IK, streaming, sag correction and hold as the loop. The tools are plain methods of `ArmTools` (testable without MCP); motions run in a worker thread, one at a time, and `arm_stop` (`hold()`) works during a motion. Units are mm and degrees; xyz targets are refused below `arm.table_z_mm` or farther than 450 mm from the base axis. There is no tool that turns the motors off except `arm_disconnect` at `rest` (D-009). The simulated arm is `So101Arm` on a `MockBus`.
+**Consequences:** `mcp` is a runtime dependency. The server and the sorter loop must not share the serial bus: run one at a time.

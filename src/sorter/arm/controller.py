@@ -17,7 +17,15 @@ from collections.abc import Callable, Sequence
 import numpy as np
 
 from sorter.arm import kinematics as kin
-from sorter.arm.bus import ACCELERATION, GOAL_SPEED, PRESENT_VOLTAGE, TICKS, TORQUE_LIMIT, Bus
+from sorter.arm.bus import (
+    ACCELERATION,
+    GOAL_SPEED,
+    P_COEFFICIENT,
+    PRESENT_VOLTAGE,
+    TICKS,
+    TORQUE_LIMIT,
+    Bus,
+)
 from sorter.arm.config import ArmConfig, ZoneConfig
 from sorter.core.errors import ArmError, EStopped, TargetRejected
 from sorter.core.types import ArmPoint, ColorClass, PickResult, Pose, Zone
@@ -150,6 +158,8 @@ class So101Arm:
             for sid in self.cfg.ids:
                 bus.write(sid, ACCELERATION, 0)  # no ramp in the servo: goals are streamed
                 bus.write(sid, GOAL_SPEED, 0)
+                if self.cfg.p_gain is not None:  # LeRobot sets 16 (factory 32): stiffer = less sag
+                    bus.write(sid, P_COEFFICIENT, self.cfg.p_gain)
             bus.write(self.cfg.gripper_id, TORQUE_LIMIT, self.cfg.gripper.torque_limit)
             bus.write_goals(dict(zip(ids, present, strict=True)))
             bus.set_torque(ids, True)
@@ -191,16 +201,22 @@ class So101Arm:
                 self._sleep(wait)
 
     def _wait_still(self) -> np.ndarray:
-        """Wait until the joints stop moving (at most `settle_s`). Returns the arm joints."""
+        """Wait until the joints stop moving (at most `settle_s`). Returns the arm joints.
+
+        Servos start moving only some tens of ms after a new goal, so the first
+        `settle_min_s` of reads never count as still."""
         ids = [*self.cfg.ids, self.cfg.gripper_id]
         deadline = time.monotonic() + self.cfg.settle_s
-        prev, still = None, 0
+        min_reads = math.ceil(self.cfg.settle_min_s * self.cfg.control_hz)
+        prev, still, reads = None, 0, 0
         while True:
             self._check_held()
             raw = np.array(self._bus().read_positions(ids))
+            reads += 1
             still = still + 1 if prev is not None and np.all(np.abs(raw - prev) <= 2) else 0
             prev = raw
-            if still >= self.cfg.still_ticks or time.monotonic() > deadline:
+            settled = still >= self.cfg.still_ticks and reads >= min_reads
+            if settled or time.monotonic() > deadline:
                 return self.q_from_raw(raw[:-1])
             self._sleep(1 / self.cfg.control_hz)
 
@@ -211,14 +227,17 @@ class So101Arm:
         q = self._wait_still()
         if q_goal is None or not strict:
             return q
-        for _ in range(self.cfg.sag_passes):
+        for i in range(self.cfg.sag_passes):
             err = q_goal - q
+            log.debug("settle pass %d: error %s°", i, np.degrees(err).round(2))
             if np.degrees(np.abs(err)).max() <= self.cfg.sag_tol_deg:
                 break
             base = self._q_goal if self._q_goal is not None else q_goal
-            self._send(base + np.clip(err, -math.radians(20), math.radians(20)))
+            step = np.clip(self.cfg.sag_gain * err, -math.radians(20), math.radians(20))
+            self._send(base + step)
             q = self._wait_still()
         err = np.degrees(np.abs(q - q_goal))
+        log.debug("settled: error %s°", np.degrees(q_goal - q).round(2))
         if err.max() > self.cfg.max_error_deg:
             j = int(np.argmax(err))
             raise ArmError(f"{kin.JOINT_NAMES[j]} stopped {err[j]:.0f}° from its goal (blocked?)")

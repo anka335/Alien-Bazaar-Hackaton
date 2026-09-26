@@ -1,7 +1,7 @@
 # Block 5: Arm Control
 
 **Status:** in progress · **Owner:** Softjey + Claude · **Branch:** `block/so101-integration`
-**Owned paths:** `src/sorter/arm/`, `tests/arm/`, `config/default.yaml` → `arm`, `config/rig.yaml` → `poses`, `zones`
+**Owned paths:** `src/sorter/arm/`, `tests/arm/`, `.mcp.json` → `so101-arm`, `config/default.yaml` → `arm`, `config/rig.yaml` → `poses`, `zones`
 
 ## Goal
 
@@ -15,6 +15,8 @@ Safe, blocking, high-level arm operations for the state machine, on the SO-101 (
 - [x] `pick`: workspace polygon check, the whole path planned (IK) before moving → `TargetRejected` without motion; descend (stopping on cloth is fine), close, measure the opening, go back up.
 - [x] Pose teaching tool: `python -m sorter.arm.teach` (`free`, `lock`, `save`, `go`, `grip`, `show`).
 - [x] Unit tests on the mock bus.
+- [x] Accuracy tool `python -m sorter.arm.accuracy` (joint and tip errors on test points, `--set` overrides, results in `data/accuracy/`). Tip error 13.5 → 1.9 mm mean: `p_gain` 32, settle waits `settle_min_s` before calling the arm still, correction gain `sag_gain` 0.8.
+- [x] MCP server `python -m sorter.arm.mcp_server` (D-016): an agent moves the arm through `So101Arm` (named poses, top-down xyz / straight lines, joints, gripper, stop / resume), real or on the mock bus.
 - [x] Joint directions verified on the hardware: all `signs` +1 (LeRobot convention); FK matched the camera view and the rig photo.
 - [ ] Poses: `rest`, `home`, `look_box`, `look_bg`, `place_bg` set from IK on the rig (2026-09-26); bins still missing. Zones come from the zone setup tool (block 2).
 - [ ] Tune grasp depth, approach, gripper force and `empty_below` on real clothes. Record the working values in config and here.
@@ -35,10 +37,12 @@ Safe, blocking, high-level arm operations for the state machine, on the SO-101 (
 - **Reach:** tool straight down only ≈ 10–30 cm from the base and up to z ≈ 80 mm; above that the tool tilts (≤ `grasp_max_tilt_deg`). Keep `approach_mm` low enough.
 - **Motors off = the arm falls.** Only at `rest` (shutdown) or in the setup tools after asking to hold the arm.
 - The bus reads **5.2 V**. If the servos are the 7.4 V type, torque is reduced: heavy clothes may slip or the arm may sag.
+- LeRobot leaves the servo P at 16 (factory 32); `arm.p_gain` rewrites it in RAM at every enable. Right after a new goal the servos don't move for some tens of ms: without `settle_min_s` the sag correction measured a stale error, doubled it and overshot by up to 20 mm.
 - Servos are P-controlled: under gravity the arm sags, up to ≈ 15–20° at the shoulder with the arm stretched out and a T-shirt in the gripper at 5 V. After each strict motion the remaining error is added to the command (`sag_passes`, `sag_tol_deg`). Goals are streamed from the last command, so the sag doesn't accumulate. A correction can overshoot when a blocked motion suddenly frees (cloth pulled loose).
 - **Lift height limits the clothes:** with the gripper down the fingertips reach ≈ 25 cm at most, so a hanging T-shirt (30–40 cm) can't clear a 13 cm box wall. The pile lies on the table (no box), or the items are small.
 - No arm thread: a motion runs in the calling thread; `hold()` from another thread takes the bus lock, freezes the goals, and the motion raises `EStopped` at its next write.
 - `rebot_b601/` belongs to the old B601 arm and is not used.
+- MCP joint moves (`arm_move_joints`, `arm_goto_pose`, `arm_move_to_xyz` with `linear=false`) check only the goal (joint limits, table guard, reach), not the path. Straight moves check every waypoint but need the tool within `grasp_max_tilt_deg` of down at the start (not true at the rig's `home`).
 
 ## Open questions
 
@@ -55,3 +59,5 @@ _None yet._
 - 2026-09-25: arm model corrected to the B601-RS (D-011).
 - 2026-09-25: arm replaced by the SO-101 (D-014): new driver, kinematics, controller and teaching tool; `joints()` returns 5 values; config keys changed (`tcp_offset_mm` → `tcp_extend_mm`, no SDK path).
 - 2026-09-26: first real picks: a T-shirt taken from a pile on the table and put down 25 cm to the left. Sag correction added; `roll_deg` 93.9 and `table_z_mm` −20 (table ≈ 17 mm below the URDF base origin) in `default.yaml`.
+- 2026-09-26: MCP server for the SO-101 (`sorter.arm.mcp_server`, D-016); `mcp` added as a dependency.
+- 2026-09-26: accuracy tool; `p_gain`, `settle_min_s`, `sag_gain` config keys; tuned defaults (mean tip error 1.9 mm).

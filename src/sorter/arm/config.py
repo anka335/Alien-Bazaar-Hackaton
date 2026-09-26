@@ -30,6 +30,7 @@ class ArmConfig(BaseModel):
     signs: list[float] = [1.0, 1.0, 1.0, 1.0, 1.0]
     offsets_deg: list[float] = [0.0, 0.0, 0.0, 0.0, 0.0]
     limit_margin_deg: float = 2.0  # stay this far inside the EEPROM range
+    p_gain: int | None = Field(None, ge=1, le=254)  # servo P, written at enable; None = keep
 
     control_hz: float = 50.0  # goal streaming rate during a motion
     joint_speed_deg_s: float = 60.0  # peak joint speed of joint moves
@@ -37,9 +38,11 @@ class ArmConfig(BaseModel):
     step_mm: float = 5.0  # IK waypoint spacing of straight moves
     settle_s: float = 3.0  # after a motion, wait at most this long for the arm to stop
     still_ticks: int = 2  # position unchanged (±2 ticks) for this many reads → still
+    settle_min_s: float = 0.25  # after a command, never call the arm still sooner (servos lag)
     max_error_deg: float = 10.0  # joint error after settling above this → ArmError
     sag_passes: int = 2  # re-command the remaining error this many times (P-only servos sag)
     sag_tol_deg: float = 1.0  # no correction below this error
+    sag_gain: float = 0.8  # share of the remaining error added per pass (1 overshoots)
 
     tcp_extend_mm: float = 0.0  # fingertip point beyond the URDF gripper_frame, along the approach
     grasp_max_tilt_deg: float = 25.0  # grasp approach may tilt this far from straight down

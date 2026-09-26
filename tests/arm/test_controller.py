@@ -175,6 +175,17 @@ def test_sag_is_commanded_away():
     assert arm.read_q() == pytest.approx(HOME, abs=np.radians(1.0))
 
 
+def test_sag_correction_waits_for_slow_servos_and_does_not_overshoot():
+    bus = MockBus(RANGES, lag=0.5)
+    bus.start_delay = 4  # servos react ~80 ms after a new goal
+    arm, _ = _arm(bus)
+    arm.start()
+    bus.sag[3] = 40  # elbow ≈ 3.5° short
+    arm.goto("home")
+    err = np.degrees(arm.read_q() - HOME)
+    assert np.abs(err).max() <= 1.0, err
+
+
 def test_drop_to_bin_goes_through_home():
     arm, bus = _arm()
     arm.start()

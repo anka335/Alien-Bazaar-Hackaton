@@ -69,6 +69,9 @@ arm:                 # block 5: SO-101, Feetech STS3215 bus (D-014)
   grasp_max_tilt_deg: 25
   roll_deg: 93.9               # wrist roll of the rig: camera image up = away from the base
   table_z_mm: -20              # the table is ≈ 17 mm below the URDF base origin
+  p_gain: 32                   # servo P (LeRobot sets 16): stiffer, ~2 mm tip error (accuracy tool)
+  sag_tol_deg: 0.4
+  sag_passes: 3
   gripper:
     open: 0.7
     torque_limit: 500          # of 1000: squeeze on cloth

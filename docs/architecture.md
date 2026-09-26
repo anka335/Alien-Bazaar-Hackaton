@@ -489,7 +489,7 @@ Each sim component is selected independently through `backends`, so a real compo
 | `src/sorter/calibration/` (plane homography, markers, zone setup and touch-test tool) | 2 |
 | `src/sorter/box_detector/` | 3 |
 | `src/sorter/color_classifier/` (incl. stats tool) | 4 |
-| `src/sorter/arm/` (Feetech bus + mock, kinematics, controller, pose teaching tool) | 5 |
+| `src/sorter/arm/` (Feetech bus + mock, kinematics, controller, pose teaching tool, MCP server) | 5 |
 | `src/sorter/orchestrator/` (state machine, run log) | 6 |
 | `src/sorter/dashboard/` (server, renderer, `static/` page) | 7 |
 | `src/sorter/<package>/config.py` | The block that owns the package |

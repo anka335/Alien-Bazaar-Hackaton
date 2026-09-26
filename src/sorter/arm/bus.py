@@ -16,6 +16,7 @@ from sorter.core.errors import ArmError
 # STS3215 control table (address, bytes)
 MIN_LIMIT = (9, 2)
 MAX_LIMIT = (11, 2)
+P_COEFFICIENT = (21, 1)
 TORQUE_ENABLE = (40, 1)
 ACCELERATION = (41, 1)
 GOAL_POSITION = (42, 2)
@@ -148,10 +149,15 @@ class MockBus:
         self.lag = lag
         self.blocked: dict[int, int] = {}  # servo → position it can't go past (cloth, obstacle)
         self.sag: dict[int, int] = {}  # servo → ticks it stops short of its goal (gravity)
+        self.start_delay = 0  # reads after a new goal before the servos start moving
+        self._idle = 0
         self.goal_log: list[dict[int, int]] = []
         self.closed = False
 
     def _step(self) -> None:
+        if self._idle > 0:
+            self._idle -= 1
+            return
         for sid in self.pos:
             if not self.torque[sid]:
                 continue
@@ -168,6 +174,7 @@ class MockBus:
 
     def write_goals(self, goals: dict[int, int]) -> None:
         self.goal_log.append(dict(goals))
+        self._idle = self.start_delay
         self.goal.update({sid: int(g) for sid, g in goals.items()})
 
     def set_torque(self, ids: list[int], on: bool) -> None:

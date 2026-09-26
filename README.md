@@ -101,6 +101,10 @@ One-time setup, in this order ([D-014](docs/decisions.md)):
 
 The arm reaches straight down only ≈ 10–30 cm from its base: the box, the background mat, and the three bins all have to fit in that circle.
 
+**Arm accuracy:** `uv run python -m sorter.arm.accuracy [--set arm.p_gain=24]` moves over a few test points and reports joint and fingertip errors (`data/accuracy/`).
+
+**MCP server (an AI agent drives the arm):** `uv run python -m sorter.arm.mcp_server` (stdio), registered as `so101-arm` in `.mcp.json`, so Claude Code picks it up in this repo. Real or simulated arm from `backends.arm`, or `--sim` / `--real`; `arm_connect(simulate=...)` overrides it per connection. Tools: `arm_info`, `arm_connect`, `arm_status`, `arm_plan_xyz`, `arm_move_to_xyz`, `arm_move_relative`, `arm_move_joints`, `arm_goto_pose`, `arm_gripper`, `arm_stop`, `arm_resume`, `arm_disconnect`. Units are mm and degrees in the arm base frame; xyz moves keep the gripper pointing down. On exit a connected arm goes to `rest` and the motors turn off.
+
 ## Working with AI agents
 
 Every block is designed to be handed to an agent on its own. See [AGENTS.md](AGENTS.md) for the parallel workflow. In Claude Code:
