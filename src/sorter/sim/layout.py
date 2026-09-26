@@ -206,6 +206,12 @@ def check(cfg: Config, step_mm: float = 20.0) -> list[str]:
         except SorterError as e:
             problems.append(f"move {a} ↔ {b}: {e}")
     lay = cfg.sim.layout
+    backs = {"box": lay.box.center_mm[0] - lay.box.size_mm[0] / 2 - 10}  # + the 10 mm wall
+    backs["background"] = lay.background.center_mm[0] - lay.background.size_mm[0] / 2
+    backs |= {f"bin_{c}": x - lay.bins.size_mm / 2 for c, (x, _) in lay.bins.centers_mm.items()}
+    for name, x in backs.items():
+        if x < lay.edge_x_mm:
+            problems.append(f"{name} hangs {lay.edge_x_mm - x:.0f} mm behind the table edge")
     heights = {
         Zone.BOX: [lay.box.floor_z_mm + h for h in (15, 35, 55)],
         Zone.BACKGROUND: [25.0],

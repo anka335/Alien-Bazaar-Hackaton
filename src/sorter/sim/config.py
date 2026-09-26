@@ -35,15 +35,17 @@ class BinsLayout(BaseModel):
 def _default_bins() -> BinsLayout:
     return BinsLayout(
         centers_mm={
-            ColorClass.LIGHT: (257.0, 306.0),
-            ColorClass.DARK: (0.0, 400.0),
-            ColorClass.COLORED: (-257.0, 306.0),
+            ColorClass.LIGHT: (150.0, -330.0),
+            ColorClass.DARK: (380.0, -250.0),
+            ColorClass.COLORED: (430.0, 220.0),
         }
     )
 
 
 class LayoutConfig(BaseModel):
-    """The table around the arm (arm base at the origin, +x forward, +y left), mm.
+    """The table in front of the arm (arm base at the origin, +x forward, +y left), mm.
+
+    The arm is clamped to the table's back edge (`edge_x_mm`): nothing lies behind it.
 
     The committed `poses` and `zones` in `rig.yaml` are computed from this layout
     (`python -m sorter.sim.layout`); build the real table the same way.
@@ -51,11 +53,12 @@ class LayoutConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    edge_x_mm: float = -70.0  # the table's back edge, flush with the back of the arm's base
     box: BoxLayout = Field(
-        default_factory=lambda: BoxLayout(center_mm=(0.0, -270.0), size_mm=(240.0, 180.0))
+        default_factory=lambda: BoxLayout(center_mm=(255.0, 0.0), size_mm=(240.0, 180.0))
     )
     background: RectConfig = Field(
-        default_factory=lambda: RectConfig(center_mm=(270.0, 0.0), size_mm=(240.0, 180.0))
+        default_factory=lambda: RectConfig(center_mm=(180.0, 210.0), size_mm=(240.0, 180.0))
     )
     bins: BinsLayout = Field(default_factory=_default_bins)
 

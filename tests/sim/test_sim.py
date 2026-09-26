@@ -75,7 +75,7 @@ def test_pick_outside_workspace_is_rejected_without_motion(system):
     with pytest.raises(TargetRejected, match="outside"):
         system.arm.pick(ArmPoint(0, 0, 0), Zone.BOX)
     with pytest.raises(TargetRejected, match="not reachable"):  # inside, but far too high
-        system.arm.pick(ArmPoint(0, -270, 500), Zone.BOX)
+        system.arm.pick(ArmPoint(255, 0, 500), Zone.BOX)
     assert system.arm.joints() == q
     assert system.world.looking_at is Zone.BOX
 

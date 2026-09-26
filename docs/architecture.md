@@ -6,7 +6,7 @@ Single source of truth for the contracts between blocks. Block 0 implements the 
 
 - **Arm:** Seeed reBot Arm B601-RS (RobStride motors: RS-06 on joints 1–3, RS-00 on joints 4–6 and the gripper; 6 DoF + parallel gripper; reach roughly 0.6–0.7 m from the shoulder axis, from the URDF; see [D-011](decisions.md)). USB→CAN (PEAK PCAN-USB, SocketCAN `can0` at 1 Mbit/s on Linux), driven through `rebot_b601/` (`motorbridge`, own IK/FK, metres + radians; [D-014](decisions.md)).
 - **Camera:** Intel RealSense D435i RGB-D, **mounted on the wrist** behind the gripper, looking along the gripper axis (eye-in-hand, [D-006](decisions.md)).
-- **Zones at fixed positions** ([D-007](decisions.md)): mixed box, background area (mid-gray), 3 bins (light / dark / colored). The clothes inside the box lie arbitrarily. The layout is `sim.layout` ([D-015](decisions.md)), sized for the arm's top-down reach: a low tray on the right (−y), the mat in front (+x), the bins on an arc 0.4 m away on the left.
+- **Zones at fixed positions** ([D-007](decisions.md)): mixed box, background area (mid-gray), 3 bins (light / dark / colored). The clothes inside the box lie arbitrarily. The layout is `sim.layout` ([D-015](decisions.md)), sized for the arm's top-down reach and all in front of it (the arm is clamped to the table's back edge, [D-017](decisions.md)): a low tray straight ahead (+x), the mat front-left, the bins farther out on both sides.
 - The arm looks at a zone from a fixed **look pose** (`look_box`, `look_bg`): the camera straight down, ~260 mm above the table. Because look poses are repeatable, pixel ROIs of each zone are constants in config.
 
 ## Components
@@ -458,7 +458,7 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 | Key | Owner | Content |
 | --- | --- | --- |
 | `backends` | 0 | Per component `real` \| `sim`: `camera`, `arm`, `calibration`, `box_detector`, `color_classifier`. Swap stubs one at a time during integration |
-| `sim` | 0 | Simulator world: `engine` (`physics` \| `kinematic`), `realtime` (physics: simulated s per wall s, 0 = as fast as possible), `use_sam3`, `board` (a ChArUco board on the mat), `seed`, `items` (colors in the box), `miss_prob`, `double_prob`, `time_scale` (arm motion time × this; 0 = instant), `vision_s` (sim vision delay), image size, `focal_px`, `camera_mount_mm` (wrist camera in the TCP frame), `item_radius_mm`, `layout` (`box`: `center_mm`, `size_mm`, `floor_z_mm`, `wall_mm`; `background`: `center_mm`, `size_mm`; `bins`: `centers_mm.<color>`, `size_mm`, `wall_mm`, `floor_z_mm`) |
+| `sim` | 0 | Simulator world: `engine` (`physics` \| `kinematic`), `realtime` (physics: simulated s per wall s, 0 = as fast as possible), `use_sam3`, `board` (a ChArUco board on the mat), `seed`, `items` (colors in the box), `miss_prob`, `double_prob`, `time_scale` (arm motion time × this; 0 = instant), `vision_s` (sim vision delay), image size, `focal_px`, `camera_mount_mm` (wrist camera in the TCP frame), `item_radius_mm`, `layout` (`edge_x_mm`: the table's back edge; `box`: `center_mm`, `size_mm`, `floor_z_mm`, `wall_mm`; `background`: `center_mm`, `size_mm`; `bins`: `centers_mm.<color>`, `size_mm`, `wall_mm`, `floor_z_mm`) |
 | `camera` | 1 | `serial` (empty = the first D435i), `width`, `height`, `fps`, `warmup_frames`, `lock_exposure`, `exposure_us`, `white_balance_k`, `timeout_s` |
 | `views.<zone>.roi` | 1 | Pixel polygon of the zone in its look pose, excluding the gripper fingers (`rig.yaml`) |
 | `calibration` | 2 | `hand_eye` (the transform, from `hand_eye.yaml`); hand-eye tool: `poses`, `tilt_deg`, `shift_mm` |
@@ -496,7 +496,7 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 - `SimWorld` holds items as points (position, color, height, location) and the arm's joints over time. The arm is the real `Controller` on `SimDriver`: planned paths play back with `rebot_b601`'s min-jerk timing × `sim.time_scale`. Closing the gripper grabs the highest cloth under the fingertips if the TCP got within 12 mm of its top (misses with `sim.miss_prob`; from the box it drags a second item with `sim.double_prob`); opening it drops what it holds onto whatever is below.
 - `SimCamera` renders sprites straight down from the camera pose (`sorter.sim.scene`). `SimCalibration` is a linear pixel ↔ XY mapping per zone; sim vision (`SimBoxDetector`, `SimColorClassifier`) reads the world directly, after `sim.vision_s`.
 
-Both: `world.looking_at` is the zone whose look pose the joints are at. `python -m sorter.sim.layout [--write]` computes `poses`, `zones` and `views.<zone>.roi` for the layout with the arm's IK and the physics camera, and checks every pick and pose-to-pose move ([D-015](decisions.md)).
+Both: `world.looking_at` is the zone whose look pose the joints are at. `python -m sorter.sim.layout [--write]` computes `poses`, `zones` and `views.<zone>.roi` for the layout with the arm's IK and the physics camera, and checks every pick and pose-to-pose move and that nothing lies behind `layout.edge_x_mm` ([D-015](decisions.md), [D-017](decisions.md)).
 
 ## Repo layout
 

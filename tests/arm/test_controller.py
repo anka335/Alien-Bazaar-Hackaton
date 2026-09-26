@@ -79,7 +79,7 @@ def test_committed_poses_and_zones_fit_the_layout(cfg):
 
 
 def test_pick_goes_above_down_and_up(arm, cfg):
-    target = ArmPoint(0, -270, 50)
+    target = ArmPoint(255, 0, 50)
     result = arm.pick(target, Zone.BOX)
     assert not result.likely_empty and result.gripper_opening == 0.3
     above, down, up = arm.driver.paths
@@ -89,26 +89,26 @@ def test_pick_goes_above_down_and_up(arm, cfg):
     assert tcp_z(up[-1]) == pytest.approx(zone.lift_z_mm, abs=1.5)
     for q in np.vstack([down, up]):  # straight down and up, gripper vertical
         T = kin.fk_tcp(q)
-        assert T[:2, 3] == pytest.approx((0, -270), abs=2)
+        assert T[:2, 3] == pytest.approx((255, 0), abs=2)
         assert T[2, 0] == pytest.approx(-1, abs=0.01)
     assert arm.driver.gripper_cmds == [cfg.arm.gripper.open, 0.0]
 
 
 def test_grasp_depth_is_clamped_to_the_zone_floor(arm, cfg):
-    arm.pick(ArmPoint(0, -270, 12), Zone.BOX)
+    arm.pick(ArmPoint(255, 0, 12), Zone.BOX)
     assert tcp_z(arm.driver.paths[1][-1]) == pytest.approx(cfg.zones[Zone.BOX].z_floor_mm, abs=1.5)
 
 
 def test_empty_gripper_is_reported(cfg):
     arm = Controller(FakeDriver(cfg.poses["look_bg"], 0.0), cfg.arm, cfg.poses, cfg.zones)
-    assert arm.pick(ArmPoint(270, 0, 25), Zone.BACKGROUND).likely_empty
+    assert arm.pick(ArmPoint(180, 210, 25), Zone.BACKGROUND).likely_empty
 
 
 @pytest.mark.parametrize(
     "target, zone",
     [
-        (ArmPoint(270, 0, 25), Zone.BOX),  # the background, but asked for the box
-        (ArmPoint(0, -270, 400), Zone.BOX),  # too high to reach with the gripper down
+        (ArmPoint(180, 210, 25), Zone.BOX),  # the background, but asked for the box
+        (ArmPoint(255, 0, 400), Zone.BOX),  # too high to reach with the gripper down
     ],
 )
 def test_rejected_pick_does_not_move(arm, target, zone):
@@ -137,7 +137,7 @@ def test_hold_until_recover(arm, cfg):
     with pytest.raises(EStopped):
         arm.home()
     with pytest.raises(EStopped):
-        arm.pick(ArmPoint(0, -270, 50), Zone.BOX)
+        arm.pick(ArmPoint(255, 0, 50), Zone.BOX)
     arm.recover()  # lift, open above the background, home
     assert np.allclose(arm.driver.q, cfg.poses["home"])
     assert arm.driver.gripper_cmds == [cfg.arm.gripper.open]

@@ -125,7 +125,7 @@ function buildTable(L) {
   // the table top under everything, z = 0
   const xs = [box.center_mm[0], bg.center_mm[0], ...Object.values(bins.centers_mm).map((c) => c[0])];
   const ys = [box.center_mm[1], bg.center_mm[1], ...Object.values(bins.centers_mm).map((c) => c[1])];
-  const x0 = Math.min(...xs, 0) * MM - 0.3, x1 = Math.max(...xs) * MM + 0.3;
+  const x0 = (L.table.edge_x_mm ?? Math.min(...xs, 0) - 300) * MM, x1 = Math.max(...xs) * MM + 0.3;
   const y0 = Math.min(...ys) * MM - 0.3, y1 = Math.max(...ys) * MM + 0.3;
   block(x1 - x0, y1 - y0, 0.03, (x0 + x1) / 2, (y0 + y1) / 2, -0.015, mat(0xcdb18d, { roughness: 0.7 }));
 

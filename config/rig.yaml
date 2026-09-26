@@ -1,13 +1,13 @@
 # Fixed rig, committed (D-007). Computed for the table layout in `sim.layout` by
 # `python -m sorter.sim.layout --write`: poses (joint angles, rad) and zones (block 5),
-# views (pixel ROIs from the look poses, block 1). Re-teach / redraw them on the real rig.
+# views (pixel ROIs from the look poses, block 1). Re-teach / redraw them on the rig.
 views:
   box:
     roi:
-    - [31, 454]
-    - [609, 454]
-    - [610, 20]
-    - [30, 20]
+    - [609, 23]
+    - [30, 23]
+    - [30, 457]
+    - [609, 457]
   background:
     roi:
     - [592, 39]
@@ -17,29 +17,29 @@ views:
 poses:
   rest: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
   home: [0.0, 0.5491, 0.8481, -1.0844, 0.0, 0.0006]
-  look_box: [1.5738, 1.3859, 1.2143, -1.3963, 0.0, 0.003]
-  look_bg: [0.2009, 1.6464, 1.4604, -1.3847, 0.0, 1.7717]
-  place_bg: [0.0, 1.616, 1.3028, -1.2576, 0.0, 0.0004]
-  bin_light: [-0.8698, 1.3486, 1.357, -0.7938, 0.0017, 0.0012]
-  bin_dark: [-1.5656, 1.3503, 1.3583, -0.7934, 0.0037, 0.0024]
-  bin_colored: [-2.262, 1.3469, 1.3556, -0.7942, 0.0052, 0.0034]
+  look_box: [0.2124, 1.5837, 1.3949, -1.382, 0.0, 1.7832]
+  look_bg: [-0.709, 1.4882, 1.303, -1.3856, -0.0001, 0.8618]
+  place_bg: [-0.86, 1.6467, 1.3353, -1.2594, 0.0, 0.0019]
+  bin_light: [1.1454, 1.1932, 1.2496, -0.8418, 0.0009, 0.0008]
+  bin_dark: [0.5818, 1.5716, 1.5545, -0.7683, -0.0001, 0.0001]
+  bin_colored: [-0.4721, 1.6977, 1.6888, -0.7764, 0.0006, 0.0004]
 zones:
   box:
     workspace_mm:
-    - [-95.0, -335.0]
-    - [95.0, -335.0]
-    - [95.0, -205.0]
-    - [-95.0, -205.0]
+    - [160.0, -65.0]
+    - [350.0, -65.0]
+    - [350.0, 65.0]
+    - [160.0, 65.0]
     z_floor_mm: 10.0
     grasp_depth_mm: 15.0
     approach_mm: 40.0
     lift_z_mm: 100.0
   background:
     workspace_mm:
-    - [170.0, -70.0]
-    - [370.0, -70.0]
-    - [370.0, 70.0]
-    - [170.0, 70.0]
+    - [80.0, 140.0]
+    - [280.0, 140.0]
+    - [280.0, 280.0]
+    - [80.0, 280.0]
     z_floor_mm: 3.0
     grasp_depth_mm: 15.0
     approach_mm: 40.0
