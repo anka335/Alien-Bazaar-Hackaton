@@ -58,3 +58,4 @@ _None yet._
 - 2026-09-26 (Softjey + Claude): `--sim` now simulates only the hardware (camera, arm) in a MuJoCo scene (`sim.engine: physics`, D-016); the other components run their real backends on it. New `sim` keys: `engine`, `realtime`, `use_sam3`, `board`. `tests/conftest.py` keeps the kinematic engine.
 - 2026-09-26: everything stands in front of the arm (D-017): new `sim.layout.edge_x_mm`, new box, mat and bin positions, `rig.yaml` recomputed.
 - 2026-09-26 (Softjey + Claude): `python -m sorter manual [--sim]` (`sorter.app.run_manual`): camera, arm and dashboard without the state machine (D-018).
+- 2026-09-26 (Softjey + Claude): operator modes in the Hub (D-026): `OperatorMode`, `WrongMode`, `Hub(mode=)`, `mode()`, `set_mode()`; `send` queues run commands in auto only and `next_command` drops them outside it. `run` serves all modes (`--mode`); `manual` is `run --mode manual` (`run_manual` removed).

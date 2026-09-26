@@ -54,3 +54,4 @@ _None yet._
 - 2026-09-25 (block 4): `classify` of the real color classifier raises `SegmentationError` (a `SorterError`) when the SAM3 service fails; the loop already turns it into `ERROR`, paused (D-013).
 - 2026-09-26 (block 5): the sim arm is the real controller with kinematics (D-014). `world.looking_at` is derived from the joints; `ArmController` is unchanged. The sim tests run with `sim.time_scale: 0` (instant).
 - 2026-09-26 (Softjey + Claude): `run --sim` runs the loop on the physics simulator with the real vision and calibration (D-016); about a minute per item at `sim.realtime: 0`.
+- 2026-09-26 (Softjey + Claude): operator modes (D-026): outside the auto mode the Hub gives the state machine no commands (it idles); the dashboard leaves auto only while the state machine is idle.

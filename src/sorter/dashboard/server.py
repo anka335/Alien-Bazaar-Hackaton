@@ -1,4 +1,5 @@
-"""Dashboard: FastAPI server with a single static page. It depends only on the Hub.
+"""Dashboard: FastAPI server for the React admin panel (`frontend/`, built into `web/`). It
+depends only on the Hub, plus the setup controls behind the manual and calibrate modes.
 
 The HTTP API is in docs/architecture.md → Dashboard HTTP API.
 """
@@ -8,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
-import json
 import math
 import threading
 import time
@@ -18,22 +18,31 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from rebot_b601.assets import ASSETS_DIR as TWIN_ASSETS_DIR
 
 from sorter.camera.config import ViewConfig
-from sorter.core.errors import SorterError
+from sorter.core.errors import SorterError, WrongMode
 from sorter.core.hub import Hub, SpeedControl
-from sorter.core.types import Command, Decision, Status, Zone
+from sorter.core.types import Command, Decision, OperatorMode, Status, Zone
 from sorter.dashboard.calibrate import CalibrateControl
 from sorter.dashboard.config import DashboardConfig
 from sorter.dashboard.manual import Busy, ManualControl
+from sorter.dashboard.modes import SETUP, ModeSwitch
 from sorter.dashboard.render import PHASE_LABELS, encode_jpeg, placeholder, render_decision
 
-STATIC_DIR = Path(__file__).parent / "static"
+WEB_DIR = Path(__file__).parent / "web"  # `npm run build` in frontend/ (not in git)
 BOUNDARY = "frame"
+# the admin panel's tabs: each serves the single page, the front end routes it
+PAGES = ("/", "/auto", "/manual", "/calibrate", "/3d")
+NOT_BUILT = """<!doctype html><meta charset="utf-8"><title>Sorter</title>
+<body style="font:16px system-ui;margin:3rem;max-width:40rem">
+<h1>The dashboard isn't built</h1>
+<p>Build it once (Node 20+), then reload:</p>
+<pre>cd frontend && npm install && npm run build</pre>
+<p>The API runs meanwhile: <a href="/api/status">/api/status</a>.</p>"""
 
 
 class CommandRequest(BaseModel):
@@ -69,10 +78,23 @@ def speed_json(speed: SpeedControl | None) -> dict[str, float] | None:
     return {"speed_scale": speed.speed_scale, "max_speed_scale": speed.max_speed_scale}
 
 
-def status_json(s: Status, speed: dict[str, float] | None = None) -> dict[str, Any]:
-    """`Status` as JSON, plus `now` (monotonic, same clock as `Event.t`) for event ages and
-    `speed` (`speed_json`, null without a speed control)."""
-    return {**jsonable_encoder(dataclasses.asdict(s)), "now": time.monotonic(), "speed": speed}
+class ModeRequest(BaseModel):
+    mode: str  # auto | manual | calibrate
+
+
+def status_json(
+    s: Status,
+    speed: dict[str, float] | None = None,
+    operator: OperatorMode = OperatorMode.AUTO,
+) -> dict[str, Any]:
+    """`Status` as JSON, plus `now` (monotonic, same clock as `Event.t`) for event ages,
+    `speed` (`speed_json`, null without a speed control) and `operator` (the operator mode)."""
+    return {
+        **jsonable_encoder(dataclasses.asdict(s)),
+        "now": time.monotonic(),
+        "speed": speed,
+        "operator": operator.value,
+    }
 
 
 class Frames:
@@ -124,119 +146,184 @@ def create_app(
     views: Mapping[Zone, ViewConfig] | None = None,
     manual: ManualControl | None = None,
     calibrate: CalibrateControl | None = None,
+    modes: ModeSwitch | None = None,
+    web_dir: Path = WEB_DIR,
 ) -> FastAPI:
-    """`views` gives the zone ROIs drawn on the decision frame (`cfg.views`). `manual`: the
-    setup mode (`python -m sorter manual`), where `/` opens the manual control page;
-    `calibrate`: its camera calibration page."""
+    """`views` gives the zone ROIs drawn on the decision frame (`cfg.views`). `manual` and
+    `calibrate`: the controls of the manual and calibrate modes, switched by `modes` (made
+    from `manual` if not given); without them the dashboard has the auto mode only."""
     app = FastAPI(title="Sorter")
     rois = {z: list(v.roi) for z, v in (views or {}).items()}
     frames = Frames(hub, cfg, rois)
     period_s = 1 / cfg.stream_fps
-    labels = json.dumps({p.value: label for p, label in PHASE_LABELS.items()})
-    page = (STATIC_DIR / "index.html").read_text().replace("__PHASE_LABELS__", labels)
+    if modes is None and manual is not None:
+        modes = ModeSwitch(hub, manual)
 
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-    # the arm's CAD meshes and three.js, vendored in rebot_b601 (D-012: no CDN)
+    # the arm's CAD meshes, vendored in rebot_b601 (D-012: no CDN)
     app.mount("/twin-assets", StaticFiles(directory=TWIN_ASSETS_DIR), name="twin-assets")
+    if (web_dir / "assets").is_dir():  # hashed names: cached for good
+        app.mount("/assets", StaticFiles(directory=web_dir / "assets"), name="assets")
 
-    @app.get("/", response_class=HTMLResponse)
-    def index():
-        return RedirectResponse("/manual") if manual else page
+    def page() -> Response:
+        index = web_dir / "index.html"
+        if not index.is_file():
+            return HTMLResponse(NOT_BUILT)
+        # revalidated on every load, so a new build shows up on a plain reload
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
-    @app.get("/manual", response_class=HTMLResponse)
-    def manual_page() -> str:
-        return (STATIC_DIR / "manual.html").read_text()
+    for path in PAGES:
+        app.add_api_route(path, page, methods=["GET"], include_in_schema=False)
+
+    @app.get("/favicon.svg", include_in_schema=False)
+    def favicon() -> Response:
+        icon = web_dir / "favicon.svg"
+        if not icon.is_file():
+            raise HTTPException(404)
+        return FileResponse(icon)
+
+    @app.get("/api/meta")
+    def meta() -> dict:
+        """What the panel needs once: the phase labels, the modes this server has."""
+        return {
+            "phase_labels": {p.value: label for p, label in PHASE_LABELS.items()},
+            "modes": [m.value for m in OperatorMode if modes is not None or m not in SETUP],
+            "calibrate": calibrate is not None,
+        }
+
+    # --- operator mode ---
+
+    def mode_json() -> dict:
+        return {"mode": hub.mode().value, "busy": manual.busy if manual else False}
+
+    @app.get("/api/mode")
+    def mode_state() -> dict:
+        return mode_json()
+
+    @app.post("/api/mode")
+    def set_mode(req: ModeRequest) -> dict:
+        try:
+            mode = OperatorMode(req.mode)
+        except ValueError:
+            raise HTTPException(400, f"unknown mode {req.mode!r}") from None
+        if mode in SETUP and modes is None:
+            raise HTTPException(404, "no manual control on this server")
+        if mode is OperatorMode.CALIBRATE and calibrate is None:
+            raise HTTPException(404, "no calibration on this server")
+        try:
+            if modes is not None:
+                modes.set(mode)
+            else:
+                hub.set_mode(mode)
+        except WrongMode as e:
+            raise HTTPException(409, str(e)) from None
+        except SorterError as e:  # the motors didn't come on
+            raise HTTPException(500, str(e)) from None
+        return mode_json()
+
+    def in_mode(*allowed: OperatorMode):
+        """The mode guard (409 in another mode), or 404 without the setup controls."""
+        if modes is None:
+            raise HTTPException(404, "no manual control on this server")
+        return modes.guard(*allowed)
+
+    # --- manual control (manual and calibrate modes) ---
 
     def manual_source() -> ManualControl:
         if manual is None:
-            raise HTTPException(404, "manual control is off; start with `python -m sorter manual`")
+            raise HTTPException(404, "no manual control on this server")
         return manual
 
     @app.get("/api/manual")
     def manual_state() -> dict:
-        return manual_source().state()
+        m = manual_source()
+        try:
+            with in_mode(*SETUP):
+                return m.state()
+        except WrongMode as e:
+            raise HTTPException(409, str(e)) from None
 
     @app.post("/api/manual")
     def manual_action(req: ManualRequest) -> dict:
         m = manual_source()
         try:
-            match req.action:
-                case "go":
-                    m.go(req.pose or "")
-                case "tour_next":
-                    m.tour_next()
-                case "tour_reset":
-                    m.tour_reset()
-                case "jog":
-                    m.jog(-1 if req.joint is None else req.joint, math.radians(req.delta_deg))
-                case "gripper":
-                    m.gripper(req.open)
-                case "release":
-                    m.release()
-                case "clear_fault":
-                    m.clear_fault()
-                case "save":
-                    return {"ok": True, "line": m.save_pose(req.pose or "")}
-                case _:
-                    raise HTTPException(400, f"unknown action {req.action!r}")
-        except Busy as e:
+            with in_mode(*SETUP):
+                match req.action:
+                    case "go":
+                        m.go(req.pose or "")
+                    case "tour_next":
+                        m.tour_next()
+                    case "tour_reset":
+                        m.tour_reset()
+                    case "jog":
+                        m.jog(-1 if req.joint is None else req.joint, math.radians(req.delta_deg))
+                    case "gripper":
+                        m.gripper(req.open)
+                    case "release":
+                        m.release()
+                    case "clear_fault":
+                        m.clear_fault()
+                    case "save":
+                        return {"ok": True, "line": m.save_pose(req.pose or "")}
+                    case _:
+                        raise HTTPException(400, f"unknown action {req.action!r}")
+        except (Busy, WrongMode) as e:
             raise HTTPException(409, str(e)) from None
         except (ValueError, OSError) as e:
             raise HTTPException(400, str(e)) from None
         return {"ok": True}
 
-    @app.get("/calibrate", response_class=HTMLResponse)
-    def calibrate_page() -> str:
-        return (STATIC_DIR / "calibrate.html").read_text()
+    # --- camera calibration (calibrate mode) ---
 
     def calibrate_source() -> CalibrateControl:
         if calibrate is None:
-            raise HTTPException(404, "calibration is off; start with `python -m sorter manual`")
+            raise HTTPException(404, "no calibration on this server")
         return calibrate
 
     @app.get("/api/calibrate")
     def calibrate_state() -> dict:
-        return calibrate_source().state()
+        c = calibrate_source()
+        try:
+            with in_mode(*SETUP):
+                return c.state()
+        except WrongMode as e:
+            raise HTTPException(409, str(e)) from None
 
     @app.post("/api/calibrate")
     def calibrate_action(req: CalibrateRequest) -> dict:
         c = calibrate_source()
         out: dict[str, Any] = {"ok": True}
         try:
-            match req.action:
-                case "goto_mark":
-                    c.goto_mark(req.mark or "")
-                case "goto_view":
-                    c.goto_view(req.index)
-                case "click":
-                    c.click(req.mark or "", req.u, req.v)
-                case "delete_click":
-                    c.delete_click(req.index)
-                case "clear_clicks":
-                    c.clear_clicks()
-                case "save_mount":
-                    out["file"] = c.save_mount()
-                case "compute_look":
-                    c.compute_look()
-                case "goto_look":
-                    c.goto_look(req.pose or "")
-                case "save_look":
-                    out["lines"] = c.save_look()
-                case "calibrate":
-                    out |= c.calibrate()
-                case "detect":
-                    out["marks"] = c.detect()
-                case _:
-                    raise HTTPException(400, f"unknown action {req.action!r}")
-        except Busy as e:
+            with in_mode(OperatorMode.CALIBRATE):
+                match req.action:
+                    case "goto_mark":
+                        c.goto_mark(req.mark or "")
+                    case "goto_view":
+                        c.goto_view(req.index)
+                    case "click":
+                        c.click(req.mark or "", req.u, req.v)
+                    case "delete_click":
+                        c.delete_click(req.index)
+                    case "clear_clicks":
+                        c.clear_clicks()
+                    case "save_mount":
+                        out["file"] = c.save_mount()
+                    case "compute_look":
+                        c.compute_look()
+                    case "goto_look":
+                        c.goto_look(req.pose or "")
+                    case "save_look":
+                        out["lines"] = c.save_look()
+                    case "calibrate":
+                        out |= c.calibrate()
+                    case "detect":
+                        out["marks"] = c.detect()
+                    case _:
+                        raise HTTPException(400, f"unknown action {req.action!r}")
+        except (Busy, WrongMode) as e:
             raise HTTPException(409, str(e)) from None
         except (ValueError, OSError, SorterError) as e:
             raise HTTPException(400, str(e)) from None
         return out
-
-    @app.get("/twin", response_class=HTMLResponse)
-    def twin_page() -> str:
-        return (STATIC_DIR / "twin.html").read_text()
 
     def twin_source():
         twin = hub.twin()
@@ -254,7 +341,7 @@ def create_app(
 
     @app.get("/api/status")
     def status() -> dict:
-        return status_json(hub.status(), speed_json(hub.speed()))
+        return status_json(hub.status(), speed_json(hub.speed()), hub.mode())
 
     def speed_source() -> SpeedControl:
         speed = hub.speed()
@@ -281,7 +368,10 @@ def create_app(
             cmd = Command(req.cmd)
         except ValueError:
             raise HTTPException(400, f"unknown command {req.cmd!r}") from None
-        hub.send(cmd)  # HOLD calls arm.hold() right here, in this worker thread
+        try:
+            hub.send(cmd)  # HOLD calls arm.hold() right here, in this worker thread
+        except WrongMode as e:
+            raise HTTPException(409, str(e)) from None
         return {"ok": True}
 
     @app.websocket("/ws")
@@ -291,7 +381,7 @@ def create_app(
         async def push() -> None:
             last = None
             while True:
-                s = (hub.status(), speed_json(hub.speed()))
+                s = (hub.status(), speed_json(hub.speed()), hub.mode())
                 if s != last:
                     await websocket.send_json(status_json(*s))
                     last = s

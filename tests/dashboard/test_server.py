@@ -29,13 +29,27 @@ def _decode(jpeg: bytes) -> np.ndarray:
     return img
 
 
-def test_page_has_phase_labels(client):
-    r = client.get("/")
-    assert r.status_code == 200
-    assert "__PHASE_LABELS__" not in r.text
-    assert '"sense_box": "Choosing what to grab"' in r.text
-    for path in ("/static/app.js", "/static/style.css"):
-        assert client.get(path).status_code == 200
+def test_every_tab_serves_the_page(system, tmp_path):
+    web = tmp_path / "web"
+    (web / "assets").mkdir(parents=True)
+    (web / "index.html").write_text("<div id=root></div>")
+    (web / "assets" / "app.js").write_text("//")
+    with TestClient(create_app(system.hub, system.cfg.dashboard, web_dir=web)) as c:
+        for path in ("/", "/auto", "/manual", "/calibrate", "/3d"):
+            r = c.get(path)
+            assert r.status_code == 200 and "id=root" in r.text
+        assert c.get("/assets/app.js").status_code == 200
+
+
+def test_unbuilt_front_end_says_how_to_build(system, tmp_path):
+    with TestClient(create_app(system.hub, system.cfg.dashboard, web_dir=tmp_path)) as c:
+        assert "npm run build" in c.get("/").text
+
+
+def test_meta(client):
+    m = client.get("/api/meta").json()
+    assert m["phase_labels"]["sense_box"] == "Choosing what to grab"
+    assert m["modes"] == ["auto"]  # no manual control on this server
 
 
 def test_status_json(client, system):
@@ -55,6 +69,14 @@ def test_commands(client, system):
     assert system.hub.next_command(0) is Command.START
     assert system.hub.next_command(0) is None
     assert client.post("/api/command", json={"cmd": "fly"}).status_code == 400
+
+
+def test_run_commands_need_the_auto_mode(client, system):
+    system.hub.set_mode("manual")
+    assert client.post("/api/command", json={"cmd": "start"}).status_code == 409
+    assert client.post("/api/command", json={"cmd": "hold"}).status_code == 200  # always
+    assert client.get("/api/status").json()["operator"] == "manual"
+    assert system.hub.next_command(0) is None
 
 
 def test_speed(client, system):

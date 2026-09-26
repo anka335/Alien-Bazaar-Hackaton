@@ -57,12 +57,13 @@ Keep docs short and factual. Describe the current state, not history: history li
 ## Conventions
 
 - Commit messages: English, [Conventional Commits](https://www.conventionalcommits.org/) (`feat(vision): ...`, `fix(arm): ...`, `docs: ...`). Use the block name as scope.
-- Python 3.11, uv, pytest, ruff ([D-005](docs/decisions.md), [D-010](docs/decisions.md)). Package layout and path ownership: [docs/architecture.md → Repo layout](docs/architecture.md#repo-layout).
+- Python 3.11, uv, pytest, ruff ([D-005](docs/decisions.md), [D-010](docs/decisions.md)). The dashboard's front end is React + TypeScript + Vite in `frontend/` ([D-026](docs/decisions.md)). Package layout and path ownership: [docs/architecture.md → Repo layout](docs/architecture.md#repo-layout).
 - Commands (from the repo root):
   - install: `uv sync`
   - run on the simulator: `uv run python -m sorter run --sim` (dashboard at http://127.0.0.1:8000)
   - tests: `uv run pytest tests/<package>` or a single test, e.g. `uv run pytest tests/sim/test_smoke.py`
   - lint and format: `uv run ruff check --fix . && uv run ruff format .`
+  - dashboard front end: `cd frontend && npm install && npm run build` (typecheck: `npm run typecheck`, hot reload: `npm run dev`); the build is not committed
 - Keep package `__init__.py` files empty. The real backend of a component is `sorter/<package>/backend.py` with `create(cfg)` ([architecture.md → Wiring](docs/architecture.md#wiring-block-0)); the model of your config section is in `sorter/<package>/config.py`.
 - Develop against the simulator: `build_system(cfg, sim=True)` in tests, `backends` in `config/local.yaml` to swap one component to `real`.
 - Run the tests relevant to your change (prefer single tests or files over the full suite) before committing.

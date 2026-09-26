@@ -1,4 +1,8 @@
-"""Hub: status, decision frames, and commands between the state machine and the dashboard."""
+"""Hub: status, decision frames, and commands between the state machine and the dashboard.
+
+It also holds the operator mode (`OperatorMode`): run commands reach the state machine only in
+AUTO, and AUTO is left only while no run is going (the state machine idle, no command pending).
+"""
 
 from __future__ import annotations
 
@@ -10,8 +14,9 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, Protocol
 
+from sorter.core.errors import WrongMode
 from sorter.core.protocols import Camera
-from sorter.core.types import Command, Decision, Event, Frame, Status
+from sorter.core.types import Command, Decision, Event, Frame, OperatorMode, Status
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +46,7 @@ class Hub:
         max_events: int = 50,
         twin: TwinSource | None = None,
         speed: SpeedControl | None = None,
+        mode: OperatorMode = OperatorMode.AUTO,
     ):
         self._camera = camera
         self._on_hold = on_hold
@@ -51,12 +57,15 @@ class Hub:
         self._decision: Decision | None = None
         self._events: deque[Event] = deque(maxlen=max_events)
         self._commands: queue.Queue[Command] = queue.Queue()
+        self._mode = mode
+        self._in_flight = False  # a command taken by the state machine, its status not out yet
 
     # --- state machine side ---
 
     def publish_status(self, s: Status) -> None:
         with self._lock:
             self._status = s
+            self._in_flight = False
 
     def publish_decision(self, d: Decision) -> None:
         with self._lock:
@@ -66,10 +75,17 @@ class Hub:
         """The next queued command, or None after `timeout_s` (0 = don't wait)."""
         try:
             if timeout_s <= 0:
-                return self._commands.get_nowait()
-            return self._commands.get(timeout=timeout_s)
+                cmd = self._commands.get_nowait()
+            else:
+                cmd = self._commands.get(timeout=timeout_s)
         except queue.Empty:
             return None
+        with self._lock:
+            if self._mode is not OperatorMode.AUTO:  # the mode changed while it was queued
+                log.warning("command %s dropped: mode is %s", cmd, self._mode)
+                return None
+            self._in_flight = True
+        return cmd
 
     # --- dashboard side ---
 
@@ -91,13 +107,38 @@ class Hub:
         return self._speed
 
     def send(self, cmd: Command | str) -> None:
-        """HOLD calls on_hold() immediately, in the caller's thread. Others are queued."""
+        """HOLD calls on_hold() immediately, in the caller's thread, in any mode. Others are
+        queued, in AUTO only (WrongMode otherwise)."""
         cmd = Command(cmd)
         if cmd is Command.HOLD:
             log.warning("HOLD requested")
             self._on_hold()
-        else:
+            return
+        with self._lock:
+            if self._mode is not OperatorMode.AUTO:
+                raise WrongMode(f"{cmd} works in the auto mode; the mode is {self._mode}")
             self._commands.put(cmd)
+
+    # --- operator mode ---
+
+    def mode(self) -> OperatorMode:
+        with self._lock:
+            return self._mode
+
+    def set_mode(self, mode: OperatorMode | str) -> None:
+        """Change the operator mode. Leaving AUTO needs the state machine idle (WrongMode
+        otherwise): Stop the run first."""
+        mode = OperatorMode(mode)
+        with self._lock:
+            if mode is self._mode:
+                return
+            leaving_auto = self._mode is OperatorMode.AUTO
+            if leaving_auto and (
+                self._status.mode != "idle" or self._in_flight or not self._commands.empty()
+            ):
+                raise WrongMode("a run is going: press Stop first")
+            log.info("operator mode: %s → %s", self._mode, mode)
+            self._mode = mode
 
     # --- logging ---
 

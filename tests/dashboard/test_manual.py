@@ -1,6 +1,7 @@
 """Manual control (setup mode) on the kinematic sim: poses, tour, jog, hold, saving a pose."""
 
 import shutil
+import threading
 
 import numpy as np
 import pytest
@@ -120,10 +121,9 @@ def test_save_pose(manual, system, rig):
 
 
 def test_api(system, manual):
+    system.hub.set_mode("manual")
     with TestClient(create_app(system.hub, system.cfg.dashboard, manual=manual)) as c:
-        assert c.get("/", follow_redirects=False).headers["location"] == "/manual"
-        assert c.get("/manual").status_code == 200
-        assert c.get("/static/manual.js").status_code == 200
+        assert c.get("/api/meta").json()["modes"] == ["auto", "manual", "calibrate"]
         assert c.post("/api/manual", json={"action": "go", "pose": "home"}).status_code == 200
         manual.wait()
         s = c.get("/api/manual").json()
@@ -138,4 +138,38 @@ def test_api(system, manual):
 def test_api_off_without_manual(system):
     with TestClient(create_app(system.hub, system.cfg.dashboard)) as c:
         assert c.get("/api/manual").status_code == 404
-        assert "__PHASE_LABELS__" not in c.get("/").text
+        assert c.post("/api/mode", json={"mode": "manual"}).status_code == 404
+
+
+def test_mode_switch(system, manual):
+    with TestClient(create_app(system.hub, system.cfg.dashboard, manual=manual)) as c:
+        assert c.get("/api/mode").json()["mode"] == "auto"
+        # auto: the manual controls are off
+        assert c.get("/api/manual").status_code == 409
+        assert c.post("/api/manual", json={"action": "tour_reset"}).status_code == 409
+        assert c.post("/api/mode", json={"mode": "manual"}).json()["mode"] == "manual"
+        assert c.post("/api/manual", json={"action": "tour_reset"}).status_code == 200
+        assert c.post("/api/command", json={"cmd": "start"}).status_code == 409
+        # a motion is going: the mode stays
+        moving = threading.Event()
+        manual.run("slow", moving.wait)
+        assert c.post("/api/mode", json={"mode": "auto"}).status_code == 409
+        moving.set()
+        manual.wait()
+        assert c.post("/api/mode", json={"mode": "auto"}).status_code == 200
+        assert c.post("/api/mode", json={"mode": "moon"}).status_code == 400
+
+
+def test_auto_is_left_only_between_runs(system, manual):
+    from sorter.core.types import Status
+
+    with TestClient(create_app(system.hub, system.cfg.dashboard, manual=manual)) as c:
+        system.hub.publish_status(Status(mode="running"))
+        assert c.post("/api/mode", json={"mode": "manual"}).status_code == 409
+        system.hub.publish_status(Status(mode="idle"))
+        c.post("/api/command", json={"cmd": "start"})  # queued, not taken yet
+        assert c.post("/api/mode", json={"mode": "manual"}).status_code == 409
+        assert system.hub.next_command(0) is not None
+        assert c.post("/api/mode", json={"mode": "manual"}).status_code == 409  # in flight
+        system.hub.publish_status(Status(mode="idle"))  # the start failed, say
+        assert c.post("/api/mode", json={"mode": "manual"}).status_code == 200

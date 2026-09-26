@@ -1,13 +1,10 @@
-/* Manual control page (setup): on top of style.css, same machine front. */
+/* The manual and calibration tabs: the camera and the 3D view on the left, a deck of cards. */
 
-body.manual { grid-template-rows: auto minmax(0, 1fr); }
+.page-setup { grid-template-rows: auto minmax(0, 1fr); }
+.page-setup .phase { font-size: clamp(1.9rem, 3.4vw, 3.4rem); margin-bottom: 0.2rem; }
+.page-setup .readouts dd { font-size: clamp(1.2rem, 1.7vw, 1.8rem); }
 
-.manual .panel { grid-template-columns: minmax(0, 1fr) auto auto; }
-.manual .phase { font-size: clamp(1.9rem, 3.4vw, 3.4rem); margin-bottom: 0.2rem; }
-.manual .hold { --size: clamp(5.5rem, 7.5vw, 7.5rem); }
-.manual .readouts dd { font-size: clamp(1.2rem, 1.7vw, 1.8rem); }
-
-.manual-stage { grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); }
+.setup-stage { grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); }
 
 .views {
   min-height: 0;
@@ -15,8 +12,6 @@ body.manual { grid-template-rows: auto minmax(0, 1fr); }
   grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
   gap: var(--gap);
 }
-.manual .screen { aspect-ratio: auto; max-width: none; height: 100%; }
-.screen.cam img { object-fit: contain; }
 .tag {
   position: absolute;
   top: 22px;
@@ -58,23 +53,7 @@ body.manual { grid-template-rows: auto minmax(0, 1fr); }
 .hint code { font-size: 0.8rem; }
 
 .row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
-
-.deck button, .deck select {
-  padding: 0.45rem 0.9rem;
-  border: 0;
-  border-radius: 999px;
-  background: linear-gradient(180deg, var(--enamel-hi), #f1f4f7);
-  box-shadow: 0 0 0 1px var(--line), 0 2px 0 var(--line);
-  font: inherit;
-  font-weight: 600;
-  color: var(--ink);
-}
 .deck select { flex: 1; min-width: 0; cursor: pointer; }
-.deck button:hover:not(:disabled) { color: #0f94ad; }
-.deck button:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 0 0 1px var(--line); }
-.deck button:disabled { opacity: 0.35; cursor: default; box-shadow: 0 0 0 1px var(--line); }
-.deck button.primary { background: var(--glass); color: var(--lcd); box-shadow: 0 2px 0 #000; }
-.deck button.primary:hover:not(:disabled) { color: var(--water); }
 .deck button[data-at] { box-shadow: 0 0 0 2px var(--water), 0 2px 0 var(--line); }
 
 .tour {
@@ -114,25 +93,12 @@ body.manual { grid-template-rows: auto minmax(0, 1fr); }
   font-size: 1.25rem;
   font-weight: 600;
 }
-.jog button { padding: 0.3rem 0.85rem; font-size: 1.1rem; line-height: 1; }
+.page .jog button { padding: 0.3rem 0.85rem; font-size: 1.1rem; line-height: 1; }
 
 @media (max-width: 900px) {
-  .manual-stage { grid-template-columns: minmax(0, 1fr); }
+  .setup-stage { grid-template-columns: minmax(0, 1fr); }
   .views { grid-template-rows: auto 50vh; }
-  .manual .screen.cam { height: auto; }
-  .screen.cam img { height: auto; }
+  .page-setup .screen.cam { height: auto; }
+  .page-setup .screen.cam > img { height: auto; }
   .deck { overflow: visible; }
 }
-
-.alert-fault { display: flex; align-items: center; gap: 1rem; }
-.alert-fault p { margin: 0; flex: 1; }
-.alert-fault button {
-  flex: none;
-  padding: 0.45rem 0.9rem;
-  border: 0;
-  border-radius: 10px;
-  background: #fff;
-  color: var(--red);
-  font-weight: 700;
-}
-.alert-fault button:disabled { opacity: 0.5; cursor: default; }

@@ -96,6 +96,12 @@ class PhysicsWorld:
         self._thread: threading.Thread | None = None
         self._running = threading.Event()
         self.camera = None  # the PhysicsCamera, once created (it also segments for the sim)
+        # the calibration's tape marks (`sim.marks`), and where each lies when shown
+        self._marks = {
+            i: m.geom_pos[i].copy()
+            for i in range(m.ngeom)
+            if (mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_GEOM, i) or "").startswith("mark_")
+        }
 
     # --- time and stepping ---
 
@@ -238,6 +244,14 @@ class PhysicsWorld:
             # always let go for a moment: the lock is not fair, and other threads (the driver,
             # the camera, the dashboard) would otherwise wait for it indefinitely
             time.sleep(max(ahead, 0.0002))
+
+    def show_marks(self, on: bool) -> None:
+        """Show or hide the tape marks (the dashboard shows them in the calibrate mode only):
+        hidden, they lie under the table, out of every camera's sight. They never collide."""
+        with self.lock:
+            for i, pos in self._marks.items():
+                self.model.geom_pos[i] = pos if on else (pos[0], pos[1], -0.5)
+            mujoco.mj_kinematics(self.model, self.data)
 
     # --- the arm (used by the motor backend, under the lock) ---
 

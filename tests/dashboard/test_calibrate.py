@@ -161,6 +161,9 @@ def test_coverage():
 def test_http_api(cal, system):
     app = create_app(system.hub, system.cfg.dashboard, manual=cal.manual, calibrate=cal)
     client = TestClient(app)
+    assert client.post("/api/mode", json={"mode": "manual"}).status_code == 200
+    assert client.post("/api/calibrate", json={"action": "detect"}).status_code == 409
+    assert client.post("/api/mode", json={"mode": "calibrate"}).status_code == 200
     post = lambda body: client.post("/api/calibrate", json=body).status_code  # noqa: E731
     s = client.get("/api/calibrate").json()
     assert {m["name"] for m in s["marks"]} == set(cal.marks)
@@ -168,7 +171,7 @@ def test_http_api(cal, system):
     assert post({"action": "goto_mark", "mark": "M9"}) == 400
     assert post({"action": "save_mount"}) == 400
     assert post({"action": "nope"}) == 400
-    assert client.get("/calibrate").status_code == 200
+    assert client.post("/api/mode", json={"mode": "auto"}).status_code == 200
 
 
 def test_off_outside_the_setup_mode(system):
@@ -214,3 +217,14 @@ def test_a_view_finds_and_names_the_marks_by_itself(cal, system):
     s = cal.state()
     assert {c["pose"] for c in s["clicks"]} == {0, 1}
     assert s["fit"]["true_error_mm"] < 3.0 and s["fit"]["true_error_deg"] < 1.0
+
+
+def test_the_sim_shows_the_marks_only_when_asked(cal, system):
+    cal.goto_view(0)
+    cal.manual.wait()
+    try:
+        system.world.show_marks(False)  # every mode but calibrate
+        assert cal.detect() == []
+    finally:
+        system.world.show_marks(True)
+    assert len(cal.detect()) >= 5

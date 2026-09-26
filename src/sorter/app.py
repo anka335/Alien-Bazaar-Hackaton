@@ -13,7 +13,7 @@ from sorter.core.hub import Hub
 from sorter.core.log import HubLogHandler
 from sorter.core.observer import Observer
 from sorter.core.system import System
-from sorter.core.types import Command, Zone
+from sorter.core.types import Command, OperatorMode, Zone
 from sorter.dashboard.twin import Twin
 from sorter.sim import backend as sim_backend
 from sorter.sim.world import SimWorld
@@ -121,24 +121,20 @@ def _physics_classifier(cfg: Config, parts: dict):
 _PHYSICS_RIG = {"calibration": _physics_calibration, "color_classifier": _physics_classifier}
 
 
-def _serve(system: System, manual=None, calibrate=None):
+def _serve(system: System, manual=None, calibrate=None, modes=None):
     """Start the dashboard's web server in a thread; returns the uvicorn server."""
     import uvicorn
 
     from sorter.dashboard.server import create_app
 
     d = system.cfg.dashboard
-    server = uvicorn.Server(
-        uvicorn.Config(
-            create_app(system.hub, d, views=system.cfg.views, manual=manual, calibrate=calibrate),
-            host=d.host,
-            port=d.port,
-            log_level="warning",
-        )
+    app = create_app(
+        system.hub, d, views=system.cfg.views, manual=manual, calibrate=calibrate, modes=modes
     )
+    server = uvicorn.Server(uvicorn.Config(app, host=d.host, port=d.port, log_level="warning"))
     server.thread = threading.Thread(target=server.run, name="dashboard", daemon=True)
     server.thread.start()
-    print(f"Dashboard: http://{d.host}:{d.port}{'/manual' if manual else ''}", flush=True)
+    print(f"Dashboard: http://{d.host}:{d.port}", flush=True)
     return server
 
 
@@ -152,67 +148,26 @@ def _close(system: System) -> None:
         system.world.stop()
 
 
-def run(cfg: Config, *, sim: bool = False, dashboard: bool = True, autostart: bool = False) -> None:
-    from sorter.orchestrator.state_machine import StateMachine
-
-    system = build_system(cfg, sim=sim)
-    logging.getLogger("sorter").addHandler(HubLogHandler(system.hub))
-    backends = system.cfg.backends.model_dump(mode="json")
-    log.info("backends: %s", backends)
-
-    system.camera.start()
-    stop = threading.Event()
-    sm = StateMachine(system)
-    sm_thread = threading.Thread(target=sm.run, args=(stop,), name="state-machine", daemon=True)
-    sm_thread.start()
-
-    server = _serve(system) if dashboard else None
-
-    if autostart:
-        system.hub.send(Command.START)
-    try:
-        while sm_thread.is_alive():
-            sm_thread.join(0.5)
-        log.error("state machine thread exited")
-    except KeyboardInterrupt:
-        log.warning("Ctrl+C: hold, then shut down")
-        system.arm.hold()
-    finally:
-        stop.set()
-        sm_thread.join(timeout=5)
-        if server is not None:
-            server.should_exit = True
-        _close(system)
-
-
 def _nominal_hand_eye(cfg: Config) -> Config:
-    """Setup mode comes before the hand-eye calibration: without `config/hand_eye.yaml` the 3D
-    view uses the nominal camera mount (`sim.camera_mount_mm`). Nothing in it targets by pixels."""
+    """Setup comes before the hand-eye calibration: without `config/hand_eye.yaml` the 3D view
+    and the calibration page use the nominal camera mount (`sim.camera_mount_mm`)."""
     from sorter.calibration.config import HandEyeResult
     from sorter.sim.world import camera_mount
 
-    log.warning("no config/hand_eye.yaml: manual control uses the nominal camera mount")
+    log.warning(
+        "no config/hand_eye.yaml: using the nominal camera mount; calibrate before an auto run"
+    )
     T = camera_mount(cfg.sim)
     he = HandEyeResult(T_link5_cam=T.tolist(), method="nominal")
     calibration = cfg.calibration.model_copy(update={"hand_eye": he})
     return cfg.model_copy(update={"calibration": calibration})
 
 
-def run_manual(cfg: Config, *, sim: bool = False, rig_file: Path) -> None:
-    """Setup mode: the camera, the arm and the manual control page, no state machine. The arm
-    only moves on a button press. Ctrl+C → hold → rest pose → motors off."""
+def _setup_controls(system: System, sim: bool, rig_file: Path):
+    """The manual control and the calibration behind the dashboard's setup modes."""
     from sorter.dashboard.calibrate import CalibrateControl
     from sorter.dashboard.manual import ManualControl
 
-    if sim:  # the tape marks of the calibration page lie on the simulated mat
-        cfg = cfg.model_copy(update={"sim": cfg.sim.model_copy(update={"marks": True})})
-    elif cfg.calibration.hand_eye is None:
-        cfg = _nominal_hand_eye(cfg)
-    system = build_system(cfg, sim=sim)
-    logging.getLogger("sorter").addHandler(HubLogHandler(system.hub))
-    log.info("manual control, backends: %s", system.cfg.backends.model_dump(mode="json"))
-    system.camera.start()
-    system.arm.start()
     manual = ManualControl(system.arm, rig_file, system.cfg.arm.gripper.open)
     # on the sim the result goes next to the board tool's sim check, and is compared to the
     # true mount; the real one is config/hand_eye.yaml
@@ -232,14 +187,68 @@ def run_manual(cfg: Config, *, sim: bool = False, rig_file: Path) -> None:
         marks_file=Path("data/calibration_marks.yaml"),
         dump_dir=None if sim else Path("data/calibrate"),
     )
-    server = _serve(system, manual, calibrate)
+    return manual, calibrate
+
+
+def _show_marks(world):
+    """The sim's tape marks lie on the mat in the calibrate mode only: elsewhere they would
+    be clutter the vision sees."""
+    if not hasattr(world, "show_marks"):
+        return None
+    return lambda mode: world.show_marks(mode is OperatorMode.CALIBRATE)
+
+
+def run(
+    cfg: Config,
+    *,
+    sim: bool = False,
+    dashboard: bool = True,
+    autostart: bool = False,
+    mode: OperatorMode = OperatorMode.AUTO,
+    rig_file: Path | None = None,
+) -> None:
+    """The sorter: the state machine and, with `dashboard`, the web dashboard with its operator
+    modes (auto, manual, calibrate), starting in `mode`. Ctrl+C → hold → rest pose → motors off."""
+    from sorter.dashboard.modes import ModeSwitch
+    from sorter.orchestrator.state_machine import StateMachine
+
+    if dashboard:
+        if sim:  # the calibration's tape marks, shown in the calibrate mode only
+            cfg = cfg.model_copy(update={"sim": cfg.sim.model_copy(update={"marks": True})})
+        elif cfg.calibration.hand_eye is None:
+            cfg = _nominal_hand_eye(cfg)
+    system = build_system(cfg, sim=sim)
+    logging.getLogger("sorter").addHandler(HubLogHandler(system.hub))
+    log.info("backends: %s", system.cfg.backends.model_dump(mode="json"))
+
+    system.camera.start()
+    stop = threading.Event()
+    sm = StateMachine(system)
+    sm_thread = threading.Thread(target=sm.run, args=(stop,), name="state-machine", daemon=True)
+    sm_thread.start()
+
+    server = None
+    if dashboard:
+        system.hub.set_mode(mode)
+        manual, calibrate = _setup_controls(system, sim, rig_file or Path("config/rig.yaml"))
+        modes = ModeSwitch(system.hub, manual, on_change=_show_marks(system.world))
+        server = _serve(system, manual, calibrate, modes)
+
+    if autostart and system.hub.mode() is OperatorMode.AUTO:
+        system.hub.send(Command.START)
     try:
-        while server.thread.is_alive():  # it exits if it can't bind the port
-            server.thread.join(0.5)
-        log.error("dashboard server exited (port %s in use?)", system.cfg.dashboard.port)
+        while sm_thread.is_alive() and (server is None or server.thread.is_alive()):
+            sm_thread.join(0.5)
+        if not sm_thread.is_alive():
+            log.error("state machine thread exited")
+        else:  # it exits if it can't bind the port
+            log.error("dashboard server exited (port %s in use?)", system.cfg.dashboard.port)
     except KeyboardInterrupt:
         log.warning("Ctrl+C: hold, then shut down")
         system.arm.hold()
     finally:
-        server.should_exit = True
+        stop.set()
+        sm_thread.join(timeout=5)
+        if server is not None:
+            server.should_exit = True
         _close(system)

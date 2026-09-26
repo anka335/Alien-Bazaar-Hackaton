@@ -112,6 +112,9 @@ class TargetRejected(ArmError): ...  # outside the zone workspace or IK failed; 
 
 
 class EStopped(ArmError): ...  # arm is held; every motion raises this until recover()
+
+
+class WrongMode(SorterError): ...  # needs another operator mode, or the mode can't change now
 ```
 
 "Nothing found" is never an exception. Vision returns it as a result value.
@@ -355,6 +358,12 @@ class Command(StrEnum):
     START, PAUSE, RESUME, STEP, STOP, HOLD, RESET
 
 
+class OperatorMode(StrEnum):  # who drives the arm (D-026)
+    AUTO = "auto"  # the state machine
+    MANUAL = "manual"  # the dashboard's manual control
+    CALIBRATE = "calibrate"  # the dashboard's camera calibration
+
+
 @dataclass(frozen=True)
 class Event:
     t: float
@@ -404,50 +413,58 @@ class Hub:
         on_hold: Callable[[], None],
         twin: TwinSource | None = None,
         speed: SpeedControl | None = None,
+        mode: OperatorMode = OperatorMode.AUTO,
     ): ...
     # state machine side
     def publish_status(self, s: Status) -> None: ...
     def publish_decision(self, d: Decision) -> None: ...
-    def next_command(self, timeout_s: float) -> Command | None: ...
+    def next_command(self, timeout_s: float) -> Command | None: ...  # None outside AUTO
     # dashboard side
     def status(self) -> Status: ...
     def decision(self) -> Decision | None: ...
     def live_frame(self) -> Frame | None: ...  # proxy to camera.latest()
     def twin(self) -> TwinSource | None: ...
     def speed(self) -> SpeedControl | None: ...
-    def send(self, cmd: Command) -> None: ...  # HOLD → on_hold() immediately; others → queue
+    def send(self, cmd: Command) -> None: ...  # HOLD → on_hold() immediately; others → queue, AUTO only (WrongMode)
+    # operator mode (D-026)
+    def mode(self) -> OperatorMode: ...  # AUTO | MANUAL | CALIBRATE
+    def set_mode(self, mode: OperatorMode) -> None: ...  # WrongMode when leaving AUTO during a run
 ```
 
 - Modules log with the standard `logging` module. `HubLogHandler` turns warnings and errors into `Event`s, so no module needs a Hub reference.
 - Blocks 6 and 7 depend only on the Hub, never on each other.
+- **Operator mode** ([D-026](decisions.md)): who drives the arm. In `AUTO` the state machine does; `MANUAL` and `CALIBRATE` are the dashboard's setup modes. Run commands (all but HOLD) are queued in `AUTO` only; HOLD works in every mode. `AUTO` is left only while no run is going: the state machine idle, no command queued, and none taken whose status isn't published yet (`next_command` marks it in flight, `publish_status` clears it; a command queued before a mode change is dropped).
 - `build_system` gives the Hub a `sorter.dashboard.twin.Twin`: the table layout (`sim.layout`, zone workspaces, camera intrinsics) and the live state (link poses from FK of `arm.joints()`, gripper opening, TCP, `T_base_cam` from `calibration.cam_pose(arm.ee_pose())`, and the sim items with their location when there is a sim world).
 
 ### Dashboard HTTP API (block 7)
 
 | Endpoint | Content |
 | --- | --- |
-| `GET /` | Single page, no build step |
-| `GET /api/status` | `Status` as JSON, plus `now` (`time.monotonic()`, the clock of `Event.t`) for event ages and `speed` (as `GET /api/speed`, null without a speed control) |
-| `WS /ws` | The same JSON, pushed on change (a speed change too), at most `dashboard.status_hz` (5 Hz) |
+| `GET /`, `/auto`, `/manual`, `/calibrate`, `/3d` | The admin panel (React, `frontend/`, built into `src/sorter/dashboard/web/`); every tab is the same page, routed in the browser. Without a build, a page that says how to build it. `/` opens the tab of the current mode |
+| `GET /assets/...`, `GET /favicon.svg` | The panel's built files |
+| `GET /api/meta` | `{"phase_labels": {phase: label}, "modes": [...] (the operator modes this server has: `auto` only without the setup controls), "calibrate": bool}` |
+| `GET /api/mode` | `{"mode": "auto" \| "manual" \| "calibrate", "busy": bool}` (busy: a manual motion runs) |
+| `POST /api/mode` | `{"mode"}` → the same JSON. 409 if a run is going (leaving auto: Stop first) or a manual motion runs; 404 if the server has no setup controls; 500 if the motors can't be turned on. Entering manual / calibrate turns the motors on; the sim shows the calibration's tape marks in calibrate only |
+| `GET /api/status` | `Status` as JSON, plus `now` (`time.monotonic()`, the clock of `Event.t`) for event ages, `speed` (as `GET /api/speed`, null without a speed control) and `operator` (the operator mode) |
+| `WS /ws` | The same JSON, pushed on change (a speed or mode change too), at most `dashboard.status_hz` (5 Hz) |
 | `GET /api/speed` | `{"speed_scale", "max_speed_scale"}` of the arm ([D-025](decisions.md)); 404 without a speed control |
 | `POST /api/speed` | `{"speed_scale": float}` → the same JSON. Works in any mode; the next motion uses it (one under way keeps its speed); clamped to [0.05, `max_speed_scale`]; not saved (a restart goes back to `arm.speed_scale`) |
 | `GET /stream/decision.mjpg` | Last decision frame with the zone ROI (`views.<zone>.roi`), the overlay, and a caption strip (phase + `summary`) drawn server-side |
 | `GET /stream/live.mjpg` | Live wrist camera (`hub.live_frame()`), at `dashboard.stream_fps` |
 | `GET /snapshot/decision.jpg`, `GET /snapshot/live.jpg` | One JPEG of the same images |
-| `POST /api/command` | `{"cmd": "start" \| "pause" \| "resume" \| "step" \| "stop" \| "hold" \| "reset"}` |
-| `GET /twin` | 3D view (three.js): the arm's CAD meshes posed from FK, the table, the items, the wrist camera's view on the table. `?embed` for the dashboard's main screen, which switches between the decision frame and this view |
+| `POST /api/command` | `{"cmd": "start" \| "pause" \| "resume" \| "step" \| "stop" \| "hold" \| "reset"}`. 409 for all but `hold` outside the auto mode |
 | `GET /api/twin/layout`, `GET /api/twin/state` | `TwinSource.layout()` / `.state()` as JSON; 404 without a source. Link and camera poses are 4×4 row-major in metres, the rest in mm |
-| `GET /twin-assets/...` | The CAD meshes and three.js vendored in `rebot_b601/rebot_b601/viewer_assets/` |
-| `GET /manual` | Manual control page for setting up the rig (setup mode, see below) |
-| `GET /api/manual` | `ManualControl.state()`: `busy`, `action`, `last`, `error`, `held`, `fault` (driver fault message or null), `at` (named pose or null), `joints` (rad), `gripper`, `tcp_mm`, `poses`, `tour`, `tour_next`, `rig_file`; 404 outside setup mode |
-| `GET /calibrate` | Camera calibration page (setup mode, see below) |
-| `GET /api/calibrate` | `CalibrateControl.state()`: `arm` (the `/api/manual` state), `image` (`width`, `height`), `overlay` (`marks`: name + pixel or null, `zones`: box / background outline pixels, from where the arm is, with the fitted mount if any else the one in use), `marks` (`name`, `xyz`, `placed`), `clicks` (`mark`, `px`, `here`, `pose` (the view it was clicked from, 0-based), `residual_mm`), `fit` (`rmse_mm`, `change_mm`, `change_deg` from the mount in use, `marks`; on the sim `true_error_mm`, `true_error_deg`) or null, `mount` (`method`, `saved`), `look` (per look pose: `tcp_z`, `camera_mm`, `sees_mm`, `coverage`, `depth_ok`, `fits`, `top`) or null, `look_saved`, `hand_eye_file`, `rig_file`, `views`, `hover_mm`, `detected` (`squares`, `marks` of the last detection) or null; 404 outside setup mode |
-| `POST /api/calibrate` | `{"action": "goto_mark", "mark"}` \| `{"action": "goto_view", "index"}` \| `{"action": "detect"}` → `{"ok", "marks"}` \| `{"action": "click", "mark", "u", "v"}` \| `{"action": "delete_click", "index"}` \| `{"action": "clear_clicks" \| "compute_look"}` \| `{"action": "goto_look", "pose"}` \| `{"action": "save_mount"}` → `{"ok", "file"}` \| `{"action": "save_look"}` → `{"ok", "lines"}` \| `{"action": "calibrate"}` (save_mount + compute_look + save_look) → `{"ok", "file", "lines"}`. 409 while a motion runs, 400 on a bad action or when it can't be done (no depth at the click, no fit yet, unreachable) |
-| `POST /api/manual` | `{"action": "go", "pose"}` \| `{"action": "tour_next" \| "tour_reset" \| "release" \| "clear_fault"}` \| `{"action": "jog", "joint": 0..5, "delta_deg"}` \| `{"action": "gripper", "open": bool}` \| `{"action": "save", "pose"}` → `{"ok", "line"}`. 409 while a motion runs, 400 on a bad action or pose |
+| `GET /twin-assets/...` | The CAD meshes vendored in `rebot_b601/rebot_b601/viewer_assets/` (the panel bundles three.js itself) |
+| `GET /api/manual` | `ManualControl.state()`: `busy`, `action`, `last`, `error`, `held`, `fault` (driver fault message or null), `at` (named pose or null), `joints` (rad), `gripper`, `tcp_mm`, `poses`, `tour`, `tour_next`, `rig_file`; 409 in the auto mode, 404 without the setup controls |
+| `GET /api/calibrate` | `CalibrateControl.state()`: `arm` (the `/api/manual` state), `image` (`width`, `height`), `overlay` (`marks`: name + pixel or null, `zones`: box / background outline pixels, from where the arm is, with the fitted mount if any else the one in use), `marks` (`name`, `xyz`, `placed`), `clicks` (`mark`, `px`, `here`, `pose` (the view it was clicked from, 0-based), `residual_mm`), `fit` (`rmse_mm`, `change_mm`, `change_deg` from the mount in use, `marks`; on the sim `true_error_mm`, `true_error_deg`) or null, `mount` (`method`, `saved`), `look` (per look pose: `tcp_z`, `camera_mm`, `sees_mm`, `coverage`, `depth_ok`, `fits`, `top`) or null, `look_saved`, `hand_eye_file`, `rig_file`, `views`, `hover_mm`, `detected` (`squares`, `marks` of the last detection) or null; 409 in the auto mode, 404 without the setup controls |
+| `POST /api/calibrate` | `{"action": "goto_mark", "mark"}` \| `{"action": "goto_view", "index"}` \| `{"action": "detect"}` → `{"ok", "marks"}` \| `{"action": "click", "mark", "u", "v"}` \| `{"action": "delete_click", "index"}` \| `{"action": "clear_clicks" \| "compute_look"}` \| `{"action": "goto_look", "pose"}` \| `{"action": "save_mount"}` → `{"ok", "file"}` \| `{"action": "save_look"}` → `{"ok", "lines"}` \| `{"action": "calibrate"}` (save_mount + compute_look + save_look) → `{"ok", "file", "lines"}`. Calibrate mode only (409 otherwise). 409 while a motion runs, 400 on a bad action or when it can't be done (no depth at the click, no fit yet, unreachable) |
+| `POST /api/manual` | `{"action": "go", "pose"}` \| `{"action": "tour_next" \| "tour_reset" \| "release" \| "clear_fault"}` \| `{"action": "jog", "joint": 0..5, "delta_deg"}` \| `{"action": "gripper", "open": bool}` \| `{"action": "save", "pose"}` → `{"ok", "line"}`. Manual or calibrate mode (409 otherwise). 409 while a motion runs, 400 on a bad action or pose |
 
-**Setup mode** (`python -m sorter manual [--sim]`, `create_app(..., manual=ManualControl)`): no state machine; `/` redirects to `/manual`, where the operator moves the arm by hand while watching the wrist camera and the 3D view. `sorter.dashboard.manual.ManualControl` runs one motion at a time in its own thread: named poses (a move to or from a bin goes via `home`), a tour `look_box → look_bg → place_bg → bin_light → bin_dark → bin_colored → home` one pose per press, joint jog, the gripper, and `save` (the current joints become that pose in memory and in `config/rig.yaml`, the rest of the file kept). Hold is the usual `POST /api/command {"cmd": "hold"}`; `release` leaves it without moving. A driver fault shows as a banner with **Clear fault** (`clear_fault`, after a confirmation), which also leaves hold. The page switcher (`static/nav.js`) greys out the page of the other mode: Dashboard in setup mode, Manual and Calibrate under `run`.
+**The admin panel** ([D-026](decisions.md)): one page with tabs on top (Auto, Manual, Calibrate, 3D view), switched without a reload. A mode's tab is also its switch: opening it sets the operator mode (`POST /api/mode`) and stays on the current tab if the mode can't change now (the reason shows as a message); 3D view changes no mode. The bar on every tab also has the arm's speed (`/api/speed`), the connection and Hold (Space / Esc anywhere). A tab opened by its URL in another mode shows a card to switch to it; the Auto tab stays visible in any mode, its run controls replaced by "Switch to Auto". The 3D view is a React component on three.js (npm, bundled), fed by `/api/twin/*` and the meshes in `/twin-assets`; the Auto tab switches its main screen between the decision frame and it. One status stream (`/ws`, polled from `/api/status` while the socket is down); the Manual and Calibrate tabs poll their state every 250 ms while shown.
 
-**Calibration page** (`/calibrate`, setup mode, `create_app(..., calibrate=CalibrateControl)`, [D-021](decisions.md)): `sorter.dashboard.calibrate.CalibrateControl` runs its motions through the same `ManualControl` (one at a time, same busy / hold rules). The page is a 4-step wizard (Marks → Click → Calibrate → Check); its **Calibrate** button is the `calibrate` action. (1) **Marks**: `goto_mark` lifts, closes the gripper, goes above the mark and straight down to `HOVER_MM` above it, gripper vertical; the tip's measured position becomes the mark's, kept in `data/calibration_marks.yaml` across restarts (not on the sim, whose marks are drawn at their nominal spots). (2) **Camera mount**: `goto_view` puts the camera over the marks, aimed with the saved mount (the nominal one before the first save), as close as the arm can (3 views, shifted; clicks within `SAME_POSE_RAD` = 0.01 rad of each other are one view, since the measured joints wander a few mrad at a pose) and then finds the marks by itself (`detect`, also an action): `find_squares` (dark, square blobs of the tape's size at their depth) and `identify` (which mark each is, from the 3D distances between them, the mirrored match rejected as it puts the camera under the table) make the clicks of that pose; each manual `click` snaps to the center of the dark tape square within 35 px (`snap`), then takes a fresh frame's depth around it (`deproject`) and the link5 pose; the fit updates with every click; the mark pattern is symmetric about the M1–M6 line, so each view is also tried with M2↔M3, M4↔M5 swapped and the fit that has the camera above the table and looking down from every view wins (a mirrored view flips it under the table; the view's labels are fixed); a fit whose camera is more than 200 mm from the nominal one or whose optical axis is more than 45° off is not saved (the turn about the optical axis is free: the real camera may be mounted any way round), and the views are always aimed with the nominal mount (a one-view fit can lose the marks); `save_mount` writes `hand_eye.yaml` (the sim: `data/hand_eye_sim.yaml`) and sets the live calibration's `T_link5_cam` (the 3D view and the overlay follow). (3) **Look poses**: `compute_look` finds, for the mount in use, the lowest TCP height (60–200 mm, 10 mm steps, stopping where the coverage starts to drop or the arm can't reach) with the camera's axis through the zone center or as close as the arm can put it, the gripper vertical (the image's turn is whatever the arm gives: joint 6 doesn't turn the camera), the whole zone in the image and the camera ≥ 200 mm above it (depth); `goto_look` previews one and measures the image rows the gripper hides (after a save it rewrites the ROI without them); `save_look` writes both poses (`write_pose`) and `views.<zone>.roi` (`write_views`) into `rig.yaml` and uses them at once.
+**Setup modes** (manual and calibrate; `create_app(..., manual=ManualControl, calibrate=CalibrateControl, modes=ModeSwitch)`): the state machine's thread keeps running but gets no commands; the operator moves the arm by hand while watching the wrist camera and the 3D view. `sorter.dashboard.modes.ModeSwitch` changes the mode (`hub.set_mode`, plus: no manual motion may be running, the motors go on when a setup mode starts, `on_change` shows the sim's tape marks in calibrate only) and `guard(*modes)` runs each manual / calibration request with the mode checked and held. `sorter.dashboard.manual.ManualControl` runs one motion at a time in its own thread: named poses (a move to or from a bin goes via `home`), a tour `look_box → look_bg → place_bg → bin_light → bin_dark → bin_colored → home` one pose per press, joint jog, the gripper, and `save` (the current joints become that pose in memory and in `config/rig.yaml`, the rest of the file kept). Hold is the usual `POST /api/command {"cmd": "hold"}`; `release` leaves it without moving. A driver fault shows as a banner with **Clear fault** (`clear_fault`, after a confirmation), which also leaves hold. The Manual tab's controls also work in the calibrate mode (opened by URL).
+
+**Calibrate tab** (calibrate mode, [D-021](decisions.md)): `sorter.dashboard.calibrate.CalibrateControl` runs its motions through the same `ManualControl` (one at a time, same busy / hold rules). The tab is a 4-step wizard (Marks → Click → Calibrate → Check); its **Calibrate** button is the `calibrate` action. (1) **Marks**: `goto_mark` lifts, closes the gripper, goes above the mark and straight down to `HOVER_MM` above it, gripper vertical; the tip's measured position becomes the mark's, kept in `data/calibration_marks.yaml` across restarts (not on the sim, whose marks are drawn at their nominal spots). (2) **Camera mount**: `goto_view` puts the camera over the marks, aimed with the saved mount (the nominal one before the first save), as close as the arm can (3 views, shifted; clicks within `SAME_POSE_RAD` = 0.01 rad of each other are one view, since the measured joints wander a few mrad at a pose) and then finds the marks by itself (`detect`, also an action): `find_squares` (dark, square blobs of the tape's size at their depth) and `identify` (which mark each is, from the 3D distances between them, the mirrored match rejected as it puts the camera under the table) make the clicks of that pose; each manual `click` snaps to the center of the dark tape square within 35 px (`snap`), then takes a fresh frame's depth around it (`deproject`) and the link5 pose; the fit updates with every click; the mark pattern is symmetric about the M1–M6 line, so each view is also tried with M2↔M3, M4↔M5 swapped and the fit that has the camera above the table and looking down from every view wins (a mirrored view flips it under the table; the view's labels are fixed); a fit whose camera is more than 200 mm from the nominal one or whose optical axis is more than 45° off is not saved (the turn about the optical axis is free: the real camera may be mounted any way round), and the views are always aimed with the nominal mount (a one-view fit can lose the marks); `save_mount` writes `hand_eye.yaml` (the sim: `data/hand_eye_sim.yaml`) and sets the live calibration's `T_link5_cam` (the 3D view and the overlay follow). (3) **Look poses**: `compute_look` finds, for the mount in use, the lowest TCP height (60–200 mm, 10 mm steps, stopping where the coverage starts to drop or the arm can't reach) with the camera's axis through the zone center or as close as the arm can put it, the gripper vertical (the image's turn is whatever the arm gives: joint 6 doesn't turn the camera), the whole zone in the image and the camera ≥ 200 mm above it (depth); `goto_look` previews one and measures the image rows the gripper hides (after a save it rewrites the ROI without them); `save_look` writes both poses (`write_pose`) and `views.<zone>.roi` (`write_views`) into `rig.yaml` and uses them at once.
 
 The decision frame is the main panel: the wrist feed moves with the arm, and overlays only match the frame they were computed on. The caption is part of the image for the same reason. Each decision is rendered and encoded once. An optional fixed scene webcam for the audience can be added by block 7 (`dashboard.scene_camera`, not implemented), with no effect on the loop.
 
@@ -461,7 +478,7 @@ One Python process ([D-005](decisions.md)):
 - state machine thread (block 6);
 - web server, uvicorn (block 7).
 
-`python -m sorter manual [--sim]` (setup mode) has no state machine thread: camera, arm, web server. `python -m sorter run [--sim]` wires everything (block 0, `sorter/app.py`). Ctrl+C → `arm.hold()`, stop the loop, `arm.shutdown()` (rest pose, then disable).
+`python -m sorter run [--sim] [--mode auto|manual|calibrate]` wires everything (block 0, `sorter/app.py`) and serves all three operator modes, starting in `--mode`; `python -m sorter manual [--sim]` is `run --mode manual`. With the dashboard on, the real rig without `config/hand_eye.yaml` uses the nominal camera mount (a warning: calibrate before an auto run), and the sim has the tape marks (hidden outside calibrate). Ctrl+C → `arm.hold()`, stop the loop, `arm.shutdown()` (rest pose, then disable).
 
 ## Wiring (block 0)
 
@@ -473,7 +490,7 @@ Entry points each block provides:
 | --- | --- |
 | 1, 2, 3, 4, 5 | `sorter.<package>.backend.create(cfg: Config) -> <Protocol>`: the real backend. Until the module exists, `backends.<name>: real` fails with a clear error |
 | 6 | `sorter.orchestrator.state_machine.StateMachine(system)` with `run(stop: threading.Event)`, the loop for the state machine thread |
-| 7 | `sorter.dashboard.server.create_app(hub, cfg.dashboard, views=cfg.views) -> FastAPI` (`views` gives the ROIs drawn on the decision frame) |
+| 7 | `sorter.dashboard.server.create_app(hub, cfg.dashboard, views=cfg.views, manual=, calibrate=, modes=) -> FastAPI` (`views` gives the ROIs drawn on the decision frame; the rest are the setup modes' controls, left out: auto only) |
 
 Package `__init__.py` files stay empty: `sorter.core.config` imports every block's config model, so an import in an `__init__` can create a cycle. Import driver SDKs inside `backend.create`, so sim runs don't need them.
 
@@ -541,7 +558,8 @@ Both: `world.looking_at` is the zone whose look pose the joints are at. `python 
 | `src/sorter/arm/` (kinematics, driver, controller, pose teaching tool) | 5 |
 | `rebot_b601/` (standalone RS driver, IK, planner, MCP server, 3D assets; a path dependency) | 5 |
 | `src/sorter/orchestrator/` (state machine, run log) | 6 |
-| `src/sorter/dashboard/` (server, renderer, manual and calibration pages, `static/` pages) | 7 |
+| `src/sorter/dashboard/` (server, renderer, mode switch, manual and calibration controls; `web/` is the build, not in git) | 7 |
+| `frontend/` (the React admin panel: Vite + TypeScript) | 7 |
 | `src/sorter/<package>/config.py` | The block that owns the package |
 | `tests/<package>/` | Same as the package |
 | `tests/conftest.py` (shared fixtures) | 0 |
