@@ -173,6 +173,31 @@ for (const id of ["decision", "live"]) {
   });
 }
 
+// The main screen shows the decision frame or the 3D view. The 3D page loads the arm's
+// meshes, so the frame gets its src only when first shown.
+function showView(view) {
+  const twin = view === "twin";
+  $("decision").hidden = twin;
+  $("twin").hidden = !twin;
+  if (twin && !$("twin").src) $("twin").src = "/twin?embed";
+  for (const b of document.querySelectorAll(".screen-tabs [data-view]")) {
+    b.setAttribute("aria-selected", String(b.dataset.view === view));
+  }
+  try {
+    localStorage.setItem("screen-view", view);
+  } catch {
+    /* private mode: not remembered */
+  }
+}
+for (const b of document.querySelectorAll(".screen-tabs [data-view]")) {
+  b.addEventListener("click", () => showView(b.dataset.view));
+}
+try {
+  if (localStorage.getItem("screen-view") === "twin") showView("twin");
+} catch {
+  /* private mode */
+}
+
 $("hold").addEventListener("click", hold);
 for (const b of document.querySelectorAll("[data-cmd]")) {
   b.addEventListener("click", () => send(b.dataset.cmd));

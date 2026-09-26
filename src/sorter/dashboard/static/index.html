@@ -52,7 +52,11 @@
   <main class="stage">
     <figure class="screen">
       <img id="decision" src="/stream/decision.mjpg" alt="The last frame the robot decided on, with what it found drawn on top">
-      <figcaption class="screen-tag">Last decision</figcaption>
+      <iframe id="twin" title="3D view of the arm, the table and the clothes" hidden></iframe>
+      <figcaption class="screen-tabs" role="tablist" aria-label="Main screen">
+        <button type="button" role="tab" data-view="decision" aria-selected="true">Last decision</button>
+        <button type="button" role="tab" data-view="twin" aria-selected="false">3D view</button>
+      </figcaption>
       <div class="alerts">
         <p class="alert alert-conn" id="conn" hidden>No connection to the sorter. Hold may not reach the arm. Retrying…</p>
         <p class="alert alert-error" id="error" hidden></p>

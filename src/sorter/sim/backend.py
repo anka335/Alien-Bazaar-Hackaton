@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sorter.sim.arm import SimArm
+from sorter.arm.controller import Controller
 from sorter.sim.calibration import SimCalibration
 from sorter.sim.camera import SimCamera
+from sorter.sim.driver import SimDriver
 from sorter.sim.vision import SimBoxDetector, SimColorClassifier
 from sorter.sim.world import SimWorld
 
@@ -18,8 +19,8 @@ def create(name: str, cfg: Config, world: SimWorld) -> Any:
     match name:
         case "camera":
             return SimCamera(world)
-        case "arm":
-            return SimArm(world)
+        case "arm":  # the real controller on a simulated driver
+            return Controller(SimDriver(world), cfg.arm, cfg.poses, cfg.zones)
         case "calibration":
             return SimCalibration(world)
         case "box_detector":

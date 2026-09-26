@@ -17,6 +17,7 @@ A live view that makes the demo understandable to the audience and gives the ope
 - [x] Controls: start / pause / resume / step / stop / reset, and a big, always visible **HOLD** button.
 - [x] Recent events and the error, if any.
 - [x] Works on the simulator before hardware is ready.
+- [x] 3D view (`/twin`, three.js, the arm's CAD meshes from `rebot_b601`): the arm posed from FK, the table layout, pick workspaces, the clothes (sim), and what the wrist camera sees. The main screen switches between it and the decision frame.
 - [ ] Optional: a fixed scene webcam for the audience (`dashboard.scene_camera`), since the wrist feed moves.
 
 ## Depends on / Unblocks
@@ -34,6 +35,7 @@ A live view that makes the demo understandable to the audience and gives the ope
 
 - Keep the tech simple. MJPEG streams and a WebSocket for status are enough (D-012).
 - Code: `server.py` (endpoints, JPEG cache, MJPEG, `/ws`), `render.py` (overlay drawing, caption strip, `PHASE_LABELS` shared with the page), `static/` (page). `index.html` is read when the app is created: restart the process after editing it; `app.js` and `style.css` are served live.
+- The 3D view is `static/twin.html` + `twin.js`, fed by `TwinSource` (`sorter/dashboard/twin.py`) through the Hub. The iframe gets its `src` only when the 3D tab is first shown: the meshes are ~36 MB. Space or Esc inside it also sends HOLD.
 - Space or Esc anywhere on the page sends HOLD. The HOLD button is still the primary control; the keys are a backup for the operator.
 - The page enables each button by the same rules as `StateMachine._apply`. If block 6 changes when a command applies, update `ENABLED` in `static/app.js`.
 - `/ws` pushes at most `status_hz`, so on the sim with instant motions some phases are skipped in the headline. The decision frame is unaffected.
@@ -54,3 +56,4 @@ _None yet._
 - 2026-09-25: runs on the same laptop in the same process (D-005); main panel is the decision frame (wrist camera, D-006); e-stop is HOLD (D-009); HTTP API fixed.
 - 2026-09-25: dashboard implemented (D-012). Contract changes: `create_app(hub, cfg.dashboard, views=cfg.views)`; `/api/status` and `/ws` add `now`; new `/snapshot/{decision,live}.jpg`; config keys `stream_fps`, `jpeg_quality`, `status_hz`. Added the `websockets` dependency.
 - 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/dashboard/config.py` (placeholder). A placeholder server is in `sorter/dashboard/server.py` (`create_app(hub, cfg)`: page, `/api/status`, `/api/command`); replace it, keep the entry point. See architecture.md → Wiring.
+- 2026-09-26 (block 5): 3D view added. Contract changes: `Hub(..., twin=)` / `hub.twin()` (`TwinSource`), new endpoints `/twin`, `/api/twin/layout`, `/api/twin/state`, `/twin-assets/...` (architecture.md → Dashboard HTTP API).

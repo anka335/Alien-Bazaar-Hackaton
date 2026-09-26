@@ -11,9 +11,17 @@ dependencies = [
     "opencv-python-headless>=4.9",
     "pydantic>=2.7",
     "pyyaml>=6.0",
+    "rebot-b601",
     "uvicorn>=0.29",
     "websockets>=12",
 ]
+
+[tool.uv.sources]
+# the arm kinematics, planner and driver (D-014); `uv sync --extra hardware` adds the motor bus
+rebot-b601 = { path = "rebot_b601", editable = true }
+
+[project.optional-dependencies]
+hardware = ["rebot-b601[hardware]"]
 
 [project.scripts]
 sorter = "sorter.__main__:main"

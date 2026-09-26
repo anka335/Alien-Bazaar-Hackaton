@@ -55,3 +55,4 @@ _None yet._
 
 - 2026-09-25: camera moved from an overhead stand to the wrist (D-006); zones fixed (D-007); ROI and record tools added to scope.
 - 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/camera/config.py` (placeholder). The real backend still needs to be implemented at `sorter/camera/backend.py` with `create(cfg) -> Camera`. See architecture.md → Wiring.
+- 2026-09-26 (block 5): the look poses are computed for the table layout (D-015): the camera straight down from ~260 mm, which at 640x480 (fx 615) sees 271 x 203 mm, enough for the 240 x 180 mm tray and mat. It assumes the camera 140 mm behind the fingertips and 55 mm off-axis, looking along the gripper (`sim.camera_mount_mm`): tell block 5 the real mount. The top of a pile in the tray stays ~200 mm from the camera, above the D435i minimum range.

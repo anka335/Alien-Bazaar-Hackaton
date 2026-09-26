@@ -12,7 +12,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | 2 | [Calibration](tasks/02-calibration.md) | todo | — | — | — |
 | 3 | [Box detection](tasks/03-box-detection.md) | todo | — | — | — |
 | 4 | [Color classification](tasks/04-color-classification.md) | in progress | Maciej | `block/04-color-classification` | tuning on real frames needs block 1 |
-| 5 | [Arm control](tasks/05-arm-control.md) | todo | — | — | — |
+| 5 | [Arm control](tasks/05-arm-control.md) | in progress | Softjey + Claude | `feat/sim-3d-arm` | controller + sim done; real arm, pose teaching and tuning need the hardware |
 | 6 | [State machine](tasks/06-state-machine.md) | review | Softjey + Claude | `block/06-state-machine` | — |
 | 7 | [Dashboard](tasks/07-dashboard.md) | review | Softjey + Claude | `block/07-dashboard` | — |
 | 8 | [Demo preparation](tasks/08-demo.md) | todo | — | — | — |

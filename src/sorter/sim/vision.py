@@ -24,7 +24,7 @@ from sorter.sim.world import SimItem, SimWorld, ZoneView
 def _grasp(view: ZoneView, frame: Frame, it: SimItem) -> GraspPoint:
     u, v = view.to_px(it.x, it.y)
     px = PixelPoint(min(max(round(u), 0), view.width - 1), min(max(round(v), 0), view.height - 1))
-    depth = float(frame.depth_mm[px.v, px.u]) or view.cam_height_mm - it.height_mm
+    depth = float(frame.depth_mm[px.v, px.u]) or view.cam_z_mm - view.surface_z_mm - it.height_mm
     return GraspPoint(px, depth)
 
 

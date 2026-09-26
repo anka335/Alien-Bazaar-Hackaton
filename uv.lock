@@ -132,6 +132,18 @@ wheels = [
 ]
 
 [[package]]
+name = "motorbridge"
+version = "0.5.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b0/be/3c5fc8f1166119c0d5e8e4cb8452481ad50253117f4f251018b98070004c/motorbridge-0.5.6.tar.gz", hash = "sha256:07abecd895f173b3b790fac114e0fe8e02a4ba87f9de71299b5c2a1b70a3bca4", size = 42965, upload-time = "2026-09-20T09:50:25.808Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3b/5d/20472d229e129e779878d3efbd7476a5334b1752be56af80bad75bbda589/motorbridge-0.5.6-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:fd119812909705594b79568e54bc8408bb20eb5d31912eca74e51ea1e4260cf2", size = 1250540, upload-time = "2026-09-20T09:50:10.57Z" },
+    { url = "https://files.pythonhosted.org/packages/69/f3/8aab1afd9d32d7c1d1e102c3b0cc7fccb4763defda3c6f7d76d4afbdf027/motorbridge-0.5.6-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:38b7d0f1d58efa3c73b93dbccf75f985fb6281f95f0dc57fe508d83655fc860d", size = 1351234, upload-time = "2026-09-20T09:50:11.905Z" },
+    { url = "https://files.pythonhosted.org/packages/60/5e/dd706c96ce0e2342eedd3f2799c865d259ccf95f81184be8fbf8edf4e234/motorbridge-0.5.6-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a4dbb84e06fc66c92a403ac03985c9ae4dbd8090eaba66030bdb4e70814c3751", size = 1370149, upload-time = "2026-09-20T09:50:13.185Z" },
+    { url = "https://files.pythonhosted.org/packages/54/a2/9f92450eac197e1dc232844fe211630f49c6bc13e3bc833c1f9de8b6f0f0/motorbridge-0.5.6-cp311-cp311-win_amd64.whl", hash = "sha256:d9d24b028ed9c38ebf627cfb4d2d4233e03da1ca3ef7c2b97f1e4d3b994412cb", size = 1034048, upload-time = "2026-09-20T09:50:14.347Z" },
+]
+
+[[package]]
 name = "numpy"
 version = "2.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -290,6 +302,27 @@ wheels = [
 ]
 
 [[package]]
+name = "rebot-b601"
+version = "0.1.0"
+source = { editable = "rebot_b601" }
+dependencies = [
+    { name = "numpy" },
+]
+
+[package.optional-dependencies]
+hardware = [
+    { name = "motorbridge" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.10,<2" },
+    { name = "motorbridge", marker = "extra == 'hardware'" },
+    { name = "numpy", specifier = ">=1.26" },
+]
+provides-extras = ["hardware", "mcp"]
+
+[[package]]
 name = "ruff"
 version = "0.16.9"
 source = { registry = "https://pypi.org/simple" }
@@ -324,8 +357,14 @@ dependencies = [
     { name = "opencv-python-headless" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "rebot-b601" },
     { name = "uvicorn" },
     { name = "websockets" },
+]
+
+[package.optional-dependencies]
+hardware = [
+    { name = "rebot-b601", extra = ["hardware"] },
 ]
 
 [package.dev-dependencies]
@@ -342,9 +381,12 @@ requires-dist = [
     { name = "opencv-python-headless", specifier = ">=4.9" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "rebot-b601", editable = "rebot_b601" },
+    { name = "rebot-b601", extras = ["hardware"], marker = "extra == 'hardware'", editable = "rebot_b601" },
     { name = "uvicorn", specifier = ">=0.29" },
     { name = "websockets", specifier = ">=12" },
 ]
+provides-extras = ["hardware"]
 
 [package.metadata.requires-dev]
 dev = [

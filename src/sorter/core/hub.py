@@ -8,6 +8,7 @@ import threading
 from collections import deque
 from collections.abc import Callable
 from dataclasses import replace
+from typing import Any, Protocol
 
 from sorter.core.protocols import Camera
 from sorter.core.types import Command, Decision, Event, Frame, Status
@@ -15,10 +16,24 @@ from sorter.core.types import Command, Decision, Event, Frame, Status
 log = logging.getLogger(__name__)
 
 
+class TwinSource(Protocol):
+    """Data for the dashboard's 3D view: the table layout and the live arm (+ sim items)."""
+
+    def layout(self) -> dict[str, Any]: ...
+    def state(self) -> dict[str, Any]: ...
+
+
 class Hub:
-    def __init__(self, camera: Camera, on_hold: Callable[[], None], max_events: int = 50):
+    def __init__(
+        self,
+        camera: Camera,
+        on_hold: Callable[[], None],
+        max_events: int = 50,
+        twin: TwinSource | None = None,
+    ):
         self._camera = camera
         self._on_hold = on_hold
+        self._twin = twin
         self._lock = threading.Lock()
         self._status = Status()
         self._decision: Decision | None = None
@@ -56,6 +71,9 @@ class Hub:
 
     def live_frame(self) -> Frame | None:
         return self._camera.latest()
+
+    def twin(self) -> TwinSource | None:
+        return self._twin
 
     def send(self, cmd: Command | str) -> None:
         """HOLD calls on_hold() immediately, in the caller's thread. Others are queued."""

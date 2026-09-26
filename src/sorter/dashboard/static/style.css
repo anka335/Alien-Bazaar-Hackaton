@@ -213,18 +213,37 @@ figure { margin: 0; }
   border-radius: calc(var(--radius) - 10px);
   background: #0b1118;
 }
-.screen-tag {
+.screen iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: calc(var(--radius) - 10px);
+  background: #121a24;
+}
+.screen [hidden] { display: none; }
+.screen-tabs {  /* switches the screen between the decision frame and the 3D view */
   position: absolute;
   top: 22px;
   left: 22px;
-  padding: 0.25em 0.75em;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
   border-radius: 999px;
   background: rgb(15 24 35 / 0.72);
   backdrop-filter: blur(6px);
-  color: var(--lcd);
+}
+.screen-tabs button {
+  padding: 0.2em 0.8em;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lcd-dim);
   font-size: clamp(0.85rem, 1vw, 1rem);
   font-weight: 600;
 }
+.screen-tabs button[aria-selected="true"] { background: #2a3849; color: var(--lcd); }
+.screen-tabs button:hover { color: var(--lcd); }
 
 .alerts {
   position: absolute;
@@ -413,6 +432,7 @@ figure { margin: 0; }
   .stage, .bottom { grid-template-columns: minmax(0, 1fr); }
   .screen { height: auto; max-width: none; aspect-ratio: auto; }
   .screen img { height: auto; }
+  .screen iframe { height: 70vh; }
   .porthole-glass { height: auto; width: min(80%, 320px); }
 }
 

@@ -13,6 +13,7 @@ from sorter.core.log import HubLogHandler
 from sorter.core.observer import Observer
 from sorter.core.system import System
 from sorter.core.types import Command
+from sorter.dashboard.twin import Twin
 from sorter.sim import backend as sim_backend
 from sorter.sim.world import SimWorld
 
@@ -45,7 +46,9 @@ def build_system(cfg: Config, sim: bool = False) -> System:
     """Create every component per `cfg.backends`. `sim=True` forces all of them to sim."""
     if sim:
         cfg = cfg.model_copy(update={"backends": BackendsConfig()})  # all sim
-    world = SimWorld(cfg.sim) if Backend.SIM in cfg.backends.model_dump().values() else None
+    world = (
+        SimWorld(cfg.sim, cfg.poses) if Backend.SIM in cfg.backends.model_dump().values() else None
+    )
     parts = {
         name: sim_backend.create(name, cfg, world)
         if getattr(cfg.backends, name) is Backend.SIM
@@ -53,6 +56,7 @@ def build_system(cfg: Config, sim: bool = False) -> System:
         for name in COMPONENTS
     }
     arm = parts["arm"]
+    twin = Twin(arm, parts["calibration"], cfg, world)
     return System(
         cfg=cfg,
         camera=parts["camera"],
@@ -61,7 +65,7 @@ def build_system(cfg: Config, sim: bool = False) -> System:
         box_detector=parts["box_detector"],
         color_classifier=parts["color_classifier"],
         observer=Observer(parts["camera"], arm, parts["calibration"]),
-        hub=Hub(parts["camera"], on_hold=arm.hold),
+        hub=Hub(parts["camera"], on_hold=arm.hold, twin=twin),
         world=world,
     )
 

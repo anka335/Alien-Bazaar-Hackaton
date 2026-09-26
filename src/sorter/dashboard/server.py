@@ -20,6 +20,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from rebot_b601.assets import ASSETS_DIR as TWIN_ASSETS_DIR
 
 from sorter.camera.config import ViewConfig
 from sorter.core.hub import Hub
@@ -95,10 +96,30 @@ def create_app(
     page = (STATIC_DIR / "index.html").read_text().replace("__PHASE_LABELS__", labels)
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    # the arm's CAD meshes and three.js, vendored in rebot_b601 (D-012: no CDN)
+    app.mount("/twin-assets", StaticFiles(directory=TWIN_ASSETS_DIR), name="twin-assets")
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         return page
+
+    @app.get("/twin", response_class=HTMLResponse)
+    def twin_page() -> str:
+        return (STATIC_DIR / "twin.html").read_text()
+
+    def twin_source():
+        twin = hub.twin()
+        if twin is None:
+            raise HTTPException(404, "no 3D view source")
+        return twin
+
+    @app.get("/api/twin/layout")
+    def twin_layout() -> dict:
+        return twin_source().layout()
+
+    @app.get("/api/twin/state")
+    def twin_state() -> dict:
+        return twin_source().state()
 
     @app.get("/api/status")
     def status() -> dict:
