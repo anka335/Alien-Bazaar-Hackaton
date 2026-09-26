@@ -95,6 +95,21 @@ ros2 run rover_nav make_keepout ~/rover_nav_maps/room.yaml --line 0 -3.5 1 -3.5 
 
 It writes `~/rover_nav_maps/keepout.pgm` + `keepout.yaml` (black = forbidden) and prints the forbidden share. Look at `keepout.pgm` to check the right areas are black. Running it again overwrites the mask; restart the navigation launch to use it.
 
+## 2b. Add things that weren't there when mapping
+
+Objects placed after mapping (here: the laundry box) are drawn into a copy of the map. The original stays; `navigation.launch.py` serves `<map_name>_nav.yaml` on `/map` when it exists (RTAB-Map then only localizes).
+
+```bash
+ros2 run rover_nav add_to_map ~/rover_nav_maps/room.yaml --rect -0.08 -1.26 0.08 -1.10   # → room_nav.*
+```
+
+Our room today: the box (10.5 cm, against the wall at x = 0) in `room_nav.*`; keepout = y < −3.5, the chairs, the box +5 cm:
+
+```bash
+ros2 run rover_nav make_keepout ~/rover_nav_maps/room.yaml --line 0 -3.5 1 -3.5 --keep 0 0 \
+  --forbid-rect -1.3 -2.6 -0.7 -0.9 --forbid-rect -0.105 -1.285 0.105 -1.075
+```
+
 ## 3. Navigate
 
 ```bash

@@ -219,7 +219,11 @@ def rtabmap_params(localization: bool) -> dict:
     }
 
 
-def rtabmap_actions(localization: bool, database: str, new_map: bool, topics: dict) -> list:
+def rtabmap_actions(
+    localization: bool, database: str, new_map: bool, topics: dict, grid_topic: str = "/map"
+) -> list:
+    """rgbd_sync + RTAB-Map. `grid_topic`: where RTAB-Map publishes its occupancy grid; moved off
+    /map when navigation serves an edited map file there instead."""
     os.makedirs(os.path.dirname(database), exist_ok=True)
     if localization and not os.path.isfile(database):
         raise RuntimeError(f"no map database {database}: run mapping.launch.py first")
@@ -242,7 +246,7 @@ def rtabmap_actions(localization: bool, database: str, new_map: bool, topics: di
             name="rtabmap",
             output="screen",
             parameters=[rtabmap_params(localization), {"database_path": database}],
-            remappings=[("rgbd_image", "/rover_nav/rgbd_image")],
+            remappings=[("rgbd_image", "/rover_nav/rgbd_image"), ("map", grid_topic)],
             arguments=["-d"] if new_map and not localization else [],  # -d: delete the database
         ),
     ]

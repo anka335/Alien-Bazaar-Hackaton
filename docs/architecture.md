@@ -485,7 +485,8 @@ Each sim component is selected independently through `backends`, so a real compo
 | TF `leo/base_link` → arm `base_link` → … → `camera_color_optical_frame` | in | Rover → arm base: static, measured mount, published by `rover_nav` (always). Arm → camera: the arm stack's `robot_state_publisher` with the arm in the `drive` pose, or a static transform in the drive pose while the arm stack isn't available |
 | `/leo/merged_odom` (`nav_msgs/Odometry`, 100 Hz) + `leo/odom` → `leo/base_footprint` TF | in | The rover's `odom_filter` (LeoOS, wheel odometry + IMU), over the rover's Wi-Fi |
 | `/leo/cmd_vel` (`geometry_msgs/Twist`) | out | To the rover firmware. Nav2, or `teleop_twist_keyboard` while mapping |
-| `/map` + `map` → `leo/odom` TF | internal | RTAB-Map |
+| `/map` | internal | `<map_name>_nav.yaml` (the saved map + obstacles drawn with `add_to_map`) served by a map server when it exists; otherwise RTAB-Map's grid (then moved to `/rtabmap/grid_map` when the file is used) |
+| TF `map` → `leo/odom` | internal | RTAB-Map (localization) |
 | Keepout mask (`.pgm` + `.yaml`) | internal | Generated from the saved 2D map and a dividing line by `rover_nav`'s mask tool |
 
 - **Names:** the arm owns the plain names (`base_link`, `/joint_states`, `/robot_description`). The rover runs with LeoOS's `ROBOT_NAMESPACE=leo`: frames `leo/…`, topics `/leo/…` (`rover_nav/scripts/setup_rover.sh`). TF tree: `map` → `leo/odom` → `leo/base_footprint` → `leo/base_link` → `base_link` (arm) → … → camera.
@@ -493,7 +494,7 @@ Each sim component is selected independently through `backends`, so a real compo
 
 ## Room search (block 10, ROS 2 track, proposed)
 
-[D-021](decisions.md), plan and interfaces in [tasks/10-room-search.md](tasks/10-room-search.md). A `room_search` node in `rover_nav` drives Nav2 through viewpoints generated from the saved map and keepout mask, finds clothes with a second `cloth_detector` instance on the OAK-D (outputs under `/search/…`), parks with the cloth 0.32 m ahead of the arm's base, and calls the arm stack: `/arm/pick_from_floor`, `/arm/drop_in_box`, `/arm/stow` (`std_srvs/Trigger`, proposed). Clothes go into the main laundry box (about (1, −2)); the rover's stop pose, 20 cm before it, is recorded in `~/rover_nav_maps/places.yaml`, and the boxes are keepout rectangles. The rover and the arm never move at the same time.
+[D-021](decisions.md), plan and interfaces in [tasks/10-room-search.md](tasks/10-room-search.md). A `room_search` node in `rover_nav` drives Nav2 through viewpoints generated from the saved map and keepout mask, finds clothes with a second `cloth_detector` instance on the OAK-D (outputs under `/search/…`), parks with the cloth 0.32 m ahead of the arm's base, and calls the arm stack: `/arm/pick_from_floor`, `/arm/drop_in_box`, `/arm/stow` (`std_srvs/Trigger`, proposed). Clothes go into the main laundry box (against the wall at about (0, −1.18)); the rover's stop pose, 20 cm before it, is in `~/rover_nav_maps/places.yaml`; the box is drawn into the static map and the keepout mask. The rover and the arm never move at the same time.
 
 ## Repo layout
 

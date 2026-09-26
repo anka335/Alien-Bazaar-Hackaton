@@ -17,7 +17,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | 7 | [Dashboard](tasks/07-dashboard.md) | review | Softjey + Claude | `block/07-dashboard` | — |
 | 8 | [Demo preparation](tasks/08-demo.md) | todo | — | — | — |
 | 9 | [Rover navigation](tasks/09-rover-navigation.md) | in progress | Slava + Claude | `block/09-rover-navigation` | map + keepout done; first navigation run pending (rover motor controller reset, charging) |
-| 10 | [Room search](tasks/10-room-search.md) | todo | Slava + Claude | `block/10-room-search` | planned (D-021); needs block 9, arm floor pick / drop into the laundry box |
+| 10 | [Room search](tasks/10-room-search.md) | todo | Slava + Claude | `block/10-room-search` | planned (D-021); box in the map, stop pose estimated; needs block 9, arm floor pick / drop into the box |
 
 ## Dependencies
 

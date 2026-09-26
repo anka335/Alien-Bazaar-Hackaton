@@ -26,6 +26,7 @@ setup(
     entry_points={
         "console_scripts": [
             "make_keepout = rover_nav.keepout:main",
+            "add_to_map = rover_nav.mapedit:main",
         ],
     },
 )

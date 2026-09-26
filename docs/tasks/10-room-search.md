@@ -5,7 +5,7 @@
 
 ## Goal
 
-The rover searches the allowed part of the room for pieces of clothing, drives up to each one, lets the arm pick it up from the floor, carries it to the **main laundry box** (one of four boxes next to the washing machine, always at the same place), the arm throws it in, and the rover goes on searching until the room is clear ([D-021](../decisions.md), proposed). The rover must never drive into any of the boxes. Builds on block 9's map, localization, Nav2 and keepout mask. Obstacle avoidance stays simple: what Nav2 already does, plus skipping what can't be reached.
+The rover searches the allowed part of the room for pieces of clothing, drives up to each one, lets the arm pick it up from the floor, carries it to the **main laundry box** (always at the same place, against the wall at about (0, −1.18)), the arm throws it in, and the rover goes on searching until the room is clear ([D-021](../decisions.md), proposed). The rover must never drive into the box. Builds on block 9's map, localization, Nav2 and keepout mask. Obstacle avoidance stays simple: what Nav2 already does, plus skipping what can't be reached.
 
 ## How it works
 
@@ -38,13 +38,12 @@ Added by the search node, all plain rules:
 - A goal that fails (Nav2 aborts, or no progress for 30 s) is retried once; then the viewpoint is skipped or the cloth ignored, and the search moves on.
 - Known cloth points are never used as viewpoints or parking spots on top of a cloth; clothes on the floor are lower than 5 cm and are not obstacles to Nav2, so the rover must not drive over one it hasn't picked yet (accepted risk for unseen ones).
 
-## The laundry boxes
+## The laundry box
 
-- Four boxes stand next to the washing machine; the **main box** (the one the clothes go into) at about **x = 1.0, y = −2.0**. It is inside the allowed area (above y = −3.5, clear of the chair strip at x −1.3 … −0.7).
-- The saved map shows free floor at (1, −2) and a line of obstacles just east of it (x ≈ 1.25–1.45, y −1.3 … −2.9, probably the machine / boxes / a wall): the box wasn't there during mapping. The rover therefore approaches **from the west, facing +x**.
-- **Stop pose:** rover front 0.20 m before the box's near face. The footprint's front is 0.27 m ahead of the rover's centre, so with a ~0.4 m deep box (near face at x ≈ 0.8) the stop pose is about **(0.33, −2.0, yaw 0)**. Placeholder until the box is in place; then drive there, check the 20 cm with a ruler, and save the pose with `record_place laundry_box`.
-- **Not driving into boxes:** the boxes are added to the keepout mask with `make_keepout --forbid-rect` (each box's outline + 5 cm) once they stand where they'll stay. Nav2 then never plans into them, even inside the OAK-D's blind zone (the floor is visible only from ~0.4 m ahead, so a box 20 cm ahead is not seen any more). The last 0.5 m to the stop pose is driven slowly, straight on (RPP's approach slowdown).
-- The stop pose is outside the box's keepout rectangle but inside its inflation: allowed, just slower.
+- One **main laundry box**, 10.5 × 10.5 cm, against the **south face of the wall** at y ≈ −1.1, centred at x = 0: it covers x −0.0525 … 0.0525, y −1.2325 … −1.1275. Inside the allowed area, clear of the chair strip.
+- It wasn't there when the room was mapped, so it is **drawn into the map**: `add_to_map` writes `~/rover_nav_maps/room_nav.*` (the saved map + the box, cells it touches marked occupied), which `navigation.launch.py` serves to Nav2 as the static map. It is also a keepout rectangle (+5 cm). Nav2 never plans into it, even in the OAK-D's blind zone (the floor is visible only from ~0.4 m ahead, so a box 20 cm ahead is not seen any more).
+- **Stop pose** `laundry_box` in `~/rover_nav_maps/places.yaml`: **(0.0, −1.70), facing +y (north)**. The footprint's front is 0.27 m ahead of the rover's centre, so the front ends 0.20 m before the box's near face (checked on the map: no occupied or keepout cell under the footprint, nearest marked cell 0.18 m from its edge). Estimated from the box position; once the box stands there, drive to it, check the 20 cm with a ruler and save the pose with `record_place laundry_box`.
+- The last 0.5 m is driven slowly, straight on (RPP's approach slowdown). Nav2's `xy_goal_tolerance` is 0.15 m today: too loose for "20 cm before the box"; tighten it (~0.05 m) or add a precise final approach for this goal.
 
 ## Pick geometry (checked offline with `rebot_b601` IK)
 
@@ -89,7 +88,7 @@ The rover never moves while an arm service runs, and the arm never moves while t
 - [ ] `viewpoints.py` + tests; preview image of the viewpoints on the map (like `keepout_preview.png`).
 - [ ] `search_logic.py` + tests (queue, de-dup, keepout check, parking poses, retries).
 - [ ] `record_place` tool; record `laundry_box` (stop pose, 20 cm before the main box).
-- [ ] Boxes in the keepout mask (`--forbid-rect` per box) once they are in place.
+- [x] Box drawn into the map (`add_to_map` → `room_nav.*`, served by `navigation.launch.py`) and into the keepout mask; stop pose estimated in `places.yaml`.
 - [ ] Search detector on the OAK-D (second `cloth_detector` instance, remapped); check SAM3 finds floor clothes at 0.5–3 m from the low camera.
 - [ ] `room_search` node + `search.launch.py`, with `fake_arm`: full loop on the rover (search → approach → "pick" → laundry box → "drop" → continue).
 - [ ] Swap `fake_arm` for the arm stack once it offers the three services.
@@ -106,7 +105,7 @@ Autonomous exploration of unknown space (the map exists), mapping other rooms, g
 
 ## Acceptance criteria
 
-- With 3 clothes on the floor of the allowed area and the arm faked: all 3 found, each approached to within 5 cm of the parking pose, 3 box trips each ending 0.20 ± 0.05 m before the main box, `DONE`; no contact with any box; no entry into the keepout areas; a person stepping in the way makes the rover stop or go around, never collide.
+- With 3 clothes on the floor of the allowed area and the arm faked: all 3 found, each approached to within 5 cm of the parking pose, 3 box trips each ending 0.20 ± 0.05 m before the box, `DONE`; no contact with the box; no entry into the keepout areas; a person stepping in the way makes the rover stop or go around, never collide.
 - With the arm: ≥ 2 of 3 clothes end up in the main box without help.
 
 ## Notes & risks
@@ -115,13 +114,12 @@ Autonomous exploration of unknown space (the map exists), mapping other rooms, g
 - **SAM3 finds any clothing:** people's clothes too. Points above 0.3 m or outside the allowed area are dropped; a person standing still in view is still a risk.
 - **Rover stability:** the arm reaching down in front shifts the weight forward; check the rover doesn't tip, and that the arm clears the OAK-D and the front wheels.
 - **Power:** block 9 saw the rover's motor controller reset repeatedly (likely battery sag under load). Box trips add driving; start runs with a full battery.
-- **Stopping 20 cm before a box relies on localization** (RTAB-Map + odometry), not on seeing the box: the box is in the camera's blind zone by then. Check the stop distance on every run at first; a localization error of a few cm eats into the 20 cm.
+- **Stopping 20 cm before the box relies on localization** (RTAB-Map + odometry), not on seeing the box: the box is in the camera's blind zone by then. Check the stop distance on every run at first; a localization error of a few cm eats into the 20 cm.
 - **Latency:** each look is 4 headings × a few SAM3 requests (0.7–1.8 s each): ~20–40 s per viewpoint.
 
 ## Open questions
 
-- Main box: size and height (for the stop pose and the arm's `drop_box`), and the exact position once it stands there.
-- The other three boxes: where exactly (for their keepout rectangles)?
+- Box: the exact position once it stands there (the stop pose and the map follow it). Height, for the arm's `drop_box` (a 10.5 cm box is a small target to throw into).
 - Headings per viewpoint: 4, or 3 with a wider overlap?
 
 ## Requests from other blocks
@@ -135,3 +133,4 @@ Autonomous exploration of unknown space (the map exists), mapping other rooms, g
 
 - 2026-09-26: block planned: viewpoint search on the saved map, OAK-D + SAM3 to find clothes, wrist camera for the final grasp, machine at a recorded place; arm floor reach checked with `rebot_b601` IK (0.25–0.40 m ahead at floor level, top-down).
 - 2026-09-26: target changed from the washing machine to the **main laundry box** (one of four next to the machine, at about (1, −2)); the rover stops 20 cm before it, approaching from the west; boxes go into the keepout mask. Wrist-camera search noted as a later option.
+- 2026-09-27: one main laundry box only, 10.5 × 10.5 cm against the wall's south face at x = 0 (y −1.23 … −1.13). Drawn into the map (`add_to_map`, `room_nav.*`, navigation serves it on /map) and the keepout; stop pose (0.0, −1.70) facing north in `places.yaml`.
