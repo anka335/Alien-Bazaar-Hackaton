@@ -17,6 +17,7 @@ class CameraConfig(BaseModel):
     exposure_us: float | None = None  # a fixed exposure instead of the settled one
     white_balance_k: float | None = None  # a fixed white balance instead of the settled one
     timeout_s: float = 2.0  # no frame for this long: CameraError
+    start_attempts: int = 5  # macOS: the system camera driver sometimes wins the device, so retry
 
 
 class ViewConfig(BaseModel):

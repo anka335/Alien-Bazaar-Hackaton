@@ -464,7 +464,7 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 | --- | --- | --- |
 | `backends` | 0 | Per component `real` \| `sim`: `camera`, `arm`, `calibration`, `box_detector`, `color_classifier`. Swap stubs one at a time during integration |
 | `sim` | 0 | Simulator world: `engine` (`physics` \| `kinematic`), `realtime` (physics: simulated s per wall s, 0 = as fast as possible), `use_sam3`, `board` (a ChArUco board on the mat), `seed`, `items` (colors in the box), `miss_prob`, `double_prob`, `time_scale` (arm motion time × this; 0 = instant), `vision_s` (sim vision delay), image size, `focal_px`, `camera_mount_mm` (wrist camera in the TCP frame), `item_radius_mm`, `layout` (`edge_x_mm`: the table's back edge; `box`: `center_mm`, `size_mm`, `floor_z_mm`, `wall_mm`; `background`: `center_mm`, `size_mm`; `bins`: `centers_mm.<color>`, `size_mm`, `wall_mm`, `floor_z_mm`) |
-| `camera` | 1 | `serial` (empty = the first D435i), `width`, `height`, `fps`, `warmup_frames`, `lock_exposure`, `exposure_us`, `white_balance_k`, `timeout_s` |
+| `camera` | 1 | `serial` (empty = the first D435i), `width`, `height`, `fps`, `warmup_frames`, `lock_exposure`, `exposure_us`, `white_balance_k`, `timeout_s`, `start_attempts` |
 | `views.<zone>.roi` | 1 | Pixel polygon of the zone in its look pose, excluding the gripper fingers (`rig.yaml`) |
 | `calibration` | 2 | `hand_eye` (the transform, from `hand_eye.yaml`); hand-eye tool: `poses`, `tilt_deg`, `shift_mm` |
 | `box_detector` | 3 | `avoid_radius_px`, `wall_margin_mm`, `floor_percentile` / `floor_depth_mm`, `cloth_height_mm`, `min_cloth_px`, `inset_px`, `smooth_px`, `depth_window_px` |

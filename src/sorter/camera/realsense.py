@@ -6,11 +6,12 @@ stay comparable between frames. `fresh()` waits for a frame that arrived at leas
 period after the call, so its exposure started after the call.
 
 Needs `uv sync --extra camera` (pyrealsense2; on macOS the pyrealsense2-macosx
-build, run as root).
+build, run as root: the macOS camera driver is stopped while the camera runs, see `macos.py`).
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 import time
@@ -18,6 +19,7 @@ import time
 import numpy as np
 
 from sorter.camera.config import CameraConfig
+from sorter.camera.macos import UvcAssistantFreeze
 from sorter.core.errors import CameraError
 from sorter.core.types import Frame, Intrinsics
 
@@ -41,12 +43,41 @@ class RealSenseCamera:
         self._seq = 0
         self.intrinsics: Intrinsics | None = None
         self.serial = cfg.serial
+        self._uvc = UvcAssistantFreeze()
 
     # --- Camera ---
 
     def start(self) -> None:
         if self._thread is not None:
             return
+        cfg = self.cfg
+        self._uvc.freeze()
+        attempts = max(1, cfg.start_attempts)
+        for attempt in range(1, attempts + 1):
+            try:
+                self._open()
+                break
+            except RuntimeError as e:
+                if self._pipeline is not None:
+                    with contextlib.suppress(RuntimeError):
+                        self._pipeline.stop()
+                    self._pipeline = None
+                if attempt == attempts:
+                    self._uvc.resume()
+                    raise CameraError(f"RealSense did not start: {e}") from e
+                log.warning(
+                    "camera: start attempt %d/%d failed (%s), retrying", attempt, attempts, e
+                )
+                time.sleep(1.0)
+        self._running.set()
+        self._thread = threading.Thread(target=self._loop, name="camera", daemon=True)
+        self._thread.start()
+        log.info(
+            "RealSense %s started, %dx%d @ %d fps", self.serial, cfg.width, cfg.height, cfg.fps
+        )
+
+    def _open(self) -> None:
+        """Start the pipeline and warm up. On macOS the first frames sometimes never come."""
         rs, cfg = self.rs, self.cfg
         pipeline = rs.pipeline()
         rc = rs.config()
@@ -54,25 +85,16 @@ class RealSenseCamera:
             rc.enable_device(cfg.serial)
         rc.enable_stream(rs.stream.color, cfg.width, cfg.height, rs.format.bgr8, cfg.fps)
         rc.enable_stream(rs.stream.depth, cfg.width, cfg.height, rs.format.z16, cfg.fps)
-        try:
-            profile = pipeline.start(rc)
-        except RuntimeError as e:
-            raise CameraError(f"RealSense did not start: {e}") from e
+        profile = pipeline.start(rc)
+        self._pipeline = pipeline
         device = profile.get_device()
         self.serial = device.get_info(rs.camera_info.serial_number)
         self._depth_mm = device.first_depth_sensor().get_depth_scale() * 1000.0
         i = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
         self.intrinsics = Intrinsics(i.fx, i.fy, i.ppx, i.ppy, i.width, i.height, tuple(i.coeffs))
         self._align = rs.align(rs.stream.color)
-        self._pipeline = pipeline
         self._color_sensor = device.first_color_sensor()
         self._warmup()
-        self._running.set()
-        self._thread = threading.Thread(target=self._loop, name="camera", daemon=True)
-        self._thread.start()
-        log.info(
-            "RealSense %s started, %dx%d @ %d fps", self.serial, cfg.width, cfg.height, cfg.fps
-        )
 
     def close(self) -> None:
         self._running.clear()
@@ -82,6 +104,7 @@ class RealSenseCamera:
         if self._pipeline is not None:
             self._pipeline.stop()
             self._pipeline = None
+        self._uvc.resume()
 
     def latest(self) -> Frame | None:
         with self._cv:
