@@ -113,6 +113,8 @@ The robot-side peer of the lens (teleop v1). Done so far: the ROS-free session, 
 - The left clutch is never accepted, because there is no mobile base: `base` is `idle` unless the link faults.
 - Link watchdog: once a socket is accepted, 200 ms without a valid teleop on the bridge's receive clock stops publishing and reports `arm` and `base` as `fault`, `fault: "timeout"`. Malformed teleops don't refresh the timer or `echoSeq`; the lens timestamp and skipped seqs don't matter. The next valid teleop clears the fault.
 - After a timeout, or when a new socket replaces the old one (arm stopped, `fault` null), both hands must be seen open before either can command; a clutch held while blocked, including on the clearing frame, doesn't count. The first socket accepts the first right clutch straight away.
+- Driver health: while the driver-fault flag is true, or when no joint measurement has arrived for 100 ms, publishing stops and the arm reports `holding` with `fault` null, so the lens raises a disagreement. Tracking resumes only on a right clutch pressed after the arm is healthy again.
+- A socket is accepted only once teleop mode has been enabled and a joint measurement has arrived. If enabling teleop is refused (for example the driver is already faulted), no socket is accepted.
 
 ```bash
 PYTHONPATH=ros2_ws/src/cloth_task python -m pytest ros2_ws/src/cloth_task/test/test_spectacles_session.py

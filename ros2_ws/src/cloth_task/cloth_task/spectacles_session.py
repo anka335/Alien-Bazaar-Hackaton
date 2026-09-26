@@ -17,6 +17,11 @@ After a timeout or a replacement, each hand must be seen open (a clutch held whi
 consumes that hand's release) before either can command again. The first socket of a session
 accepts the first right clutch straight away.
 
+Driver: a driver-fault flag, or no joint measurement for MEAS_TIMEOUT_S, stops publishing and
+reports the arm holding with fault null (the lens sees the disagreement). Tracking resumes only
+on a right clutch pressed after the arm is healthy again. A socket is accepted only once teleop
+mode is on and a joint measurement has arrived.
+
 Kept free of rclpy so it can be unit-tested with plain pytest.
 """
 
@@ -35,6 +40,7 @@ TOL_POS_M = 1e-3
 TOL_ANG_DEG = 3.0
 MIN_QUAT_NORM = 1e-6
 TIMEOUT_S = 0.2
+MEAS_TIMEOUT_S = 0.1
 HANDS = frozenset({"arm", "base"})
 
 
@@ -162,8 +168,10 @@ def solve_pose(
 class Session:
     """One lens session. `send_joints(q)` gets joint1..6 targets (rad), `send_gripper(opening)`
     the gripper opening 0..1; both are only called while the right clutch is accepted.
-    `clock()` is the bridge's receive clock, s. Call `on_connect()` when a socket is accepted
-    and `tick()` periodically (well under TIMEOUT_S) so a silent link times out."""
+    `clock()` is the bridge's receive clock, s. Report the result of enabling teleop mode with
+    `on_teleop_mode()` and the driver-fault flag with `on_driver_fault()`. Call `on_connect()`
+    for each socket and close it if refused, and `tick()` periodically (well under
+    MEAS_TIMEOUT_S) so a silent link or a stale measurement is noticed."""
 
     def __init__(
         self,
@@ -186,23 +194,54 @@ class Session:
         self._fault: str | None = None
         self._blocked = False
         self._released: set[str] = set()
+        self._t_meas = 0.0
+        self._teleop_mode = False
+        self._driver_fault = False
+        self._need_release = False
 
     def on_joint_state(self, q: Any) -> None:
         """A joint1..6 measurement, rad."""
         self._q_meas = np.asarray(q, dtype=float).copy()
+        self._t_meas = self._clock()
 
-    def on_connect(self) -> None:
-        """A lens socket was accepted. Any socket after the first replaces the previous one."""
+    def on_teleop_mode(self, enabled: bool) -> None:
+        """Whether enabling `arm_bridge`'s teleop mode succeeded (False if it was refused)."""
+        self._teleop_mode = bool(enabled)
+
+    def on_driver_fault(self, faulted: bool) -> None:
+        """The driver-fault flag; it stays true until the arm is connected again."""
+        self._driver_fault = bool(faulted)
+        self.tick()
+
+    def on_connect(self) -> bool:
+        """A lens socket arrived. Accepted only once teleop mode is on and a joint measurement
+        has arrived; any accepted socket after the first replaces the previous one."""
+        if not self._teleop_mode or self._q_meas is None:
+            return False
         if self._connected:
             self._block()
         self._connected = True
         self._fault = None
         self._echo_seq = None
         self._last_valid = self._clock()
+        return True
+
+    def _arm_ok(self) -> bool:
+        return (
+            not self._driver_fault
+            and self._q_meas is not None
+            and self._clock() - self._t_meas < MEAS_TIMEOUT_S
+        )
 
     def tick(self) -> None:
-        """Times the link out after TIMEOUT_S without a valid teleop."""
-        if not self._connected or self._fault is not None:
+        """Stops the arm on a driver fault or a stale measurement, and times the link out after
+        TIMEOUT_S without a valid teleop."""
+        if not self._connected:
+            return
+        if not self._arm_ok():
+            self._latch = None
+            self._need_release = True
+        if self._fault is not None:
             return
         if self._clock() - self._last_valid >= TIMEOUT_S:
             self._fault = "timeout"
@@ -230,7 +269,9 @@ class Session:
                 else:
                     self._released.add(hand)
             self._blocked = self._released != HANDS
-        if self._blocked or not t.arm_engaged or self._q_meas is None:
+        if self._need_release and self._arm_ok() and not t.arm_engaged:
+            self._need_release = False
+        if self._blocked or self._need_release or not t.arm_engaged:
             self._latch = None
             return
         if self._latch is None:

@@ -69,7 +69,8 @@ def rig(clock):
     motor = Motor()
     s = Session(K, C.JOINT_LIMITS_RAD, motor.joints.append, motor.gripper.append, clock)
     s.on_joint_state(Q0)
-    s.on_connect()
+    s.on_teleop_mode(True)
+    assert s.on_connect()
     return s, motor
 
 
@@ -244,6 +245,7 @@ def test_the_timer_ignores_the_lens_timestamp_and_skipped_seqs(rig, clock):
     s, motor = rig
     for seq in (0, 7, 30):
         clock.t += 0.15
+        s.on_joint_state(Q0)
         msg = teleop(seq, arm=True)
         msg["timestamp"] = 1.0  # stale on the lens clock
         s.on_teleop(msg)
@@ -268,6 +270,7 @@ def test_after_timeout_both_hands_must_release(rig, clock):
     s, motor = rig
     clock.t += 0.3
     s.tick()
+    s.on_joint_state(Q0)
     s.on_teleop(teleop(0, arm=True, base=True))  # clears the fault, both still held
     s.on_teleop(teleop(1, arm=False, base=True))  # right released, left still held
     s.on_teleop(teleop(2, arm=True, base=True))
@@ -285,6 +288,8 @@ def test_first_socket_accepts_the_first_right_clutch(clock):
     motor = Motor()
     s = Session(K, C.JOINT_LIMITS_RAD, motor.joints.append, motor.gripper.append, clock)
     s.on_joint_state(Q0)
+    s.on_teleop_mode(True)
+    s.status()
     s.on_connect()
     s.on_teleop(teleop(0, arm=True))
     assert len(motor.joints) == 1
@@ -296,6 +301,7 @@ def test_replacement_socket_stops_the_arm_and_needs_each_hand_open(rig, clock):
     s.on_teleop(teleop(0, arm=True))
     clock.t += 0.3
     s.tick()
+    s.on_joint_state(Q0)
     s.on_connect()
     assert link(s) == {"base": "idle", "arm": "holding", "fault": None}
     assert s.status()["echoSeq"] is None
@@ -320,3 +326,98 @@ def test_replacement_socket_restarts_the_timer(rig, clock):
     clock.t += 0.1
     s.tick()
     assert link(s) == TIMED_OUT
+
+
+HOLDING = {"base": "idle", "arm": "holding", "fault": None}
+
+
+def test_driver_fault_stops_publishing_and_reports_holding(rig, clock):
+    s, motor = rig
+    s.on_teleop(teleop(0, arm=True))
+    s.on_driver_fault(True)
+    assert link(s) == HOLDING
+    sent = len(motor.joints)
+    for seq in range(1, 4):
+        clock.t += 0.03
+        s.on_joint_state(Q0)
+        s.on_teleop(teleop(seq, arm=True, position=[0.01 * seq, 0.0, 0.0]))
+
+    assert len(motor.joints) == sent
+    assert link(s) == HOLDING
+
+
+def test_new_clutch_does_not_track_while_the_driver_is_faulted(rig, clock):
+    s, motor = rig
+    s.on_driver_fault(True)
+    s.on_teleop(teleop(0))
+    s.on_teleop(teleop(1, arm=True))
+
+    assert motor.joints == []
+    assert link(s) == HOLDING
+
+
+def test_after_the_driver_recovers_a_fresh_clutch_tracks(rig, clock):
+    s, motor = rig
+    s.on_teleop(teleop(0, arm=True))
+    s.on_driver_fault(True)
+    s.on_teleop(teleop(1, arm=True))
+    s.on_driver_fault(False)
+    sent = len(motor.joints)
+    s.on_teleop(teleop(2, arm=True))
+    assert len(motor.joints) == sent
+    s.on_teleop(teleop(3))
+    s.on_teleop(teleop(4, arm=True))
+
+    assert len(motor.joints) == sent + 1
+    assert s.status()["arm"] == "tracking"
+
+
+def test_stale_measurement_stops_publishing_and_reports_holding(rig, clock):
+    s, motor = rig
+    s.on_teleop(teleop(0, arm=True))
+    clock.t += 0.09
+    s.on_teleop(teleop(1, arm=True))
+    assert len(motor.joints) == 2
+    clock.t += 0.02
+    s.on_teleop(teleop(2, arm=True, position=[0.01, 0.0, 0.0]))
+
+    assert len(motor.joints) == 2
+    assert link(s) == HOLDING
+
+
+def test_stale_measurement_is_noticed_by_tick_alone(rig, clock):
+    s, _ = rig
+    s.on_teleop(teleop(0, arm=True))
+    clock.t += 0.11
+    s.tick()
+    assert link(s) == HOLDING
+
+
+def fresh_session(clock):
+    motor = Motor()
+    return Session(K, C.JOINT_LIMITS_RAD, motor.joints.append, motor.gripper.append, clock)
+
+
+def test_socket_needs_teleop_mode_and_a_measurement(clock):
+    s = fresh_session(clock)
+    assert not s.on_connect()
+    s.on_teleop_mode(True)
+    assert not s.on_connect()
+    s.on_joint_state(Q0)
+    assert s.on_connect()
+
+
+def test_socket_needs_teleop_mode_even_with_measurements(clock):
+    s = fresh_session(clock)
+    s.on_joint_state(Q0)
+    assert not s.on_connect()
+
+
+def test_refused_teleop_mode_never_accepts_a_socket(clock):
+    s = fresh_session(clock)
+    s.on_joint_state(Q0)
+    s.on_driver_fault(True)
+    s.on_teleop_mode(False)
+    assert not s.on_connect()
+    s.on_teleop(teleop(0, arm=True))
+    assert s.status()["echoSeq"] is None
