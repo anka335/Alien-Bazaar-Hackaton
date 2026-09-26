@@ -45,6 +45,10 @@ _BIN_RGB = {
 }
 
 _CARDBOARD = "0.5 0.01 0.001"  # the box and the bins
+# the mat and the box / bin floors reach this far into the table: a cloth vertex pressed through
+# a thin slab would sit between its underside and the table top, pushed both ways, and stay
+# pinned there (the cloth then stretches from the gripper to the table and snaps back)
+_SINK = 0.02
 CLOTH_N = 8  # vertices per side
 CLOTH_SHEET_M = 0.14  # side of the flat sheet
 CLOTH_GATHER = 0.6  # the rest shape is the sheet gathered to this fraction, with folds
@@ -325,8 +329,8 @@ def _open_box(
         "geom",
         name=f"{name}_floor",
         type="box",
-        size=_f(ix / 2 + t, iy / 2 + t, floor_z / 2),
-        pos=_f(cx, cy, floor_z / 2),
+        size=_f(ix / 2 + t, iy / 2 + t, (floor_z + _SINK) / 2),
+        pos=_f(cx, cy, (floor_z - _SINK) / 2),
         rgba=floor_rgba or rgba,
         friction=_CARDBOARD,
     )
@@ -471,8 +475,8 @@ def build_xml(cfg: SimConfig, board: bool = False) -> str:
         "geom",
         name="table",
         type="box",
-        size="1.2 1.2 0.02",
-        pos="0 0 -0.02",
+        size="0.5 1.2 0.02",  # 1 m deep from the back edge the arm is clamped to
+        pos=_f(lay.edge_x_mm / 1000 + 0.5, 0, -0.02),
         material="wood",
         friction="0.8 0.01 0.001",
     )
@@ -482,8 +486,8 @@ def build_xml(cfg: SimConfig, board: bool = False) -> str:
         "geom",
         name="mat",
         type="box",
-        size=_f(bg.size_mm[0] / 2000, bg.size_mm[1] / 2000, 0.0005),
-        pos=_f(bg.center_mm[0] / 1000, bg.center_mm[1] / 1000, 0.0005),
+        size=_f(bg.size_mm[0] / 2000, bg.size_mm[1] / 2000, (0.001 + _SINK) / 2),
+        pos=_f(bg.center_mm[0] / 1000, bg.center_mm[1] / 1000, (0.001 - _SINK) / 2),
         rgba="0.49 0.49 0.48 1",
         friction="1.0 0.01 0.001",
     )
