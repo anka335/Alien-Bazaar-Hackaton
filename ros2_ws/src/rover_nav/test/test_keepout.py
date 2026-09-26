@@ -5,6 +5,7 @@ import yaml
 from rover_nav.keepout import (
     ALLOWED,
     FORBIDDEN,
+    forbidden_rect,
     forbidden_side,
     main,
     make_keepout,
@@ -69,7 +70,9 @@ def test_pgm_round_trip_with_comment(tmp_path):
 
 def test_make_keepout_writes_a_matching_mask(tmp_path):
     share = make_keepout(
-        _save_map(tmp_path), (0.0, -1.0), (0.0, 1.0), (-0.2, 0.0), str(tmp_path / "keepout")
+        _save_map(tmp_path),
+        str(tmp_path / "keepout"),
+        line=((0.0, -1.0), (0.0, 1.0), (-0.2, 0.0)),
     )
     assert share == pytest.approx(0.5)
     img = read_pgm(str(tmp_path / "keepout.pgm"))
@@ -86,10 +89,8 @@ def test_rotated_map_origin_is_refused(tmp_path):
     with pytest.raises(ValueError, match="yaw"):
         make_keepout(
             _save_map(tmp_path, origin=(-0.5, -0.3, 0.5)),
-            (0.0, -1.0),
-            (0.0, 1.0),
-            (-0.2, 0.0),
             str(tmp_path / "keepout"),
+            line=((0.0, -1.0), (0.0, 1.0), (-0.2, 0.0)),
         )
 
 
@@ -102,3 +103,34 @@ def test_cli_defaults_next_to_the_map(tmp_path, capsys):
         main([str(tmp_path / "missing.yaml"), "--line", "0", "0", "1", "1", "--keep", "1", "0"])
         == 1
     )
+
+
+def test_rect_forbids_only_cells_inside():
+    # corners in any order; cells with centres x in [-0.2, 0.2], y in [0.0, 0.2]
+    mask = forbidden_rect(SHAPE, RES, ORIGIN, (0.2, 0.2), (-0.2, 0.0))
+    assert mask.sum() == 4 * 2
+    assert mask[1:3, 3:7].all()  # rows 1-2 = y 0.15, 0.05; cols 3-6 = x -0.15 .. 0.15
+    with pytest.raises(ValueError, match="no area"):
+        forbidden_rect(SHAPE, RES, ORIGIN, (0.1, 0.0), (0.1, 0.2))
+
+
+def test_line_and_rect_combine(tmp_path):
+    share = make_keepout(
+        _save_map(tmp_path),
+        str(tmp_path / "keepout"),
+        line=((0.0, -1.0), (0.0, 1.0), (-0.2, 0.0)),  # x > 0 forbidden
+        rects=[((-0.5, -0.3), (-0.3, 0.3))],  # plus the two leftmost columns
+    )
+    img = read_pgm(str(tmp_path / "keepout.pgm"))
+    assert (img[:, :2] == FORBIDDEN).all() and (img[:, 2:5] == ALLOWED).all()
+    assert (img[:, 5:] == FORBIDDEN).all()
+    assert share == pytest.approx(0.7)
+
+
+def test_cli_rect_only_and_argument_checks(tmp_path, capsys):
+    map_yaml = _save_map(tmp_path)
+    assert main([map_yaml, "--forbid-rect", "-0.5", "-0.3", "-0.3", "0.3"]) == 0
+    assert "20% of the map is forbidden" in capsys.readouterr().out
+    assert main([map_yaml]) == 1  # nothing to forbid
+    with pytest.raises(SystemExit):
+        main([map_yaml, "--line", "0", "-1", "0", "1"])  # --line without --keep

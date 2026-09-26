@@ -1,9 +1,12 @@
-"""Nav2 keepout mask from a saved map: forbid everything on one side of a line (D-015).
+"""Nav2 keepout mask from a saved map: forbid one side of a line and/or rectangles (D-015).
 
-    ros2 run rover_nav make_keepout ~/rover_nav_maps/room.yaml --line X1 Y1 X2 Y2 --keep X Y
+    ros2 run rover_nav make_keepout ~/rover_nav_maps/room.yaml --line X1 Y1 X2 Y2 --keep X Y \
+        [--forbid-rect X1 Y1 X2 Y2 ...]
 
-The line goes through two points in the `map` frame (metres); `--keep` is any point on the side
-the rover may use. Writes `keepout.pgm` + `keepout.yaml` next to the map (or `-o PREFIX`): black =
+All coordinates are in the `map` frame (metres). The line goes through two points; `--keep` is
+any point on the side the rover may use. Each `--forbid-rect` (repeatable) forbids an extra
+axis-aligned rectangle given by two opposite corners, e.g. furniture the rover must not drive
+through. Writes `keepout.pgm` + `keepout.yaml` next to the map (or `-o PREFIX`): black =
 forbidden, white = allowed, same resolution and origin as the map, for Nav2's KeepoutFilter.
 
 No ROS imports: the map files are the map_server format (`map_saver_cli` output).
@@ -91,14 +94,42 @@ def forbidden_side(
     return s * np.sign(keep_side) < 0
 
 
-def make_keepout(map_yaml: str, p1, p2, keep, out_prefix: str) -> float:
-    """Write `out_prefix`.pgm + .yaml. Returns the forbidden share of the map."""
+def forbidden_rect(
+    shape: tuple[int, int],
+    resolution: float,
+    origin: tuple[float, float],
+    corner1: tuple[float, float],
+    corner2: tuple[float, float],
+) -> np.ndarray:
+    """Bool mask (True = forbidden) of the cells whose centre is inside the axis-aligned
+    rectangle with opposite corners `corner1` and `corner2` (edges included)."""
+    (xa, ya), (xb, yb) = corner1, corner2
+    if xa == xb or ya == yb:
+        raise ValueError(f"rectangle {corner1} - {corner2} has no area")
+    height, width = shape
+    xs = origin[0] + (np.arange(width) + 0.5) * resolution
+    ys = origin[1] + (height - np.arange(height) - 0.5) * resolution  # row 0 = top = largest y
+    in_x = (xs >= min(xa, xb)) & (xs <= max(xa, xb))
+    in_y = (ys >= min(ya, yb)) & (ys <= max(ya, yb))
+    return in_y[:, np.newaxis] & in_x[np.newaxis, :]
+
+
+def make_keepout(map_yaml: str, out_prefix: str, line=None, rects=()) -> float:
+    """Write `out_prefix`.pgm + .yaml. `line` = (p1, p2, keep) or None; `rects` = pairs of
+    opposite corners. Returns the forbidden share of the map."""
+    if line is None and not rects:
+        raise ValueError("nothing to forbid: give --line/--keep and/or --forbid-rect")
     meta = load_map(map_yaml)
     origin = meta["origin"]
     if len(origin) > 2 and abs(float(origin[2])) > 1e-9:
         raise ValueError(f"{map_yaml}: map origin yaw {origin[2]} is not supported (expected 0)")
     shape = read_pgm(meta["image"]).shape
-    mask = forbidden_side(shape, float(meta["resolution"]), (origin[0], origin[1]), p1, p2, keep)
+    res, org = float(meta["resolution"]), (origin[0], origin[1])
+    mask = np.zeros(shape, dtype=bool)
+    if line is not None:
+        mask |= forbidden_side(shape, res, org, *line)
+    for corner1, corner2 in rects:
+        mask |= forbidden_rect(shape, res, org, corner1, corner2)
     img = np.where(mask, FORBIDDEN, ALLOWED).astype(np.uint8)
     write_pgm(out_prefix + ".pgm", img)
     out_meta = {
@@ -111,7 +142,8 @@ def make_keepout(map_yaml: str, p1, p2, keep, out_prefix: str) -> float:
         "free_thresh": 0.25,
     }
     with open(out_prefix + ".yaml", "w") as f:
-        f.write(f"# Keepout mask for {os.path.basename(map_yaml)}: line {p1} - {p2}, keep {keep}\n")
+        f.write(f"# Keepout mask for {os.path.basename(map_yaml)}: line (p1, p2, keep) {line}")
+        f.write(f", rectangles {list(rects)}\n")
         yaml.safe_dump(out_meta, f, sort_keys=False)
     return float(mask.mean())
 
@@ -123,7 +155,6 @@ def main(argv=None) -> int:
         "--line",
         nargs=4,
         type=float,
-        required=True,
         metavar=("X1", "Y1", "X2", "Y2"),
         help="two points of the border, map frame, m",
     )
@@ -131,18 +162,30 @@ def main(argv=None) -> int:
         "--keep",
         nargs=2,
         type=float,
-        required=True,
         metavar=("X", "Y"),
-        help="a point on the side the rover may use",
+        help="a point on the side the rover may use (with --line)",
+    )
+    parser.add_argument(
+        "--forbid-rect",
+        nargs=4,
+        type=float,
+        action="append",
+        default=[],
+        metavar=("X1", "Y1", "X2", "Y2"),
+        help="also forbid this rectangle (two opposite corners, m); repeatable",
     )
     parser.add_argument("-o", "--out", help="output prefix (default: keepout next to the map)")
     # ros2 run passes --ros-args ... when launched from a launch file; ignore it
     args, _ = parser.parse_known_args(argv)
+    if (args.line is None) != (args.keep is None):
+        parser.error("--line and --keep go together")
     out = args.out or os.path.join(os.path.dirname(os.path.abspath(args.map_yaml)), "keepout")
+    line = None
+    if args.line is not None:
+        line = (tuple(args.line[:2]), tuple(args.line[2:]), tuple(args.keep))
+    rects = [(tuple(r[:2]), tuple(r[2:])) for r in args.forbid_rect]
     try:
-        share = make_keepout(
-            args.map_yaml, tuple(args.line[:2]), tuple(args.line[2:]), tuple(args.keep), out
-        )
+        share = make_keepout(args.map_yaml, out, line=line, rects=rects)
     except (OSError, ValueError, KeyError) as e:
         print(f"make_keepout: {e}", file=sys.stderr)
         return 1

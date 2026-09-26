@@ -10,7 +10,7 @@ Block 9 ([task](../../../docs/tasks/09-rover-navigation.md), [D-015](../../../do
 | --- | --- | --- |
 | Camera | Luxonis OAK-D, fixed on the rover's front | the arm's RealSense D435i, arm holding its `drive` pose |
 | Needs | `ros-jazzy-depthai-ros`, `scripts/setup_oak.sh` (udev) | `ros-jazzy-realsense2-camera`; the arm in `drive` (or `camera_tf:=static`) |
-| Depth range | ~0.2–3 m used (400p stereo, extended disparity) | ~0.2–3 m used |
+| Depth range | from 0.34 m (measured), up to 3 m used (400p stereo, extended disparity) | ~0.2–3 m used |
 | Field of view | ~70° (depth aligned to the color camera) | ~87° |
 | Arm | free: doesn't matter what the arm does | must not move while driving |
 
@@ -86,7 +86,14 @@ Pick the border in the map frame: open `room.pgm`, or in RViz use **Publish Poin
 ros2 run rover_nav make_keepout ~/rover_nav_maps/room.yaml --line X1 Y1 X2 Y2 --keep X Y
 ```
 
-It writes `~/rover_nav_maps/keepout.pgm` + `keepout.yaml` (black = forbidden) and prints the forbidden share. Look at `keepout.pgm` to check the right half is black.
+Furniture the rover must not drive through (chairs: legs and gaps look passable on the map) can be forbidden too: add `--forbid-rect X1 Y1 X2 Y2` (two opposite corners, repeatable), with `--line`/`--keep` or alone. Our room:
+
+```bash
+ros2 run rover_nav make_keepout ~/rover_nav_maps/room.yaml --line 0 -3.5 1 -3.5 --keep 0 0 \
+  --forbid-rect -1.3 -2.6 -0.7 -0.9      # y < -3.5 forbidden + the row of chairs at x = -1
+```
+
+It writes `~/rover_nav_maps/keepout.pgm` + `keepout.yaml` (black = forbidden) and prints the forbidden share. Look at `keepout.pgm` to check the right areas are black. Running it again overwrites the mask; restart the navigation launch to use it.
 
 ## 3. Navigate
 
@@ -117,8 +124,8 @@ cd ros2_ws/src/rover_nav && python3 -m pytest test -q      # keepout mask tool, 
 ## Risks
 
 - One camera looking forward (~70° OAK-D, ~87° D435i): the sides are blind while turning, and obstacles closer than ~20 cm aren't seen. The saved map covers the fixed room; keep people and new objects away on the first runs.
-- OAK-D: use a USB 3 port and a data cable. The original OAK-D has a separate 5 V power input; if it resets or drops out on USB power alone, give it its own supply.
-- `config/oak.yaml` is written from the driver's parameter names (depthai-ros 2.12), not yet tried on the camera: check the image size and depth on the first run.
+- OAK-D: on the test laptop it ran at **USB 2** speed (`USB SPEED: HIGH` in the log) and still delivered 640×360 color + depth at ~15 Hz. Prefer a USB 3 port and cable (`USB SPEED: SUPER`). The original OAK-D has a separate 5 V power input; if it resets or drops out on USB power alone, give it its own supply.
+- After the driver is killed hard, the next start can take ~40 s (`Device already closed or disconnected`, once `Device crashed`) before it reconnects by itself. Stop it with Ctrl+C and wait; replug the camera if it never reconnects.
 - `wrist`: the arm must not move while driving (map and localization assume a fixed camera).
 - RTAB-Map needs texture: a bare wall or a dark room gives few features. Keep the room lit as when mapping.
 - The rover's time is served by the laptop (`setup_time_sync.sh`); if the laptop's address on the rover network changes, run it again.
