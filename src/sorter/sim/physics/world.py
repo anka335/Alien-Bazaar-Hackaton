@@ -6,8 +6,9 @@ time, so the real driver code steers the simulated motors with its real timing. 
 fast as the CPU allows.
 
 Grip: soft cloth contacts let cloth slip out of a parallel gripper far more easily than real
-fabric does. So when the fingers close and stop, the cloth vertices between the pads are
-attached to the gripper until it opens again (a common simulation stand-in for friction).
+fabric does. So when a close command has stopped the fingers on cloth that touches both pads,
+the cloth vertices between the pads are attached to the gripper until an open command (a common
+simulation stand-in for friction).
 Everything else (the fingers stopping on the cloth, the cloth hanging, falling, landing) is
 simulated.
 """
@@ -31,6 +32,11 @@ from sorter.sim.world import LOOK_POSES, in_rect
 log = logging.getLogger(__name__)
 
 SETTLE_S = 1.5  # the items fall into the box before anything else happens
+GRIP_CATCH_NM = 0.5  # motor 7 torque that means "closing" (rebot_b601 holds a grip with 1 N·m)
+GRIP_RELEASE_NM = 0.5  # and "opening"
+GRIP_MAX_M = 0.035  # a finger further out than this pinches nothing
+GRIP_STALL_M_S = 0.004  # fingers slower than this have stopped on something
+GRIP_SETTLE_S = 0.3  # after a close command starts (the fingers are at rest at first too)
 
 
 class PhysicsWorld:
@@ -55,6 +61,10 @@ class PhysicsWorld:
         flex = {mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_FLEX, i): i for i in range(m.nflex)}
         self.item_flex = [flex[f"item{it.id}"] for it in self.items]  # item id → flex id
         self._flex = [(m.flex_vertadr[f], m.flex_vertnum[f]) for f in self.item_flex]
+        self._vert_item = np.full(m.nflexvert, -1)  # flexvert index → item id
+        for it in self.items:
+            a, n = self._flex[it.id]
+            self._vert_item[a : a + n] = it.id
         self._gripper_body = m.body("gripper_end").id
         self._pads = (m.geom("pad_left").id, m.geom("pad_right").id)
         # the grip constraint of every cloth vertex, in flexvert order
@@ -66,8 +76,7 @@ class PhysicsWorld:
             ]
         )
         self._grip_idx = np.zeros(0, int)  # cloth vertices attached to the gripper
-        self._grip_finger = 0.0  # finger opening when they were caught
-        self._grip_local = np.zeros((0, 3))  # their offsets in the TCP frame
+        self._closing_since: float | None = None  # sim time the close command began
         self.enabled = False
         self.set_enabled(False)
         self.data.qpos[self.arm_qpos] = self.poses.get("rest", np.zeros(6))
@@ -131,42 +140,68 @@ class PhysicsWorld:
         return out
 
     def _grip(self) -> None:
+        """Catch the cloth pinched between the pads on a close command; let go on an open one.
+
+        A command is told by the torque `rebot_b601` sends: a close drives motor 7 hard toward 0
+        (then holds with 1 N·m); an open drives it the other way. The small torques around a
+        reached target (the PD settling) mean neither, so a released item isn't caught again.
+        """
         d, m = self.data, self.model
         torque = d.ctrl[self.grip_act]
-        finger = d.qpos[self.finger_qpos]
-        held = len(self._grip_idx) > 0 and self._grip_idx[0] >= 0
-        opening = torque > 0.05 and d.qvel[self.finger_dof] > 0.005
-        if not self.enabled or opening or (held and finger > self._grip_finger + 0.004):
-            if held:
+        held = len(self._grip_idx) > 0
+        if held:
+            if not self.enabled or torque > GRIP_RELEASE_NM:
                 d.eq_active[self._grip_eq[self._grip_idx]] = 0
-                log.debug(
-                    "grip: released %d vertices, finger %.1f mm", len(self._grip_idx), finger * 1000
-                )
-            self._grip_idx = np.zeros(0, int)
+                log.debug("grip: released %d vertices", len(self._grip_idx))
+                self._grip_idx = np.zeros(0, int)
             return
-        if held or torque > -0.05:
-            return  # holding already, or not closing
+        if not self.enabled or torque > -GRIP_CATCH_NM:
+            self._closing_since = None
+            return
+        if self._closing_since is None:
+            self._closing_since = d.time
+        finger = d.qpos[self.finger_qpos]
+        if (
+            d.time - self._closing_since < GRIP_SETTLE_S
+            or finger > GRIP_MAX_M
+            or abs(d.qvel[self.finger_dof]) > GRIP_STALL_M_S
+        ):
+            return  # still closing: nothing is pinched yet
         left, right = self._pad_contacts()
-        if not (left and right):
-            return  # both fingers must press cloth
+        # the top item pressed by both fingers: the pile's items pass through each other (no
+        # cloth-cloth contacts), so real fingers would squeeze the one on top
+        both = set(self._vert_item[sorted(left)]) & set(self._vert_item[sorted(right)])
+        both.discard(-1)
+        if not both:
+            return
+        touch = np.array(sorted(left | right), int)
+        pinched = {
+            max(both, key=lambda i: d.flexvert_xpos[touch[self._vert_item[touch] == i], 2].max())
+        }
         p = d.site_xpos[self.tcp_site]
         R = d.site_xmat[self.tcp_site].reshape(3, 3)
         local = (d.flexvert_xpos - p) @ R  # TCP frame: x = approach, fingers along y
         between = (
             (local[:, 0] > -0.06)
             & (local[:, 0] < 0.008)
-            & (np.abs(local[:, 1]) < finger + 0.009)
+            & (np.abs(local[:, 1]) < max(finger, 0.0) + 0.009)
             & (np.abs(local[:, 2]) < 0.02)
         )
-        idx = np.union1d(np.nonzero(between)[0], np.array(sorted(left | right), int))
+        between &= np.isin(self._vert_item, sorted(pinched))
+        touching = [v for v in left | right if self._vert_item[v] in pinched]
+        idx = np.union1d(np.nonzero(between)[0], np.array(sorted(touching), int))
         g = self._gripper_body
         local_g = (d.flexvert_xpos[idx] - d.xpos[g]) @ d.xmat[g].reshape(3, 3)
         eq = self._grip_eq[idx]
         m.eq_data[eq, 3:6] = local_g  # hold each vertex where it is now, in the gripper_end frame
         d.eq_active[eq] = 1
         self._grip_idx = idx
-        self._grip_finger = max(finger, 0.0)
-        log.debug("grip: caught %d vertices, finger %.1f mm", len(idx), finger * 1000)
+        log.debug(
+            "grip: caught %d vertices of items %s, finger %.1f mm",
+            len(idx),
+            sorted(int(i) for i in pinched),
+            finger * 1000,
+        )
 
     def start(self) -> None:
         if self._thread is not None:
@@ -265,13 +300,12 @@ class PhysicsWorld:
 
     def location(self, item: int) -> tuple[str, ColorClass | None]:
         """Where item `item` is: box / background / gripper / bin (+ color) / table."""
+        with self.lock:
+            if item in self._vert_item[self._grip_idx]:
+                return "gripper", None
         v = self.vertices(item)
         x, y, _ = v.mean(axis=0)
-        low = v[:, 2].min()
         lay = self.layout
-        tcp = self.tcp()
-        if low > 25 and np.min(np.linalg.norm(v - tcp, axis=1)) < 40:
-            return "gripper", None
         if in_rect(x, y, lay.box):
             return "box", None
         if in_rect(x, y, lay.background):

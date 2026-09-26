@@ -2,7 +2,7 @@
 
 From the fixed `look_box` pose the box floor is at a near-constant depth, so cloth is whatever
 stands higher than the floor. The grasp point is the top of the pile, inside a cloth region,
-at least `wall_margin_px` inside the box ROI, and away from the failed grasps in `avoid`.
+at least `wall_margin_mm` inside the box ROI, and away from the failed grasps in `avoid`.
 """
 
 from __future__ import annotations
@@ -72,7 +72,8 @@ class DepthBoxDetector:
             return BoxResult(BoxStatus.EMPTY, None, coverage, overlay)
 
         smooth = cv2.GaussianBlur(height.astype(np.float32), (0, 0), cfg.smooth_px)
-        allowed = _erode(roi, cfg.wall_margin_px) & _erode(cloth, cfg.inset_px) & valid
+        margin_px = round(cfg.wall_margin_mm * frame.intrinsics.fx / floor)
+        allowed = _erode(roi, margin_px) & _erode(cloth, cfg.inset_px) & valid
         if avoid:
             yy, xx = np.mgrid[0:h, 0:w]
             for a in avoid:

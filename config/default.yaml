@@ -40,7 +40,7 @@ camera: {}           # block 1
 calibration: {}      # block 2
 box_detector:        # block 3
   avoid_radius_px: 30
-  wall_margin_px: 60     # ~25 mm on the box floor from the look pose
+  wall_margin_mm: 45     # an open finger (arm.gripper.open) and its pad fit between grasp and wall
   cloth_height_mm: 8
   min_cloth_px: 1500
 color_classifier:    # block 4 (D-013)
@@ -69,7 +69,7 @@ arm:                 # block 5 (D-014)
   z_min_mm: 3        # table clearance for every point of the arm
   place_release_height_mm: 90   # TCP above the mat at place_bg (sim.layout tool)
   bin_release_height_mm: 90     # TCP above the bin rim at bin_<color> (sim.layout tool)
-  gripper: {open: 1.0, empty_below: 0.01}   # cloth keeps the fingers ~0.02-0.05 open (physics sim)
+  gripper: {open: 0.6, empty_below: 0.01}   # 0.6: ~27 mm a finger, fits beside the box walls
 
 state_machine:       # block 6
   empty_confirmations: 2       # EMPTY box results in a row before DONE

@@ -8,11 +8,11 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | # | Block | Status | Owner | Branch | Blocked by / notes |
 | --- | --- | --- | --- | --- | --- |
 | 0 | [Contracts & skeleton](tasks/00-contracts.md) | done | Softjey + Claude | `block/00-contracts` | — |
-| 1 | [Setup & camera](tasks/01-setup-camera.md) | todo | — | — | — |
-| 2 | [Calibration](tasks/02-calibration.md) | todo | — | — | — |
-| 3 | [Box detection](tasks/03-box-detection.md) | todo | — | — | — |
+| 1 | [Setup & camera](tasks/01-setup-camera.md) | in progress | Softjey + Claude | `feat/sim-3d-arm` | RealSense driver written, untested on the device; physical rig, ROI and record tools left |
+| 2 | [Calibration](tasks/02-calibration.md) | in progress | Softjey + Claude | `feat/sim-3d-arm` | backend + hand-eye tool done, rehearsed in the sim; touch-test tool and the rig run left |
+| 3 | [Box detection](tasks/03-box-detection.md) | in progress | Softjey + Claude | `feat/sim-3d-arm` | depth detector works in the physics sim; tuning on rig frames left |
 | 4 | [Color classification](tasks/04-color-classification.md) | in progress | Maciej | `block/04-color-classification` | tuning on real frames needs block 1 |
-| 5 | [Arm control](tasks/05-arm-control.md) | in progress | Softjey + Claude | `feat/sim-3d-arm` | controller + sim done; real arm, pose teaching and tuning need the hardware |
+| 5 | [Arm control](tasks/05-arm-control.md) | in progress | Softjey + Claude | `feat/sim-3d-arm` | controller + physics sim done; real arm, pose teaching and tuning need the hardware |
 | 6 | [State machine](tasks/06-state-machine.md) | review | Softjey + Claude | `block/06-state-machine` | — |
 | 7 | [Dashboard](tasks/07-dashboard.md) | review | Softjey + Claude | `block/07-dashboard` | — |
 | 8 | [Demo preparation](tasks/08-demo.md) | todo | — | — | — |

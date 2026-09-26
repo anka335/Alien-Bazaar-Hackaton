@@ -53,3 +53,4 @@ _None yet._
 - 2026-09-25: loop implemented on the simulator with tests for every failure path. Run log added (`sorter/orchestrator/runlog.py`, format in architecture.md → Recording format). New config keys `low_confidence`, `save_runs`, `runs_dir`. Unexpected exceptions → `ERROR` instead of killing the thread. `tests/conftest.py` (block 0): `sim_config` sets `save_runs: false`.
 - 2026-09-25 (block 4): `classify` of the real color classifier raises `SegmentationError` (a `SorterError`) when the SAM3 service fails; the loop already turns it into `ERROR`, paused (D-013).
 - 2026-09-26 (block 5): the sim arm is the real controller with kinematics (D-014). `world.looking_at` is derived from the joints; `ArmController` is unchanged. The sim tests run with `sim.time_scale: 0` (instant).
+- 2026-09-26 (Softjey + Claude): `run --sim` runs the loop on the physics simulator with the real vision and calibration (D-016); about a minute per item at `sim.realtime: 0`.

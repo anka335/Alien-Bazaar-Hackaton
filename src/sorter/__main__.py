@@ -12,7 +12,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="sorter")
     sub = parser.add_subparsers(dest="command", required=True)
     run_p = sub.add_parser("run", help="run the sorter")
-    run_p.add_argument("--sim", action="store_true", help="simulate every component")
+    run_p.add_argument("--sim", action="store_true", help="simulate the camera and the arm")
     run_p.add_argument("--config-dir", default=DEFAULT_CONFIG_DIR, help="directory with *.yaml")
     run_p.add_argument("--no-dashboard", action="store_true", help="don't start the web server")
     run_p.add_argument("--autostart", action="store_true", help="send START right away")

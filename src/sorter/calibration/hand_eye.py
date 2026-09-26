@@ -80,17 +80,35 @@ def collect(system, cfg: Config, seed: int = 0) -> list[tuple[Pose, Pose]]:
     return pairs
 
 
+def park(pairs: list[tuple[Pose, Pose]]) -> Pose:
+    """AX = XB by Park & Martin, over every pair of views. A = G_i⁻¹ G_j (flange motion),
+    B = C_i C_j⁻¹ (camera motion), since G_i X C_i is the same board for every i.
+    (OpenCV 5 dropped `cv2.calibrateHandEye` from its Python package.)"""
+    A, B = [], []
+    for i in range(len(pairs)):
+        for j in range(i + 1, len(pairs)):
+            (g_i, c_i), (g_j, c_j) = pairs[i], pairs[j]
+            A.append(np.linalg.inv(g_i) @ g_j)
+            B.append(c_i @ np.linalg.inv(c_j))
+    M = np.zeros((3, 3))
+    for a, b in zip(A, B, strict=True):
+        alpha = cv2.Rodrigues(a[:3, :3])[0].ravel()
+        beta = cv2.Rodrigues(b[:3, :3])[0].ravel()
+        M += np.outer(beta, alpha)
+    w, V = np.linalg.eigh(M.T @ M)
+    R = V @ np.diag(w**-0.5) @ V.T @ M.T
+    C = np.vstack([a[:3, :3] - np.eye(3) for a in A])
+    d = np.concatenate([R @ b[:3, 3] - a[:3, 3] for a, b in zip(A, B, strict=True)])
+    X = np.eye(4)
+    X[:3, :3], X[:3, 3] = R, np.linalg.lstsq(C, d, rcond=None)[0]
+    return X
+
+
 def solve(pairs: list[tuple[Pose, Pose]]) -> tuple[Pose, float]:
     """T_flange_cam (mm) and the spread of the board position through the views (mm)."""
     if len(pairs) < 4:
         raise SorterError(f"only {len(pairs)} views of the board; need at least 4")
-    R_g = [ee[:3, :3] for ee, _ in pairs]
-    t_g = [ee[:3, 3] for ee, _ in pairs]
-    R_t = [cb[:3, :3] for _, cb in pairs]
-    t_t = [cb[:3, 3] for _, cb in pairs]
-    R, t = cv2.calibrateHandEye(R_g, t_g, R_t, t_t, method=cv2.CALIB_HAND_EYE_PARK)
-    X = np.eye(4)
-    X[:3, :3], X[:3, 3] = R, t.ravel()
+    X = park(pairs)
     board = np.array([(ee @ X @ cb)[:3, 3] for ee, cb in pairs])
     rmse = float(np.sqrt(((board - board.mean(axis=0)) ** 2).sum(axis=1).mean()))
     return X, rmse
@@ -132,7 +150,7 @@ def main(argv: list[str] | None = None) -> None:
     result = {
         "T_flange_cam": np.round(X, 4).tolist(),
         "rmse_mm": round(rmse, 3),
-        "method": "charuco + cv2.calibrateHandEye(PARK)",
+        "method": "charuco + Park-Martin",
         "camera_serial": getattr(system.camera, "serial", "") or ("sim" if args.sim else ""),
         "created": dt.datetime.now().isoformat(timespec="seconds"),
     }

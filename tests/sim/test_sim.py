@@ -1,4 +1,3 @@
-import math
 import threading
 import time
 
@@ -141,8 +140,7 @@ def test_camera_follows_the_arm(system):
     view = world.views[Zone.BACKGROUND]
     assert (pose.x, pose.y, pose.z) == pytest.approx((*view.center_mm, view.cam_z_mm))
     assert view.center_mm == pytest.approx(system.cfg.sim.layout.background.center_mm, abs=1)
-    system.arm.drop_to_bin(ColorClass.LIGHT)
+    system.arm.drop_to_bin(ColorClass.LIGHT)  # ends back at home
     assert world.looking_at is None
-    x, y, _ = world.tcp()
-    bx, by = world.bin_xy[ColorClass.LIGHT]
-    assert math.hypot(x - bx, y - by) < 5
+    x, y, z = world.tcp()
+    assert np.allclose((x, y, z), kin.fk_tcp(system.cfg.poses["home"])[:3, 3], atol=1)

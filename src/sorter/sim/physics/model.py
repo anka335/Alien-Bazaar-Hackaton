@@ -29,6 +29,11 @@ GRIPPER_OPEN_MOTOR_DEG = 270.0  # rebot_b601 maps 0..270° of motor 7 to 0..FING
 # above would give ~94; the real linkage is unknown, and 94 x 3 N·m slams cloth out of the
 # fingers. 15 gives 45 N while closing and 15 N holding (rebot_b601's torque limits): measure it.
 GRIPPER_N_PER_NM = 15.0
+GRIPPER_MOTOR_KD = 1.5  # N·m·s/rad: the damping rebot_b601 sets on motor 7 (MIT mode)
+# that damping as felt at a finger: it limits the fingers to ~20 mm/s at 3 N·m
+_FINGER_DAMPING = (
+    GRIPPER_N_PER_NM * GRIPPER_MOTOR_KD * math.radians(GRIPPER_OPEN_MOTOR_DEG) / FINGER_TRAVEL_M
+)
 # servo stiffness (N·m/rad), damping (N·m·s/rad), rotor inertia (kg·m²) per joint
 _KP = (300, 300, 300, 60, 60, 40)
 _DAMPING = (8, 8, 6, 1.5, 1.2, 0.8)
@@ -39,6 +44,7 @@ _BIN_RGB = {
     ColorClass.COLORED: "0.14 0.55 0.67",
 }
 
+_CARDBOARD = "0.5 0.01 0.001"  # the box and the bins
 CLOTH_N = 8  # vertices per side
 CLOTH_SHEET_M = 0.14  # side of the flat sheet
 CLOTH_GATHER = 0.6  # the rest shape is the sheet gathered to this fraction, with folds
@@ -133,7 +139,7 @@ def item_specs(cfg: SimConfig) -> list[ItemSpec]:
     rng = np.random.default_rng(cfg.seed)
     box = cfg.layout.box
     (cx, cy), (w, h) = box.center_mm, box.size_mm
-    reach = CLOTH_SHEET_M * CLOTH_GATHER * 1000 / 2 + 5
+    reach = CLOTH_SHEET_M * CLOTH_GATHER * 1000 / math.sqrt(2) + 5  # a turned corner: off the walls
     out = []
     for i, color in enumerate(cfg.items):
         x = rng.uniform(cx - w / 2 + reach, cx + w / 2 - reach)
@@ -278,7 +284,7 @@ def _arm(parent: ET.Element, cfg: SimConfig) -> None:
             type="slide",
             axis=f"0 {sign} 0",
             range=f"0 {FINGER_TRAVEL_M}",
-            damping="4",
+            damping=f"{_FINGER_DAMPING:.0f}" if side == "left" else "4",  # the motor's finger
             solreflimit="0.002 1",
         )
         ET.SubElement(
@@ -322,6 +328,7 @@ def _open_box(
         size=_f(ix / 2 + t, iy / 2 + t, floor_z / 2),
         pos=_f(cx, cy, floor_z / 2),
         rgba=floor_rgba or rgba,
+        friction=_CARDBOARD,
     )
     for k, (dx, dy, sx, sy) in enumerate(
         (
@@ -339,6 +346,7 @@ def _open_box(
             size=_f(sx, sy, top / 2),
             pos=_f(cx + dx, cy + dy, top / 2),
             rgba=rgba,
+            friction=_CARDBOARD,
         )
 
 
@@ -375,7 +383,7 @@ def _cloth(parent: ET.Element, it: ItemSpec, rng: np.random.Generator) -> None:
         f,
         "contact",
         condim="3",
-        friction="1.2 0.01 0.001",
+        friction="0.6 0.01 0.001",  # cotton on cardboard; MuJoCo takes the larger of a pair
         selfcollide="none",
         solref="0.004 1",
         contype="2",
@@ -392,8 +400,7 @@ def build_xml(cfg: SimConfig, board: bool = False) -> str:
         "option",
         timestep=str(TIMESTEP),
         integrator="discrete",
-        cone="pyramidal",
-        impratio="10",
+        cone="pyramidal",  # impratio stays 1: stiffer friction wedges a dragged cloth into walls
     )
     vis = ET.SubElement(root, "visual")
     ET.SubElement(

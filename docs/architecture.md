@@ -22,7 +22,7 @@ Single source of truth for the contracts between blocks. Block 0 implements the 
 | Hub | 0 | Status, decision frames, and commands between the state machine and the dashboard |
 | State machine | 6 | Main loop, failure handling, counters, run logs |
 | Dashboard | 7 | Web UI: decision frame with overlays, live wrist feed, state, counters, controls |
-| Simulator | 0 | Fake world, camera, arm driver, vision, calibration, so the loop runs without hardware |
+| Simulator | 0 | The hardware without hardware: a MuJoCo physics scene with the arm's motors and the wrist RGB-D camera, so the real code of every other block runs on it; a quick kinematic world for tests |
 
 ## Coordinate frames and units
 
@@ -180,6 +180,7 @@ class Camera(Protocol):
 - The camera runs its own capture thread and keeps only the newest frame.
 - Auto exposure and white balance are locked after warm-up if the SDK allows.
 - The camera module knows nothing about the arm.
+- The real backend is `RealSenseCamera` (`pyrealsense2`, the `camera` extra; Linux / Windows): depth aligned to color, rectified (`coeffs` empty).
 
 ### Observation and Observer (block 0)
 
@@ -249,7 +250,8 @@ class BoxDetector(Protocol):
 
 - **Stateless.** Failed grasps are passed as `avoid`. Candidates within `box_detector.avoid_radius_px` of any of them are skipped.
 - `NO_GRASP` = cloth is present, but no valid candidate is left.
-- The grasp point keeps a margin from the box walls that covers the gripper **and the camera** footprint (the camera descends with the gripper).
+- The grasp point keeps `wall_margin_mm` from the ROI edge on the box floor (an open finger and its pad), converted to pixels with the floor depth.
+- `DepthBoxDetector` (the real backend): the floor is a high percentile of the ROI depth, cloth is what stands `cloth_height_mm` above it, the grasp is the top of the smoothed height map inside the cloth.
 - The ROI excludes the gripper fingers. They sit at fixed pixels in every frame.
 
 ### Color classifier (block 4)
@@ -292,6 +294,7 @@ class Calibration(Protocol):
 - `to_arm`: deproject `(u, v, depth)` with `obs.frame.intrinsics`, then apply `obs.T_base_cam`. It raises `CalibrationError` if `T_base_cam` is `None` or depth is 0.
 - The hand-eye result `T_flange_cam` is stored in `config/hand_eye.yaml`: 4×4 in mm, `rmse_mm`, `method`, `camera_serial`, `created`. It is **committed** ([D-007](decisions.md)), because it depends only on the camera mount, which travels with the arm.
 - It must be computed against the same flange frame (`end_link`) that `ee_pose()` returns.
+- `python -m sorter.calibration.hand_eye` computes it: a ChArUco board (`python -m sorter.calibration.board` prints it) on the mat, `calibration.poses` views around `look_bg`, Park's method. The real backend (`HandEyeCalibration`) raises `CalibrationError` at start if there is no result.
 
 ### Arm controller (block 5)
 
@@ -424,8 +427,9 @@ The decision frame is the main panel: the wrist feed moves with the arm, and ove
 
 One Python process ([D-005](decisions.md)):
 
-- camera capture thread (block 1);
-- arm control loop thread, 50 Hz, inside `rebot_b601.arm.Arm` (block 5; the sim driver has none);
+- camera capture thread (block 1; in the physics sim, its render thread);
+- arm control loop thread, 50 Hz, inside `rebot_b601.arm.Arm` (block 5). In the physics sim the loop is ticked by the physics thread every 20 ms of simulated time; the kinematic sim driver has none;
+- physics thread (physics sim only): steps MuJoCo at `sim.realtime`;
 - state machine thread (block 6);
 - web server, uvicorn (block 7).
 
@@ -433,7 +437,7 @@ One Python process ([D-005](decisions.md)):
 
 ## Wiring (block 0)
 
-`sorter.app.build_system(cfg, sim=False) -> System` creates every component per `backends` (`--sim` forces all of them to sim). `System` (`sorter.core.system`) holds `cfg`, `camera`, `arm`, `calibration`, `box_detector`, `color_classifier`, `observer`, `hub`, and `world` (the `SimWorld`, or `None` when nothing is simulated).
+`sorter.app.build_system(cfg, sim=False) -> System` creates every component per `backends`. `--sim` (`sim=True`) makes the hardware sim: the camera and the arm. With `sim.engine: physics` (default) the other components keep their real backends and run on the rendered frames; only the calibration comes from the sim camera mount (exact) instead of `hand_eye.yaml`, and the classifier's SAM3 client is replaced by the render's segmentation unless `sim.use_sam3`. With `sim.engine: kinematic` (tests) every backend set to `sim` stays sim. `System` (`sorter.core.system`) holds `cfg`, `camera`, `arm`, `calibration`, `box_detector`, `color_classifier`, `observer`, `hub`, and `world` (the `SimWorld`, or `None` when nothing is simulated).
 
 Entry points each block provides:
 
@@ -454,11 +458,11 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 | Key | Owner | Content |
 | --- | --- | --- |
 | `backends` | 0 | Per component `real` \| `sim`: `camera`, `arm`, `calibration`, `box_detector`, `color_classifier`. Swap stubs one at a time during integration |
-| `sim` | 0 | Simulator world: `seed`, `items` (colors in the box), `miss_prob`, `double_prob`, `time_scale` (arm motion time × this; 0 = instant), `vision_s` (sim vision delay), image size, `focal_px`, `camera_mount_mm` (wrist camera in the TCP frame), `item_radius_mm`, `layout` (`box`: `center_mm`, `size_mm`, `floor_z_mm`, `wall_mm`; `background`: `center_mm`, `size_mm`; `bins`: `centers_mm.<color>`, `size_mm`, `wall_mm`, `floor_z_mm`) |
-| `camera` | 1 | Device type, serial, resolution, fps, exposure / white balance |
+| `sim` | 0 | Simulator world: `engine` (`physics` \| `kinematic`), `realtime` (physics: simulated s per wall s, 0 = as fast as possible), `use_sam3`, `board` (a ChArUco board on the mat), `seed`, `items` (colors in the box), `miss_prob`, `double_prob`, `time_scale` (arm motion time × this; 0 = instant), `vision_s` (sim vision delay), image size, `focal_px`, `camera_mount_mm` (wrist camera in the TCP frame), `item_radius_mm`, `layout` (`box`: `center_mm`, `size_mm`, `floor_z_mm`, `wall_mm`; `background`: `center_mm`, `size_mm`; `bins`: `centers_mm.<color>`, `size_mm`, `wall_mm`, `floor_z_mm`) |
+| `camera` | 1 | `serial` (empty = the first D435i), `width`, `height`, `fps`, `warmup_frames`, `lock_exposure`, `exposure_us`, `white_balance_k`, `timeout_s` |
 | `views.<zone>.roi` | 1 | Pixel polygon of the zone in its look pose, excluding the gripper fingers (`rig.yaml`) |
-| `calibration` | 2 | `hand_eye` (the transform, from `hand_eye.yaml`) |
-| `box_detector` | 3 | Thresholds, `avoid_radius_px`, wall margin |
+| `calibration` | 2 | `hand_eye` (the transform, from `hand_eye.yaml`); hand-eye tool: `poses`, `tilt_deg`, `shift_mm` |
+| `box_detector` | 3 | `avoid_radius_px`, `wall_margin_mm`, `floor_percentile` / `floor_depth_mm`, `cloth_height_mm`, `min_cloth_px`, `inset_px`, `smooth_px`, `depth_window_px` |
 | `color_classifier` | 4 | `sam` (SAM3 service: `url`, `api_key`, `prompts`, `threshold`, `mask_threshold`, `timeout_s`), class thresholds (`lightness_dark`, `chroma_colored`, `lightness_light`, `confidence_margin`), `erode_px`, `min_area_px`, `max_area_frac`, `overlap_max`, re-grasp (`grasp_inset_px`, `grasp_depth_tol_mm`, `depth_window_px`). The API key goes in `local.yaml` or env `SAM3_API_KEY`, never committed |
 | `arm` | 5 | `dry_run`, `speed_scale` (of `rebot_b601`'s joint speeds, capped at 0.6), `approach`, `safe_z_mm` (recover / shutdown lift), `z_min_mm` (table clearance), `place_release_height_mm`, `bin_release_height_mm` (both used by the layout tool), gripper (`open`, `empty_below`) |
 | `poses` | 5 | Joint angles (rad): `rest`, `home`, `look_box`, `look_bg`, `place_bg`, `bin_light`, `bin_dark`, `bin_colored` (`rig.yaml`; computed for `sim.layout` by `python -m sorter.sim.layout --write`, re-taught on the rig) |
@@ -476,15 +480,23 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 
 ## Simulator (block 0)
 
-`SimWorld` holds the table (`sim.layout`), the items (position in arm frame, color, height, location: box / background / gripper / bin / table) and the arm's joints over time (`JointMotion`). All sim components share one world. No physics; the arm is simulated at the joint level with the real kinematics ([D-014](decisions.md)).
+`--sim` simulates the **hardware only** (camera, arm), so everything above it runs its real code and moving to the rig is `run` without `--sim` ([D-016](decisions.md)). Two engines, `sim.engine`:
 
-- The sim arm is the real `Controller` (block 5) on `SimDriver`: planned paths play back with `rebot_b601`'s min-jerk timing × `sim.time_scale` (0 = instant, for tests). A hold freezes the joints mid-motion. Closing the gripper grabs the highest cloth under the fingertips if the TCP got within 12 mm of its top (misses with `sim.miss_prob`; from the box it drags a second item with `sim.double_prob`); opening it drops what it holds onto whatever is below: the mat, a bin, the box, or the bare table (lost). `connect()` puts every item back in the box when none is left in the box or on the mat, so the next run has something to sort. `world.looking_at` is the zone whose look pose the joints are at.
-- `SimCamera` renders what the wrist camera sees (`sorter.sim.scene`): a table rendered once (wood, the cardboard tray, the gray mat, three bins), crumpled cloth sprites with shadows, the gripper fingers at the bottom of the frame (no depth there) and the item they hold, plus depth. The camera pose is FK of the current joints × `sim.camera_mount_mm`; the image is always rendered straight down from there (look poses point the camera straight down), axis-aligned with the arm frame, at `sim.focal_px`. At a look pose the image matches `ZoneView` exactly, which sim vision and sim calibration use.
-- `SimCalibration` is a fixed linear pixel ↔ XY mapping per zone (`ZoneView` at the look pose); Z comes from depth; `cam_pose` applies the sim camera mount.
-- Sim vision (`SimBoxDetector`, `SimColorClassifier`) reads the world directly and returns pixels, with perfect colors, after `sim.vision_s`.
-- `python -m sorter.sim.layout [--write]` computes `poses` and `zones` for the layout with the arm's IK and checks every pick and pose-to-pose move ([D-015](decisions.md)).
+**`physics` (default), `sorter.sim.physics`:** a MuJoCo scene built from `sim.layout` and the arm's URDF.
 
-Each sim component is selected independently through `backends`, so a real component can run against the rest of the sim (e.g. real vision on sim frames).
+- `PhysicsWorld` steps the scene in its own thread in simulated time (`sim.realtime` × wall time; 0 = as fast as the CPU allows). Items are cloth (2D flex, crumpled rest shape) that fall into the box, fold, hang from the gripper and land where they are dropped. Cloth does not collide with other cloth (it costs ~10× the rest of the step), so a pile interpenetrates.
+- The arm: `rebot_b601.arm.Arm` runs unchanged with `MujocoBackend` in place of the CAN bus (joint setpoints for motors 1–6, torque for motor 7, feedback of position, speed, torque), and its 50 Hz loop runs on the simulated clock. The joints have position servos with gravity compensation (the RobStride position loop); the gripper is a force motor (`GRIPPER_N_PER_NM`, an assumption) with the damping rebot sets on motor 7. Tracking-error, limit and fault checks are the real ones.
+- Grip: when a close command has stalled the fingers on an item that touches both pads, its vertices between the pads are attached to the gripper until an open command (a stand-in for fabric friction, which soft contacts underestimate).
+- `PhysicsCamera` renders the wrist D435i: pinhole at `sim.focal_px` from the `wrist` camera at `sim.camera_mount_mm`, depth with noise growing with distance, no data under 175 mm (the fingers) and on random speckles, its own capture thread. `segment()` returns MuJoCo's segmentation as SAM3-style instances.
+- `sorter.sim.physics.backend.hand_eye(cfg)` is the true `T_flange_cam` of the sim mount; `python -m sorter.calibration.hand_eye --sim` must recover it from views of the rendered board.
+- `connect()` puts the items back in the box when none is left in the box or on the mat.
+
+**`kinematic`, `sorter.sim.world` (tests, the color-classifier stats tool):** no physics.
+
+- `SimWorld` holds items as points (position, color, height, location) and the arm's joints over time. The arm is the real `Controller` on `SimDriver`: planned paths play back with `rebot_b601`'s min-jerk timing × `sim.time_scale`. Closing the gripper grabs the highest cloth under the fingertips if the TCP got within 12 mm of its top (misses with `sim.miss_prob`; from the box it drags a second item with `sim.double_prob`); opening it drops what it holds onto whatever is below.
+- `SimCamera` renders sprites straight down from the camera pose (`sorter.sim.scene`). `SimCalibration` is a linear pixel ↔ XY mapping per zone; sim vision (`SimBoxDetector`, `SimColorClassifier`) reads the world directly, after `sim.vision_s`.
+
+Both: `world.looking_at` is the zone whose look pose the joints are at. `python -m sorter.sim.layout [--write]` computes `poses`, `zones` and `views.<zone>.roi` for the layout with the arm's IK and the physics camera, and checks every pick and pose-to-pose move ([D-015](decisions.md)).
 
 ## Repo layout
 

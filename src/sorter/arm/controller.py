@@ -163,6 +163,7 @@ class Controller:
         self._go("home")
         self._go(f"bin_{color.value}")
         self._gripper(self.cfg.gripper.open)
+        self._go("home")  # and back the same way, clear of the walls
 
     def ee_pose(self) -> Pose:
         return kin.fk_flange(self.driver.joints())

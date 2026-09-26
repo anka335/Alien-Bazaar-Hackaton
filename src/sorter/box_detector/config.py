@@ -9,7 +9,8 @@ class BoxDetectorConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     avoid_radius_px: int = 30  # skip candidates this close to a failed grasp (also the simulator)
-    wall_margin_px: int = 60  # the grasp stays this far inside the box ROI (fingers + camera)
+    # the grasp stays this far inside the box ROI, on the floor: an open finger and its pad
+    wall_margin_mm: float = 45.0
     floor_percentile: float = 98.0  # the box floor depth: this percentile of the ROI depth
     floor_depth_mm: float | None = None  # or a fixed box floor depth at the look pose
     cloth_height_mm: float = 8.0  # higher above the floor counts as cloth

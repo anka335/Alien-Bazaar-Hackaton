@@ -83,6 +83,8 @@ class Twin:
         }
         w = self.world
         if w is not None and hasattr(w, "vertices"):  # physics: the cloth itself
+            looking = w.looking_at
+            out["looking_at"] = looking.value if isinstance(looking, Zone) else None
             for it in w.items:
                 v = w.vertices(it.id)
                 loc = w.location(it.id)[0]

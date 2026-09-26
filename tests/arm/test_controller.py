@@ -121,8 +121,9 @@ def test_place_and_drop_go_to_their_poses_and_open(arm, cfg):
     arm.place_on_background()
     assert np.allclose(arm.driver.q, cfg.poses["place_bg"])
     arm.drop_to_bin(ColorClass.COLORED)
-    assert np.allclose(arm.driver.q, cfg.poses["bin_colored"])
-    assert arm.driver.gripper_cmds == [1.0, 1.0]
+    assert any(np.allclose(p[-1], cfg.poses["bin_colored"]) for p in arm.driver.paths)
+    assert np.allclose(arm.driver.q, cfg.poses["home"])  # back out of the bin
+    assert arm.driver.gripper_cmds == [cfg.arm.gripper.open] * 2
 
 
 def test_look_is_a_no_op_when_already_there(arm):
