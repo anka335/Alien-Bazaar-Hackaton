@@ -12,10 +12,13 @@ class CameraConfig(BaseModel):
     width: int = 640  # color and depth (depth is aligned to color)
     height: int = 480
     fps: int = 30
-    warmup_frames: int = 30  # auto exposure settles, then it is locked
+    warmup_frames: int = 60  # auto exposure and white balance settle, then they are locked
     lock_exposure: bool = True  # lock auto exposure and white balance after warm-up
-    exposure_us: float | None = None  # a fixed exposure instead of the settled one
+    exposure: float | None = None  # a fixed exposure (x100 µs) instead of the settled one
+    gain: float | None = None  # a fixed gain (0-128) instead of the settled one
     white_balance_k: float | None = None  # a fixed white balance instead of the settled one
+    settle_frames: int = 5  # frames after an option change before the probe frame
+    lock_steps: int = 8  # bisection steps per locked option
     timeout_s: float = 2.0  # no frame for this long: CameraError
     start_attempts: int = 5  # macOS: the system camera driver sometimes wins the device, so retry
 

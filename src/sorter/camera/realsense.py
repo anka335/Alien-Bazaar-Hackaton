@@ -1,9 +1,10 @@
 """RealSenseCamera: the D435i on the wrist, through `pyrealsense2` (block 1).
 
 A capture thread keeps only the newest frame. Depth is aligned to color and converted to mm
-(Z along the optical axis). After warm-up, auto exposure and white balance are locked so colors
-stay comparable between frames. `fresh()` waits for a frame that arrived at least one frame
-period after the call, so its exposure started after the call.
+(Z along the optical axis). After warm-up, auto exposure and white balance are locked at what they
+settled on (found by search, see `lock.py`) so colors stay comparable between frames. `fresh()`
+waits for a frame that arrived at least one frame period after the call, so its exposure started
+after the call.
 
 Needs `uv sync --extra camera` (pyrealsense2; on macOS the pyrealsense2-macosx
 build, run as root: the macOS camera driver is stopped while the camera runs, see `macos.py`).
@@ -13,11 +14,13 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import math
 import threading
 import time
 
 import numpy as np
 
+from sorter.camera import lock
 from sorter.camera.config import CameraConfig
 from sorter.camera.macos import UvcAssistantFreeze
 from sorter.core.errors import CameraError
@@ -129,26 +132,83 @@ class RealSenseCamera:
     # --- capture ---
 
     def _warmup(self) -> None:
-        rs, cfg, s = self.rs, self.cfg, self._color_sensor
-        for _ in range(cfg.warmup_frames):
-            self._pipeline.wait_for_frames(int(cfg.timeout_s * 1000))
+        rs, cfg = self.rs, self.cfg
+        # The device keeps the manual mode of the last run, so the auto modes are turned on first.
+        self._set(rs.option.enable_auto_exposure, 1)
+        self._set(rs.option.enable_auto_white_balance, 1)
+        ref = self._color(cfg.warmup_frames)
         if not cfg.lock_exposure:
             return
-        for opt, fixed in (
-            (rs.option.exposure, cfg.exposure_us),
-            (rs.option.white_balance, cfg.white_balance_k),
-        ):
-            value = fixed if fixed is not None else s.get_option(opt)  # the settled value
-            auto = (
-                rs.option.enable_auto_exposure
-                if opt == rs.option.exposure
-                else (rs.option.enable_auto_white_balance)
-            )
-            if s.supports(auto):
-                s.set_option(auto, 0)
-            if s.supports(opt):
-                s.set_option(opt, value)
-        log.info("camera: exposure and white balance locked")
+        wb = self._lock(
+            rs.option.enable_auto_white_balance,
+            rs.option.white_balance,
+            cfg.white_balance_k,
+            lock.red_blue,
+            lock.red_blue(ref),
+            geometric=False,
+        )
+        self._set(rs.option.gain, cfg.gain if cfg.gain is not None else self._default_gain())
+        cap = self._range(rs.option.exposure)
+        cap = (cap[0], min(cap[1], 10000 / cfg.fps))  # 100 µs units, no longer than a frame
+        exposure = self._lock(
+            rs.option.enable_auto_exposure,
+            rs.option.exposure,
+            cfg.exposure,
+            lock.luma,
+            lock.luma(ref),
+            limits=cap,
+        )
+        gain = self._get(rs.option.gain)
+        if cfg.exposure is None and cfg.gain is None and exposure >= 0.95 * cap[1]:
+            # Too dark even at the longest exposure a frame allows: raise the gain too.
+            limits = (gain, self._range(rs.option.gain)[1])
+            gain = self._lock(None, rs.option.gain, None, lock.luma, lock.luma(ref), limits=limits)
+        log.info(
+            "camera: locked exposure %.0f (x100 µs), gain %.0f, white balance %.0f K",
+            exposure,
+            gain,
+            wb,
+        )
+
+    def _lock(self, auto, opt, fixed, measure, target, geometric=True, limits=None) -> float:
+        """Turn `auto` off, set `opt` to `fixed` or to where `measure` matches the auto frame."""
+        s = self._color_sensor
+        if auto is not None:
+            self._set(auto, 0)
+        if not s.supports(opt):
+            return math.nan
+        if fixed is None:
+            lo, hi = limits or self._range(opt)
+
+            def probe(v: float) -> float:
+                s.set_option(opt, round(v))  # integer options on the D435i color sensor
+                return measure(self._color(self.cfg.settle_frames))
+
+            fixed = lock.bisect(probe, max(lo, 1), hi, target, self.cfg.lock_steps, geometric)
+        s.set_option(opt, round(fixed))
+        return self._get(opt)
+
+    def _color(self, n: int) -> np.ndarray:
+        """The color image of the n-th next frame (earlier ones may predate an option change)."""
+        for _ in range(n - 1):
+            self._pipeline.wait_for_frames(int(self.cfg.timeout_s * 1000))
+        frames = self._pipeline.wait_for_frames(int(self.cfg.timeout_s * 1000))
+        return np.asanyarray(frames.get_color_frame().get_data()).copy()
+
+    def _set(self, opt, value: float) -> None:
+        if self._color_sensor.supports(opt):
+            self._color_sensor.set_option(opt, value)
+
+    def _get(self, opt) -> float:
+        s = self._color_sensor
+        return s.get_option(opt) if s.supports(opt) else math.nan
+
+    def _range(self, opt) -> tuple[float, float]:
+        r = self._color_sensor.get_option_range(opt)
+        return r.min, r.max
+
+    def _default_gain(self) -> float:
+        return self._color_sensor.get_option_range(self.rs.option.gain).default
 
     def _loop(self) -> None:
         while self._running.is_set():
