@@ -1,9 +1,10 @@
 """Sim scene: a table seen by the moving wrist camera, with crumpled clothes on it.
 
-The table (wood, a cardboard box, a gray mat, three bins) is rendered once into a top-down map,
-`K` px per mm. A frame is a crop of that map with the items pasted in, warped to the camera
-image. At a look pose the warp is exactly `ZoneView.to_px`, so sim vision and sim calibration
-(which use `ZoneView`) agree with the picture.
+The table (wood, a cardboard box, a gray mat, three bins; `sim.layout`) is rendered once into a
+top-down map, `K` px per mm. A frame is a crop of that map with the items pasted in, warped to
+the camera image, straight down from where FK puts the wrist camera. At a look pose the warp is
+exactly `ZoneView.to_px`, so sim vision and sim calibration (which use `ZoneView`) agree with
+the picture.
 """
 
 from __future__ import annotations
@@ -15,8 +16,8 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from sorter.core.types import ColorClass, Zone
-from sorter.sim.world import BIN_FLOOR_Z_MM, BIN_SIZE_MM, CamPose, SimItem, SimWorld
+from sorter.core.types import ColorClass
+from sorter.sim.world import CamPose, SimItem, SimWorld, rect_bounds
 
 K = 2.0  # map px per mm
 
@@ -26,10 +27,8 @@ _WOOD_BGR = (150, 183, 208)
 _MAT_BGR = (122, 124, 126)
 _CARDBOARD_BGR = (92, 140, 184)
 _BOX_RIM_BGR = (126, 172, 210)
-_BOX_WALL_MM = 14.0
-_BOX_WALL_H_MM = 130.0
+_BOX_WALL_MM = 10.0
 _BIN_RIM_MM = 12.0
-_BIN_WALL_H_MM = 220.0
 _BIN_RIM_BGR = {
     ColorClass.LIGHT: (234, 236, 236),
     ColorClass.DARK: (60, 58, 56),
@@ -182,18 +181,13 @@ class Scene:
         self.world = world
         cfg = world.cfg
         self.W, self.H = cfg.width, cfg.height
-        view = next(iter(world.views.values()))
-        self.f = view.cam_height_mm / view.mm_per_px  # focal length, px
-        x0, x1, y0, y1 = world.zones_extent()
-        half = BIN_SIZE_MM / 2
-        bx = [x for x, _ in world.bin_xy.values()]
-        by = [y for _, y in world.bin_xy.values()]
-        m = 90.0
-        self.X0, self.Y0 = min(x0, min(bx) - half) - m, min(y0, min(by) - half) - m
-        X1, Y1 = max(x1, max(bx) + half) + m, max(y1, max(by) + half) + m
-        self.shape = (round((Y1 - self.Y0) * K), round((X1 - self.X0) * K))
+        self.f = cfg.focal_px
+        x0, x1, y0, y1 = world.extent()
+        m = 120.0
+        self.X0, self.Y0 = x0 - m, y0 - m
+        self.shape = (round((y1 + m - self.Y0) * K), round((x1 + m - self.X0) * K))
         self.rng = np.random.default_rng(cfg.seed)
-        key = (cfg.seed, self.shape, repr(world.views), repr(world.bin_xy))
+        key = (cfg.seed, self.shape, repr(world.layout))
         if key not in _TABLES:
             _TABLES[key] = self._build_table()
         self.color, self.height = _TABLES[key]  # read-only: frames copy what they draw on
@@ -230,23 +224,21 @@ class Scene:
         img += rng.normal(0, 2, (h, w, 1)).astype(np.float32)
         height = np.zeros((h, w), np.float32)
 
-        # the gray mat under the background view
-        bg = self.world.views[Zone.BACKGROUND]
-        x0, y0 = bg.to_xy(0, 0)
-        x1, y1 = bg.to_xy(bg.width, bg.height)
-        mat = _rounded_rect_mask((h, w), *self._rect_px(x0 - 25, y0 - 25, x1 + 25, y1 + 25), 10 * K)
+        lay = self.world.layout
+        # the gray mat
+        x0, x1, y0, y1 = rect_bounds(lay.background)
+        mat = _rounded_rect_mask((h, w), *self._rect_px(x0, y0, x1, y1), 10 * K)
         _cast_shadow(img, mat, 2 * K, 3 * K, 3 * K, 0.35)
         felt = cv2.GaussianBlur(rng.normal(0, 6, (h, w)).astype(np.float32), (0, 0), 0.9)
         on = mat > 0
         img[on] = np.array(_MAT_BGR, np.float32) + felt[on, None]
-        height[on] = bg.surface_z_mm
+        height[on] = 0.0
 
-        # the cardboard box around the box view
-        box = self.world.views[Zone.BOX]
-        x0, y0 = box.to_xy(0, 0)
-        x1, y1 = box.to_xy(box.width, box.height)
-        inner = _rounded_rect_mask((h, w), *self._rect_px(x0 - 12, y0 - 12, x1 + 12, y1 + 12), 4)
-        t = 12 + _BOX_WALL_MM
+        # the cardboard box: `size_mm` is the inside
+        box = lay.box
+        x0, x1, y0, y1 = rect_bounds(box)
+        inner = _rounded_rect_mask((h, w), *self._rect_px(x0, y0, x1, y1), 4)
+        t = _BOX_WALL_MM
         outer = _rounded_rect_mask((h, w), *self._rect_px(x0 - t, y0 - t, x1 + t, y1 + t), 6)
         _cast_shadow(img, outer, 10 * K, 14 * K, 12 * K, 0.5)
         walls = (outer > 0) & (inner == 0)
@@ -257,11 +249,12 @@ class Scene:
             np.float32
         )
         img[on] = (floor * _inner_shade(inner, 45 * K, 0.55)[..., None])[on]
-        height[walls] = box.surface_z_mm + _BOX_WALL_H_MM
-        height[on] = box.surface_z_mm
+        height[walls] = box.floor_z_mm + box.wall_mm
+        height[on] = box.floor_z_mm
 
         # the bins
-        half = BIN_SIZE_MM / 2
+        bins = lay.bins
+        half = bins.size_mm / 2
         for color, (bx, by) in self.world.bin_xy.items():
             outer = _rounded_rect_mask(
                 (h, w), *self._rect_px(bx - half, by - half, bx + half, by + half), 18 * K
@@ -276,8 +269,8 @@ class Scene:
             img[walls] = rim
             on = inner > 0
             img[on] = (rim * 0.5 * _inner_shade(inner, 60 * K, 0.35)[..., None])[on]
-            height[walls] = BIN_FLOOR_Z_MM + _BIN_WALL_H_MM
-            height[on] = BIN_FLOOR_Z_MM
+            height[walls] = bins.floor_z_mm + bins.wall_mm
+            height[on] = bins.floor_z_mm
         return np.clip(img, 0, 255), height
 
     # --- items ---
@@ -298,26 +291,15 @@ class Scene:
     def _items(self) -> tuple[list[_ItemView], list[_ItemView]]:
         """Items on the table (lowest first) and in the gripper, read under the world lock."""
         out, held = [], []
-        in_bin: dict[ColorClass, int] = {}
-        surface = {z: v.surface_z_mm for z, v in self.world.views.items()}
         for it in self.world.items:
-            v = self._item_view(it, surface, in_bin)
+            v = self._item_view(it)
             (held if it.location == "gripper" else out).append(v)
         out.sort(key=lambda v: v.top_z)
         return out, held
 
-    def _item_view(self, it: SimItem, surface: dict[Zone, float], in_bin: dict) -> _ItemView:
-        x, y, top = it.x, it.y, 0.0
-        if it.location in ("box", "background"):
-            top = surface[Zone(it.location)] + it.height_mm
-        elif it.location == "bin" and it.bin is not None:
-            n = in_bin[it.bin] = in_bin.get(it.bin, 0) + 1
-            rng = np.random.default_rng((it.id, 7))
-            bx, by = self.world.bin_xy[it.bin]
-            spread = BIN_SIZE_MM / 2 - 50
-            x, y = bx + rng.uniform(-spread, spread), by + rng.uniform(-spread, spread)
-            top = BIN_FLOOR_Z_MM + 18 * n
-        return _ItemView(it.id, it.color, it.bgr, x, y, top)
+    def _item_view(self, it: SimItem) -> _ItemView:
+        top = 0.0 if it.location == "gripper" else self.world.top_z(it)
+        return _ItemView(it.id, it.color, it.bgr, it.x, it.y, top)
 
     # --- a frame ---
 
@@ -325,8 +307,8 @@ class Scene:
         """(color BGR uint8, depth uint16 mm) as the wrist camera sees it now."""
         now = time.monotonic() if now is None else now
         with self.world.lock:
-            pose = self.world.camera.pose(now)
-            before = self.world.camera.pose(now - 0.06)
+            before = self.world.camera_pose(now - 0.06)
+            pose = self.world.camera_pose(now)
             items, held = self._items()
         mpp = max(pose.z - pose.ref_z_mm, 20.0) / self.f
         color, height = self._view(pose, mpp, items)

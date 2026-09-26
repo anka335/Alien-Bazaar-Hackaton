@@ -1,35 +1,49 @@
 # Defaults for every section. Merge order: default.yaml → rig.yaml → hand_eye.yaml → local.yaml.
 # Each block owns its section (docs/architecture.md → Config). Put machine overrides in
-# config/local.yaml (gitignored), e.g. `backends: {camera: real}`.
+# config/local.yaml (gitignored), e.g. `backends: {camera: sim}`.
 
-# real | sim per component. Swap one at a time during integration.
+# real | sim per component. `run --sim` makes the hardware (camera, arm) sim; with the physics
+# engine only the hardware is simulated and the rest runs its real code on the rendered frames.
 backends:
-  camera: sim
-  arm: sim
-  calibration: sim
-  box_detector: sim
-  color_classifier: sim
+  camera: real
+  arm: real
+  calibration: real
+  box_detector: real
+  color_classifier: real
 
-# Simulator world (block 0).
+# Simulator world (block 0). The arm runs the real controller and kinematics (block 5).
 sim:
+  engine: physics    # physics: MuJoCo (arm dynamics, cloth, rendered RGB-D); kinematic: quick, for tests
+  realtime: 1.0      # physics: simulated seconds per wall second; 0 = as fast as the CPU allows
+  use_sam3: false    # physics: segment the background with the real SAM3 service, not the render
   seed: 0
   items: [light, dark, colored, colored, light, dark]  # in the box at start
-  miss_prob: 0.2     # a pick grabs nothing
+  miss_prob: 0.2     # a closed gripper holds nothing although it reached the cloth
   double_prob: 0.1   # a pick from the box grabs two items
-  motion_s: 0.8      # per path segment of an arm motion (a pick has 3), so the loop can be watched
+  time_scale: 0.5    # kinematic: arm motion time × this: 1 = the real arm's speed, 0 = instant
   vision_s: 0.4      # sim vision "thinking" time per frame
   width: 640
   height: 480
-  cam_height_mm: 400
-  item_radius_mm: 35
-  zones:             # what the camera sees from each look pose, arm frame, mm
-    box: {center_mm: [350, -200], width_mm: 300, surface_z_mm: 40}
-    background: {center_mm: [350, 150], width_mm: 300, surface_z_mm: 0}
+  focal_px: 615                   # D435i color at 640x480
+  camera_mount_mm: [-140, 0, 55]  # wrist camera in the TCP frame (x = approach), looks along x
+  item_radius_mm: 22             # items fit the 150 x 120 mat (the rig camera sees no bigger)
+  layout:            # the table, arm base at the origin, +x forward, +y left, mm
+    edge_x_mm: -70     # the table's back edge: the arm is clamped here, everything lies in front
+    box: {center_mm: [300, 0], size_mm: [140, 200], floor_z_mm: 5, wall_mm: 60}  # inside
+    background: {center_mm: [180, 210], size_mm: [150, 120]}                       # the gray mat
+    bins:
+      centers_mm: {light: [150, -330], dark: [380, -250], colored: [430, 220]}
+      size_mm: 180
+      wall_mm: 150
+      floor_z_mm: 5
 
 camera: {}           # block 1
 calibration: {}      # block 2
 box_detector:        # block 3
   avoid_radius_px: 30
+  wall_margin_mm: 45     # an open finger (arm.gripper.open) and its pad fit between grasp and wall
+  cloth_height_mm: 8
+  min_cloth_px: 1500
 color_classifier:    # block 4 (D-013)
   sam:                         # remote SAM3 segmentation service
     url: https://exes-shape-zoning.ngrok-free.dev
@@ -49,7 +63,14 @@ color_classifier:    # block 4 (D-013)
   grasp_inset_px: 15           # the re-grasp point is at least this far inside the blob
   grasp_depth_tol_mm: 5        # points this close to the highest count as the highest
   depth_window_px: 5           # window for the robust depth of the grasp point
-arm: {}              # block 5
+arm:                 # block 5 (D-019)
+  dry_run: false     # real backend: rebot_b601's simulated motors instead of the CAN bus
+  speed_scale: 0.5   # of rebot_b601's joint speeds (capped at 0.6)
+  safe_z_mm: 100     # recover() / shutdown() first lift the TCP to this height
+  z_min_mm: 3        # table clearance for every point of the arm
+  place_release_height_mm: 90   # TCP above the mat at place_bg (sim.layout tool)
+  bin_release_height_mm: 90     # TCP above the bin rim at bin_<color> (sim.layout tool)
+  gripper: {open: 0.6, empty_below: 0.01}   # 0.6: ~27 mm a finger, fits beside the box walls
 
 state_machine:       # block 6
   empty_confirmations: 2       # EMPTY box results in a row before DONE

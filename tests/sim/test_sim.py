@@ -1,24 +1,33 @@
 import threading
+import time
 
+import numpy as np
 import pytest
 
 from sorter.app import build_system
+from sorter.arm import kinematics as kin
 from sorter.core.errors import CalibrationError, EStopped, TargetRejected
-from sorter.core.types import ArmPoint, BoxStatus, GraspPoint, PixelPoint, Zone
+from sorter.core.types import ArmPoint, BoxStatus, ColorClass, GraspPoint, PixelPoint, Zone
 
 
 @pytest.fixture
 def system(sim_config):
-    return build_system(sim_config, sim=True)
+    system = build_system(sim_config, sim=True)
+    system.arm.start()
+    return system
 
 
 def test_observe_renders_the_zone(system):
     obs = system.observer.observe(Zone.BOX)
-    assert obs.zone is Zone.BOX and obs.T_base_cam is not None
+    view = system.world.views[Zone.BOX]
     cfg = system.cfg.sim
+    assert obs.zone is Zone.BOX and obs.T_base_cam is not None
+    assert obs.T_base_cam[2, 3] == pytest.approx(view.cam_z_mm)
+    assert obs.T_base_cam[2, 2] == pytest.approx(-1, abs=1e-3)  # looking straight down
     assert obs.frame.color.shape == (cfg.height, cfg.width, 3)
-    assert obs.frame.depth_mm.max() == cfg.cam_height_mm  # the box floor
-    assert obs.frame.depth_mm.min() < cfg.cam_height_mm  # items stick out
+    floor = view.cam_z_mm - cfg.layout.box.floor_z_mm
+    assert obs.frame.depth_mm[240, 320] <= round(floor)  # the box floor or a cloth on it
+    assert obs.frame.depth_mm.min() < floor - 10  # items stick out
 
 
 def test_fresh_frames_are_newer(system):
@@ -28,8 +37,9 @@ def test_fresh_frames_are_newer(system):
 
 def test_calibration_roundtrip(system):
     obs = system.observer.observe(Zone.BACKGROUND)
-    p = system.calibration.to_arm(obs, GraspPoint(PixelPoint(100, 50), 380.0))
-    assert p.z == pytest.approx(20.0)  # 380 mm below a camera 400 mm above the surface
+    cam_z = system.world.views[Zone.BACKGROUND].cam_z_mm
+    p = system.calibration.to_arm(obs, GraspPoint(PixelPoint(100, 50), 240.0))
+    assert p.z == pytest.approx(cam_z - 240.0)
     assert system.calibration.to_pixel(obs, p) == PixelPoint(100, 50)
     assert system.calibration.to_pixel(obs, ArmPoint(0, 0, 0)) is None
     with pytest.raises(CalibrationError):
@@ -45,17 +55,43 @@ def test_box_detection_and_pick(system):
     n_box = len(system.world.at("box"))
     result = system.arm.pick(system.calibration.to_arm(obs, box.grasp), Zone.BOX)
     assert not result.likely_empty
-    assert len(system.world.at("box")) == n_box - 1
+    assert len(system.world.at("box")) == n_box - 1 and len(system.world.at("gripper")) == 1
     # the grasped point is avoided on the next detection
     again = system.box_detector.detect(system.observer.observe(Zone.BOX).frame, [box.grasp.px])
     assert again.status is BoxStatus.GRASP and again.grasp.px != box.grasp.px
 
 
+def test_a_gripper_closing_above_the_cloth_catches_nothing(system):
+    it = max(system.world.at("box"), key=system.world.top_z)
+    top = system.world.top_z(it)
+    system.cfg.sim.miss_prob = 0.0
+    assert system.world.grasp((it.x, it.y, top + 30)) == []
+    assert system.world.grasp((it.x, it.y, top - 5)) != []
+
+
 def test_pick_outside_workspace_is_rejected_without_motion(system):
     system.arm.look(Zone.BOX)
-    with pytest.raises(TargetRejected):
+    q = system.arm.joints()
+    with pytest.raises(TargetRejected, match="outside"):
         system.arm.pick(ArmPoint(0, 0, 0), Zone.BOX)
+    with pytest.raises(TargetRejected, match="not reachable"):  # inside, but far too high
+        system.arm.pick(ArmPoint(255, 0, 500), Zone.BOX)
+    assert system.arm.joints() == q
     assert system.world.looking_at is Zone.BOX
+
+
+def test_released_items_land_on_what_is_below(system):
+    world = system.world
+    a, b = world.items[:2]
+    a.location = "gripper"
+    world.release((600.0, 0.0, 100.0))  # beyond the mat: the bare table
+    assert a.location == "table"
+    a.location = "gripper"
+    system.arm.drop_to_bin(ColorClass.DARK)
+    assert a.location == "bin" and a.bin is ColorClass.DARK
+    b.location = "gripper"
+    system.arm.place_on_background()
+    assert b.location == "background"
 
 
 def test_hold_blocks_motion_until_recover(system):
@@ -67,25 +103,44 @@ def test_hold_blocks_motion_until_recover(system):
 
 
 def test_hold_interrupts_a_motion(system):
-    system.cfg.sim.motion_s = 5.0
-    threading.Timer(0.05, system.arm.hold).start()
+    system.cfg.sim.time_scale = 1.0  # the real arm's speed: rest → home takes seconds
+    threading.Timer(0.2, system.arm.hold).start()
+    t0 = time.monotonic()
     with pytest.raises(EStopped):
         system.arm.home()
+    assert time.monotonic() - t0 < 1.0
+    q = np.array(system.arm.joints())
+    assert not np.allclose(q, 0) and not np.allclose(q, system.cfg.poses["home"])
+    time.sleep(0.1)
+    assert np.allclose(system.arm.joints(), q)  # frozen where it was
+
+
+def test_motions_take_the_real_arms_time_times_the_scale(system):
+    system.cfg.sim.time_scale = 0.05
+    wps = np.array([system.arm.joints(), system.cfg.poses["home"]])
+    expected = kin.path_duration(wps, system.cfg.arm.speed_scale) * 0.05
+    t0 = time.monotonic()
+    system.arm.home()
+    assert time.monotonic() - t0 == pytest.approx(expected, rel=0.3, abs=0.02)
 
 
 def test_start_refills_the_box_when_everything_is_sorted(system):
     world = system.world
     for it in world.items:
         it.location, it.bin = "bin", it.color
+    world.items[0].location, world.items[0].bin = "table", None  # dropped next to a bin
     system.arm.start()
     assert all(it.location == "box" and it.bin is None for it in world.items)
 
 
 def test_camera_follows_the_arm(system):
+    world = system.world
     system.arm.look(Zone.BACKGROUND)
-    pose = system.world.camera.pose()
-    view = system.world.views[Zone.BACKGROUND]
-    assert (pose.x, pose.y, pose.z) == (*view.center_mm, view.cam_z_mm)
-    system.arm.drop_to_bin(system.world.items[0].color)
-    pose = system.world.camera.pose()
-    assert (pose.x, pose.y) == system.world.bin_xy[system.world.items[0].color]
+    pose = world.camera_pose()
+    view = world.views[Zone.BACKGROUND]
+    assert (pose.x, pose.y, pose.z) == pytest.approx((*view.center_mm, view.cam_z_mm))
+    assert view.center_mm == pytest.approx(system.cfg.sim.layout.background.center_mm, abs=1)
+    system.arm.drop_to_bin(ColorClass.LIGHT)  # ends back at home
+    assert world.looking_at is None
+    x, y, z = world.tcp()
+    assert np.allclose((x, y, z), kin.fk_tcp(system.cfg.poses["home"])[:3, 3], atol=1)

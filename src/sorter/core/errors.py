@@ -23,3 +23,7 @@ class TargetRejected(ArmError):
 
 class EStopped(ArmError):
     """The arm is held. Every motion raises this until recover()."""
+
+
+class WrongMode(SorterError):
+    """The request needs another operator mode, or the mode can't change now."""

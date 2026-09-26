@@ -72,7 +72,8 @@ HOME_DEG = np.zeros(6)
 
 # Peak joint speed at speed_scale=1 [deg/s]; the actual speed is this times
 # the requested scale (which is itself capped by MAX_SPEED_SCALE).
-JOINT_SPEED_DPS = np.array([40.0, 30.0, 30.0, 60.0, 60.0, 90.0])
+# joint6 at 40, not 90: on the rig it lagged ~20 deg behind at 45 deg/s (the wrist camera cable)
+JOINT_SPEED_DPS = np.array([40.0, 30.0, 30.0, 60.0, 60.0, 40.0])
 DEFAULT_SPEED_SCALE = _env_float("REBOT_DEFAULT_SPEED", 0.3)
 MAX_SPEED_SCALE = _env_float("REBOT_MAX_SPEED", 0.6)
 MIN_MOVE_TIME_S = 0.4

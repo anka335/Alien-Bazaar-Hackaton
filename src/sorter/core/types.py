@@ -189,6 +189,14 @@ class Command(StrEnum):
 Mode = Literal["idle", "running", "paused"]
 
 
+class OperatorMode(StrEnum):
+    """Who drives the arm (the dashboard's mode switch): the state machine, or a person."""
+
+    AUTO = "auto"  # the state machine; Start/Pause/… work
+    MANUAL = "manual"  # the manual control tab: poses, jog, gripper
+    CALIBRATE = "calibrate"  # the camera calibration tab
+
+
 @dataclass(frozen=True)
 class Event:
     t: float  # monotonic

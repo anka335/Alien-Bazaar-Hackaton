@@ -7,12 +7,28 @@ readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "fastapi>=0.110",
+    "mujoco>=3.14.0",
     "numpy>=1.26",
     "opencv-python-headless>=4.9",
     "pydantic>=2.7",
     "pyyaml>=6.0",
+    "rebot-b601",
     "uvicorn>=0.29",
     "websockets>=12",
+]
+
+[tool.uv.sources]
+# the arm kinematics, planner and driver (D-019); `uv sync --extra hardware` adds the motor bus
+rebot-b601 = { path = "rebot_b601", editable = true }
+
+[project.optional-dependencies]
+hardware = ["rebot-b601[hardware]"]
+# the official RealSense wheels are Linux / Windows only; macOS uses a community build that installs
+# the same `pyrealsense2` module (run as root to take the camera from macOS). 2.56.5 segfaults opening
+# the D435i IMU on macOS 26, so 2.54.2 is pinned.
+camera = [
+    "pyrealsense2>=2.55; sys_platform == 'linux' or sys_platform == 'win32'",
+    "pyrealsense2-macosx==2.54.2; sys_platform == 'darwin'",
 ]
 
 [project.scripts]

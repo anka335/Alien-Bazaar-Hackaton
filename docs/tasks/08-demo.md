@@ -38,3 +38,4 @@ A demo that works on stage, and a backup if it doesn't.
 - 2026-09-25: runbook covers the touch test and HOLD instead of full recalibration and e-stop (D-006, D-009).
 - 2026-09-25 (block 7): Space or Esc on the dashboard also sends HOLD; `/snapshot/decision.jpg` saves the current decision frame (e.g. for backup material).
 - 2026-09-25 (block 4): the real color classifier needs network access to the SAM3 service and its API key in `config/local.yaml` (D-013). Check both before the demo; SAM3 prompt and threshold are validated on the demo clothes.
+- 2026-09-26 (block 5): build the table to `sim.layout` (README → Table layout, D-020): the arm reaches the tray and the mat only with that geometry. The dashboard's 3D view shows the arm and the table, useful for the audience and for rehearsing on the simulator.

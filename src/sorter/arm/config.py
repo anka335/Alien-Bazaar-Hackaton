@@ -1,15 +1,50 @@
-"""Config models for block 5 (arm, poses, zones). Placeholder from block 0: block 5 fills it in."""
+"""Config models for block 5 (arm, poses, zones)."""
 
-from pydantic import BaseModel, ConfigDict
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+POSE_NAMES = (
+    "rest",
+    "home",
+    "look_box",
+    "look_bg",
+    "place_bg",
+    "bin_light",
+    "bin_dark",
+    "bin_colored",
+)
+
+
+class GripperConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    open: float = 1.0  # opening before a grasp and at a release, 0 = closed .. 1 = open
+    empty_below: float = 0.01  # a closed gripper opening below this → `likely_empty`
 
 
 class ArmConfig(BaseModel):
-    """`arm`: SDK config path, speeds, tcp_offset_mm, grasp_rpy_deg, safe_z_mm, gripper, ..."""
+    """`arm`: driver, speed, pick geometry, gripper."""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = False  # real backend: rebot_b601's simulated motors instead of the CAN bus
+    speed_scale: float = 0.5  # of rebot_b601's joint speeds; the driver caps it at 0.6
+    approach: Literal["down"] = "down"  # tool orientation for a pick
+    safe_z_mm: float = 100.0  # recover() / shutdown() lift the TCP to this height first
+    z_min_mm: float = 3.0  # table clearance: no point of the arm goes lower
+    place_release_height_mm: float = 90.0  # TCP above the background at `place_bg`
+    bin_release_height_mm: float = 90.0  # TCP above the bin rim at `bin_<color>`
+    gripper: GripperConfig = Field(default_factory=GripperConfig)
 
 
 class ZoneConfig(BaseModel):
-    """`zones.<zone>`: workspace_mm, z_floor_mm, grasp_depth_mm, approach_mm."""
+    """`zones.<zone>`: where a pick is allowed and how deep it goes."""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_mm: list[tuple[float, float]]  # XY polygon, arm frame
+    z_floor_mm: float  # the grasp never goes lower (box floor / mat)
+    grasp_depth_mm: float = 15.0  # below the cloth surface
+    approach_mm: float = 40.0  # above the cloth surface before descending
+    lift_z_mm: float = 100.0  # TCP height after the pick (the box needs to clear its wall)
