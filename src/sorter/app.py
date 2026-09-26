@@ -119,7 +119,7 @@ def _physics_classifier(cfg: Config, parts: dict):
 _PHYSICS_RIG = {"calibration": _physics_calibration, "color_classifier": _physics_classifier}
 
 
-def _serve(system: System, manual=None):
+def _serve(system: System, manual=None, calibrate=None):
     """Start the dashboard's web server in a thread; returns the uvicorn server."""
     import uvicorn
 
@@ -128,7 +128,7 @@ def _serve(system: System, manual=None):
     d = system.cfg.dashboard
     server = uvicorn.Server(
         uvicorn.Config(
-            create_app(system.hub, d, views=system.cfg.views, manual=manual),
+            create_app(system.hub, d, views=system.cfg.views, manual=manual, calibrate=calibrate),
             host=d.host,
             port=d.port,
             log_level="warning",
@@ -200,9 +200,12 @@ def _nominal_hand_eye(cfg: Config) -> Config:
 def run_manual(cfg: Config, *, sim: bool = False, rig_file: Path) -> None:
     """Setup mode: the camera, the arm and the manual control page, no state machine. The arm
     only moves on a button press. Ctrl+C → hold → rest pose → motors off."""
+    from sorter.dashboard.calibrate import CalibrateControl
     from sorter.dashboard.manual import ManualControl
 
-    if not sim and cfg.calibration.hand_eye is None:
+    if sim:  # the tape marks of the calibration page lie on the simulated mat
+        cfg = cfg.model_copy(update={"sim": cfg.sim.model_copy(update={"marks": True})})
+    elif cfg.calibration.hand_eye is None:
         cfg = _nominal_hand_eye(cfg)
     system = build_system(cfg, sim=sim)
     logging.getLogger("sorter").addHandler(HubLogHandler(system.hub))
@@ -210,7 +213,25 @@ def run_manual(cfg: Config, *, sim: bool = False, rig_file: Path) -> None:
     system.camera.start()
     system.arm.start()
     manual = ManualControl(system.arm, rig_file, system.cfg.arm.gripper.open)
-    server = _serve(system, manual)
+    # on the sim the result goes next to the board tool's sim check, and is compared to the
+    # true mount; the real one is config/hand_eye.yaml
+    true_mount = None
+    if sim and system.cfg.sim.engine == "physics":
+        from sorter.sim.physics.backend import hand_eye
+
+        true_mount = hand_eye(system.cfg)
+    calibrate = CalibrateControl(
+        manual,
+        system.camera,
+        system.calibration,
+        system.cfg,
+        Path("data/hand_eye_sim.yaml") if sim else rig_file.parent / "hand_eye.yaml",
+        true_mount,
+        fixed_marks=sim,
+        marks_file=Path("data/calibration_marks.yaml"),
+        dump_dir=None if sim else Path("data/calibrate"),
+    )
+    server = _serve(system, manual, calibrate)
     try:
         while server.thread.is_alive():  # it exits if it can't bind the port
             server.thread.join(0.5)

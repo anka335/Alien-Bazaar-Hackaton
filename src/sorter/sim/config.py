@@ -72,6 +72,7 @@ class SimConfig(BaseModel):
     engine: Literal["physics", "kinematic"] = "kinematic"
     realtime: float = 1.0  # physics: simulated seconds per wall second; 0 = as fast as possible
     board: bool = False  # physics: a ChArUco board lies on the mat (hand-eye calibration)
+    marks: bool = False  # physics: tape marks on the mat (the /calibrate page; on in setup mode)
     use_sam3: bool = False  # physics: the real SAM3 service segments the rendered frames
     seed: int = 0
     items: list[ColorClass] = Field(

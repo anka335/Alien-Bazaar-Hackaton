@@ -202,6 +202,18 @@ class Controller:
         self._check_held()
         self._run(kin.plan_joints(self.driver.joints(), q, z_min_mm=self.cfg.z_min_mm))
 
+    def move_tcp(self, xyz_mm: Sequence[float], *, linear: bool = False) -> None:
+        """TCP to `xyz_mm` with the gripper pointing down (the calibration page).
+        TargetRejected if IK or the path check fails; nothing moves then."""
+        self._check_held()
+        q0 = self.driver.joints()
+        self._run(kin.plan_to(q0, xyz_mm, "down", linear=linear, z_min_mm=self.cfg.z_min_mm))
+
+    def lift(self) -> None:
+        """Straight up to `safe_z_mm` if lower, keeping the tool orientation. Best effort."""
+        self._check_held()
+        self._lift()
+
     def set_gripper(self, opening: float) -> float:
         return self._gripper(opening)
 

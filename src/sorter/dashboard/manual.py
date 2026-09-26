@@ -81,6 +81,15 @@ class ManualControl:
             self._action, self._error = None, error
             self._last = label if error is None else self._last
 
+    def run(self, label: str, fn: Callable[[], None]) -> None:
+        """Run a motion of another page (the calibration page) the same way: one at a time."""
+        self._submit(label, fn)
+
+    @property
+    def busy(self) -> bool:
+        with self._lock:
+            return self._action is not None
+
     def wait(self, timeout_s: float = 30.0) -> None:
         """Block until no motion runs (tests)."""
         for t in [t for t in threading.enumerate() if t.name == "manual"]:

@@ -17,6 +17,7 @@ A live view that makes the demo understandable to the audience and gives the ope
 - [x] Controls: start / pause / resume / step / stop / reset, and a big, always visible **HOLD** button.
 - [x] Recent events and the error, if any.
 - [x] Works on the simulator before hardware is ready.
+- [x] Camera calibration page (`/calibrate`, setup mode, D-021): tape marks, clicks on the live image with an overlay, the camera mount, look poses and ROIs into `rig.yaml`.
 - [x] 3D view (`/twin`, three.js, the arm's CAD meshes from `rebot_b601`): the arm posed from FK, the table layout, pick workspaces, the clothes (sim), and what the wrist camera sees. The main screen switches between it and the decision frame.
 - [ ] Optional: a fixed scene webcam for the audience (`dashboard.scene_camera`), since the wrist feed moves.
 
@@ -59,3 +60,4 @@ _None yet._
 - 2026-09-26 (Softjey + Claude): setup mode (D-018): `/manual` page, `GET/POST /api/manual`, `create_app(..., manual=)`, `sorter/dashboard/manual.py` (`ManualControl`); `/` redirects to `/manual` in that mode.
 - 2026-09-26 (Softjey + Claude): `/api/manual` state has `fault`, new action `clear_fault` (D-020); the page shows a fault banner with Clear fault. The page switcher greys out the page of the mode that isn't running.
 - 2026-09-26 (block 5): 3D view added. Contract changes: `Hub(..., twin=)` / `hub.twin()` (`TwinSource`), new endpoints `/twin`, `/api/twin/layout`, `/api/twin/state`, `/twin-assets/...` (architecture.md → Dashboard HTTP API).
+- 2026-09-26 (Softjey + Claude): `/calibrate` page and `GET/POST /api/calibrate` (D-021); `create_app(..., calibrate=CalibrateControl)`; `ManualControl.run()` / `.busy` let other pages run motions through it.

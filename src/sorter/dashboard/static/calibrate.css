@@ -1,0 +1,123 @@
+/* Camera calibration page: on top of style.css and manual.css. */
+
+.calibrate .views { grid-template-rows: minmax(0, 3fr) minmax(0, 1.4fr); }
+
+/* the overlay covers the image exactly: same box, same "contain" letterboxing */
+.overlay {
+  position: absolute;
+  inset: 10px;
+  width: calc(100% - 20px);
+  height: calc(100% - 20px);
+  cursor: crosshair;
+  overflow: hidden;
+}
+.overlay[data-disabled] { cursor: progress; }
+.overlay .zone { fill: none; stroke: var(--water); stroke-width: 2; stroke-dasharray: 8 6; opacity: 0.8; }
+.overlay .mark circle { fill: none; stroke: var(--amber); stroke-width: 2; }
+.overlay .mark text, .overlay .click text {
+  fill: var(--amber);
+  font: 700 15px system-ui, sans-serif;
+  paint-order: stroke;
+  stroke: rgb(11 17 24 / 0.8);
+  stroke-width: 3px;
+}
+.overlay .mark.picked circle { stroke: #fff; stroke-width: 3; }
+.overlay .mark.picked text { fill: #fff; }
+.overlay .mark.done circle { stroke-dasharray: 3 4; opacity: 0.7; }
+.overlay .click path { stroke: #7cf29a; stroke-width: 2.5; }
+
+.legend {
+  position: absolute;
+  right: 22px;
+  bottom: 18px;
+  margin: 0;
+  padding: 0.2em 0.8em;
+  border-radius: 999px;
+  background: rgb(15 24 35 / 0.72);
+  color: var(--lcd-dim);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+.legend:empty { display: none; }
+
+/* the wizard: a step bar, one card at a time */
+.stepper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0.3rem;
+  border-radius: 999px;
+  background: var(--glass);
+  list-style: none;
+}
+.deck .stepper button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.3rem;
+  background: transparent;
+  box-shadow: none;
+  color: var(--lcd-dim);
+  font-size: 0.88rem;
+}
+.stepper b {
+  display: grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: var(--glass-line);
+  color: var(--lcd);
+  font-size: 0.8rem;
+}
+.deck .stepper button[aria-current] { background: var(--glass-2); color: var(--lcd); }
+.stepper button[aria-current] b { background: var(--water); color: var(--glass); }
+
+.count { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.task { margin: 0.4rem 0 0.6rem; font-size: 1.05rem; font-weight: 600; color: var(--ink); }
+.foot { justify-content: space-between; margin-top: 0.8rem; padding-top: 0.7rem; border-top: 1px solid var(--line); }
+.deck button.big { flex: 1; padding: 0.8rem 1rem; font-size: 1.15rem; }
+
+#map { display: block; width: 100%; max-height: 170px; }
+.map-card[hidden] { display: none; }
+#map .mat { fill: #7c7c7a; opacity: 0.35; }
+#map .arm { fill: var(--muted); font: 600 12px system-ui, sans-serif; text-anchor: middle; }
+#map .map-mark { cursor: pointer; }
+#map .map-mark text { fill: var(--ink); font: 700 12px system-ui, sans-serif; text-anchor: middle; }
+#map .map-mark rect { fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 2 2; }
+#map .map-mark.placed rect { fill: var(--ink); stroke: none; }
+#map .map-mark.picked rect { fill: var(--water); stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: none; }
+
+#clicked { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.6rem; }
+#clicked span { padding: 0.1em 0.6em; border-radius: 999px; background: rgb(29 138 74 / 0.12); color: #1d8a4a; font-weight: 600; font-size: 0.85rem; }
+
+.clicks-box { margin-top: 0.4rem; font-size: 0.88rem; }
+.clicks-box summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+.clicks {
+  display: grid;
+  gap: 0.2rem;
+  max-height: 9.5rem;
+  overflow-y: auto;
+  margin: 0.45rem 0;
+  padding: 0;
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+.clicks li { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; color: var(--muted); }
+.clicks li[data-here] { color: var(--ink); font-weight: 600; }
+.deck .clicks button { padding: 0.05rem 0.55rem; font-size: 1rem; line-height: 1.2; }
+
+.fit { margin: 0.55rem 0; font-size: 0.9rem; }
+.fit.big { font-size: 1rem; font-weight: 600; }
+.fit[data-quality="good"] { color: #1d8a4a; }
+.fit[data-quality="ok"] { color: #a86a0c; }
+.fit[data-quality="bad"] { color: var(--red); }
+
+.look { width: 100%; margin: 0.55rem 0; border-collapse: collapse; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+.look th { text-align: left; color: var(--muted); font-weight: 600; padding: 0 0.3rem 0.2rem 0; }
+.look td { padding: 0.2rem 0.3rem 0.2rem 0; }
+.look tr[data-warn] td:nth-child(4) { color: var(--red); font-weight: 600; }
+.deck .look button { padding: 0.25rem 0.6rem; font-size: 0.82rem; }

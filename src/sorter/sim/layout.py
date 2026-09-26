@@ -14,6 +14,7 @@ import argparse
 import itertools
 import math
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -52,14 +53,14 @@ def _rect_polygon(r: RectConfig, margin: float) -> list[tuple[float, float]]:
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
 
 
-def _roll_error(q: np.ndarray) -> float:
-    """Angle of the image u axis (TCP y) from the arm's x axis, folded to [-pi/2, pi/2]."""
-    R = kin.fk_tcp(q)[:3, :3]
-    a = math.atan2(R[1, 1], R[0, 1])
+def _roll_error(q: np.ndarray, T_tcp_cam: np.ndarray) -> float:
+    """Angle of the image u axis from the arm's x axis, folded to [-pi/2, pi/2]."""
+    u = (kin.fk_tcp(q) @ T_tcp_cam)[:3, 0]
+    a = math.atan2(u[1], u[0])
     return (a + math.pi / 2) % math.pi - math.pi / 2
 
 
-def _square_up(q: np.ndarray, prefer: float | None = None) -> np.ndarray:
+def _square_up(q: np.ndarray, T_tcp_cam: np.ndarray, prefer: float | None = None) -> np.ndarray:
     """Turn the wrist (joint 6 turns about the approach axis) so the image's long side runs
     along the arm's x axis, like the long sides of the box and the mat. Of the two ways, the one
     nearest `prefer` (joint 6, rad), so the off-axis camera doesn't jump sides."""
@@ -69,10 +70,48 @@ def _square_up(q: np.ndarray, prefer: float | None = None) -> np.ndarray:
     for k in (-1, 0, 1):
         for sign in (1, -1):
             c = q.copy()
-            c[5] = q[5] + sign * _roll_error(q) + k * math.pi
+            c[5] = q[5] + sign * _roll_error(q, T_tcp_cam) + k * math.pi
             if lo <= c[5] <= hi:
-                cands.append((round(abs(_roll_error(c)), 4), abs(c[5] - prefer), c))
+                cands.append((round(abs(_roll_error(c, T_tcp_cam)), 4), abs(c[5] - prefer), c))
     return min(cands, key=lambda t: t[:2])[2] if cands else q
+
+
+def axis_hit(T_base_cam: np.ndarray, z_mm: float) -> np.ndarray | None:
+    """Where the camera's optical axis meets the plane z = `z_mm` (x, y), or None."""
+    o, d = T_base_cam[:3, 3], T_base_cam[:3, 2]
+    if d[2] > -0.1:  # not looking down
+        return None
+    return (o + d * (z_mm - o[2]) / d[2])[:2]
+
+
+def camera_over(
+    arm: ArmConfig,
+    center: Sequence[float],
+    tcp_z: float,
+    T_tcp_cam: np.ndarray,
+    surface_z: float = 0.0,
+) -> np.ndarray | None:
+    """Joints with the gripper vertical, the TCP at `tcp_z`, and the camera's optical axis
+    through `center` on the surface at `surface_z`, the image long side along the arm's x axis.
+    None if the arm can't."""
+    target = np.array([*center, tcp_z], dtype=float)
+    q = _seed(*center)
+    roll = None
+    # the camera sits off the TCP: shift the TCP until the camera is centered
+    for _ in range(10):
+        q = kin.solve(target, "down", q, arm.z_min_mm)
+        if q is None:
+            return None
+        q = _square_up(q, T_tcp_cam, roll)
+        roll = q[5]
+        hit = axis_hit(kin.fk_tcp(q) @ T_tcp_cam, surface_z)
+        if hit is None:
+            return None
+        err = np.asarray(center, dtype=float) - hit
+        if np.hypot(*err) < 0.5 and abs(_roll_error(q, T_tcp_cam)) < math.radians(0.5):
+            return q
+        target[:2] += err
+    return None
 
 
 def look_pose(sim: SimConfig, arm: ArmConfig, center: tuple[float, float]) -> np.ndarray:
@@ -80,21 +119,9 @@ def look_pose(sim: SimConfig, arm: ArmConfig, center: tuple[float, float]) -> np
     long side along the arm's x axis."""
     T_tcp_cam = camera_mount(sim)
     for tcp_z in range(LOOK_TCP_Z_MM[0], LOOK_TCP_Z_MM[1] - 1, -5):
-        target = np.array([*center, tcp_z], dtype=float)
-        q = _seed(*center)
-        roll = None
-        # the camera sits off the TCP: shift the TCP until the camera is centered
-        for _ in range(10):
-            q = kin.solve(target, "down", q, arm.z_min_mm)
-            if q is None:
-                break
-            q = _square_up(q, roll)
-            roll = q[5]
-            cam = (kin.fk_tcp(q) @ T_tcp_cam)[:3, 3]
-            err = np.array(center) - cam[:2]
-            if np.hypot(*err) < 0.5 and abs(_roll_error(q)) < math.radians(0.5):
-                return q
-            target[:2] += err
+        q = camera_over(arm, center, tcp_z, T_tcp_cam)
+        if q is not None:
+            return q
     raise SystemExit(f"no look pose puts the camera straight down over {center}")
 
 

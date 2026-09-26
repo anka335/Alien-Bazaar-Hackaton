@@ -24,8 +24,10 @@ from pydantic import BaseModel
 from rebot_b601.assets import ASSETS_DIR as TWIN_ASSETS_DIR
 
 from sorter.camera.config import ViewConfig
+from sorter.core.errors import SorterError
 from sorter.core.hub import Hub
 from sorter.core.types import Command, Decision, Status, Zone
+from sorter.dashboard.calibrate import CalibrateControl
 from sorter.dashboard.config import DashboardConfig
 from sorter.dashboard.manual import Busy, ManualControl
 from sorter.dashboard.render import PHASE_LABELS, encode_jpeg, placeholder, render_decision
@@ -44,6 +46,17 @@ class ManualRequest(BaseModel):
     joint: int | None = None  # 0..5
     delta_deg: float = 0.0
     open: bool = True
+
+
+class CalibrateRequest(BaseModel):
+    # goto_mark | goto_view | detect | click | delete_click | clear_clicks | save_mount
+    # | compute_look | goto_look | save_look | calibrate (save_mount + compute_look + save_look)
+    action: str
+    mark: str | None = None
+    u: float = 0.0
+    v: float = 0.0
+    index: int = 0  # a view or a click
+    pose: str | None = None
 
 
 def status_json(s: Status) -> dict[str, Any]:
@@ -99,9 +112,11 @@ def create_app(
     cfg: DashboardConfig,
     views: Mapping[Zone, ViewConfig] | None = None,
     manual: ManualControl | None = None,
+    calibrate: CalibrateControl | None = None,
 ) -> FastAPI:
     """`views` gives the zone ROIs drawn on the decision frame (`cfg.views`). `manual`: the
-    setup mode (`python -m sorter manual`), where `/` opens the manual control page."""
+    setup mode (`python -m sorter manual`), where `/` opens the manual control page;
+    `calibrate`: its camera calibration page."""
     app = FastAPI(title="Sorter")
     rois = {z: list(v.roi) for z, v in (views or {}).items()}
     frames = Frames(hub, cfg, rois)
@@ -158,6 +173,55 @@ def create_app(
         except (ValueError, OSError) as e:
             raise HTTPException(400, str(e)) from None
         return {"ok": True}
+
+    @app.get("/calibrate", response_class=HTMLResponse)
+    def calibrate_page() -> str:
+        return (STATIC_DIR / "calibrate.html").read_text()
+
+    def calibrate_source() -> CalibrateControl:
+        if calibrate is None:
+            raise HTTPException(404, "calibration is off; start with `python -m sorter manual`")
+        return calibrate
+
+    @app.get("/api/calibrate")
+    def calibrate_state() -> dict:
+        return calibrate_source().state()
+
+    @app.post("/api/calibrate")
+    def calibrate_action(req: CalibrateRequest) -> dict:
+        c = calibrate_source()
+        out: dict[str, Any] = {"ok": True}
+        try:
+            match req.action:
+                case "goto_mark":
+                    c.goto_mark(req.mark or "")
+                case "goto_view":
+                    c.goto_view(req.index)
+                case "click":
+                    c.click(req.mark or "", req.u, req.v)
+                case "delete_click":
+                    c.delete_click(req.index)
+                case "clear_clicks":
+                    c.clear_clicks()
+                case "save_mount":
+                    out["file"] = c.save_mount()
+                case "compute_look":
+                    c.compute_look()
+                case "goto_look":
+                    c.goto_look(req.pose or "")
+                case "save_look":
+                    out["lines"] = c.save_look()
+                case "calibrate":
+                    out |= c.calibrate()
+                case "detect":
+                    out["marks"] = c.detect()
+                case _:
+                    raise HTTPException(400, f"unknown action {req.action!r}")
+        except Busy as e:
+            raise HTTPException(409, str(e)) from None
+        except (ValueError, OSError, SorterError) as e:
+            raise HTTPException(400, str(e)) from None
+        return out
 
     @app.get("/twin", response_class=HTMLResponse)
     def twin_page() -> str:

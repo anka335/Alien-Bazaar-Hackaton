@@ -28,6 +28,9 @@ Convert camera observations into arm coordinates accurately enough to grasp clot
 ## Notes & risks
 
 - The error budget includes FK accuracy, hand-eye accuracy, and depth noise. Depth error grows with distance, so the look poses should be as low as the camera's minimum range allows.
+- The calibration page (`/calibrate`, D-021) is the way without a board: tape marks, clicks, a rigid fit (`sorter.calibration.marks`). The marks lie on the mat plane, so clicks from 2–3 different views are needed for a good rotation.
+- A poor fit on `/calibrate`: the page also shows each view's RMSE without the arm FK (`view_rmse`). Large in one view: a wrong label, bad depth on the tape or a tape off its spot; small in every view while the fit is poor: the FK pose differs between views (joint offsets, backlash). On the rig every clicked/detected frame (png, depth .npy, joints) and `clicks.json` go to `data/calibrate/<start time>/`.
+- On the rig the camera is turned ~135° about its optical axis from the sim's nominal mount (`sim.camera_mount_mm` and `camera_mount()` assume the image x along the TCP y): the circles of an uncalibrated overlay are rotated. The calibration finds any turn.
 - Only a change of the camera mount invalidates the hand-eye result. Moving the rig doesn't, as long as the zones stay at their positions.
 
 ## Open questions
@@ -44,3 +47,4 @@ _None yet._
 - 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/calibration/config.py` (placeholder). Real backend: `sorter/calibration/backend.py` → `create(cfg) -> Calibration`. See architecture.md → Wiring.
 - 2026-09-26 (block 5): the flange that `ee_pose()` returns is the URDF `link6` frame; FK in mm is `sorter.arm.kinematics.fk_flange(q)` (on `rebot_b601`, D-014). Compute the hand-eye result against it. The sim calibration now applies the sim camera mount in `cam_pose`.
 - 2026-09-26 (Softjey + Claude): real backend `HandEyeCalibration` and the hand-eye tool. `--sim` runs it on the physics simulator with a rendered board and reports the error against the true mount. On the physics sim the calibration uses the exact sim mount, not `hand_eye.yaml`. Not yet run on the rig.
+- 2026-09-26 (Softjey + Claude): hand-eye from tape marks on the `/calibrate` page (D-021): `sorter.calibration.marks` (marks, `deproject`, `fit_mount` Kabsch, `project`); config key `calibration.marks_z_mm`. Result format unchanged (`method: marks (...)`).

@@ -25,3 +25,4 @@ class CalibrationConfig(BaseModel):
     poses: int = Field(default=14, ge=4)  # views of the board the tool collects
     tilt_deg: float = 12.0  # how far the tool tilts the camera between views
     shift_mm: float = 30.0  # how far it moves the camera sideways
+    marks_z_mm: float = 1.0  # the /calibrate page: the mat top, where the tape marks lie

@@ -1,4 +1,4 @@
-// Page switcher (Dashboard / Manual / Twin), pinned to the bottom-left corner. Skipped inside
+// Page switcher (Dashboard / Manual / Calibrate / Twin), pinned to the bottom-left corner. Skipped inside
 // an iframe, e.g. the twin embedded in the dashboard.
 // One server runs either the sorter (`python -m sorter run`) or manual control (`… manual`):
 // /api/manual answers only in the manual mode, and the page of the other mode is greyed out.
@@ -7,6 +7,7 @@
   const pages = [
     ["/", "Dashboard", "run", "The dashboard needs the sorter: python -m sorter run"],
     ["/manual", "Manual", "manual", "Manual control needs: python -m sorter manual"],
+    ["/calibrate", "Calibrate", "manual", "Calibration needs: python -m sorter manual"],
     ["/twin", "Twin", null, ""],
   ];
   const nav = document.createElement("nav");

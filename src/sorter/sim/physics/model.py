@@ -49,6 +49,7 @@ _CARDBOARD = "0.5 0.01 0.001"  # the box and the bins
 # a thin slab would sit between its underside and the table top, pushed both ways, and stay
 # pinned there (the cloth then stretches from the gripper to the table and snaps back)
 _SINK = 0.02
+MARK_MM = 12  # a tape mark's side
 CLOTH_N = 8  # vertices per side
 CLOTH_SHEET_M = 0.14  # side of the flat sheet
 CLOTH_GATHER = 0.6  # the rest shape is the sheet gathered to this fraction, with folds
@@ -506,6 +507,21 @@ def build_xml(cfg: SimConfig, board: bool = False) -> str:
             contype="0",
             conaffinity="0",
         )
+    if cfg.marks:  # dark tape squares, where the /calibrate page asks for them
+        from sorter.calibration.marks import MARK_OFFSETS_MM
+
+        for name, (dx, dy) in MARK_OFFSETS_MM.items():
+            ET.SubElement(
+                world,
+                "geom",
+                name=f"mark_{name}",
+                type="box",
+                size=_f(MARK_MM / 2000, MARK_MM / 2000, 0.0002),
+                pos=_f((bg.center_mm[0] + dx) / 1000, (bg.center_mm[1] + dy) / 1000, 0.0012),
+                rgba="0.08 0.08 0.1 1",
+                contype="0",
+                conaffinity="0",
+            )
     box = lay.box
     _open_box(
         world,
