@@ -493,7 +493,7 @@ Each sim component is selected independently through `backends`, so a real compo
 
 ## Room search (block 10, ROS 2 track, proposed)
 
-[D-021](decisions.md), plan and interfaces in [tasks/10-room-search.md](tasks/10-room-search.md). A `room_search` node in `rover_nav` drives Nav2 through viewpoints generated from the saved map and keepout mask, finds clothes with a second `cloth_detector` instance on the OAK-D (outputs under `/search/…`), parks with the cloth 0.32 m ahead of the arm's base, and calls the arm stack: `/arm/pick_from_floor`, `/arm/place_in_machine`, `/arm/stow` (`std_srvs/Trigger`, proposed). The machine pose is recorded in `~/rover_nav_maps/places.yaml`. The rover and the arm never move at the same time.
+[D-021](decisions.md), plan and interfaces in [tasks/10-room-search.md](tasks/10-room-search.md). A `room_search` node in `rover_nav` drives Nav2 through viewpoints generated from the saved map and keepout mask, finds clothes with a second `cloth_detector` instance on the OAK-D (outputs under `/search/…`), parks with the cloth 0.32 m ahead of the arm's base, and calls the arm stack: `/arm/pick_from_floor`, `/arm/drop_in_box`, `/arm/stow` (`std_srvs/Trigger`, proposed). Clothes go into the main laundry box (about (1, −2)); the rover's stop pose, 20 cm before it, is recorded in `~/rover_nav_maps/places.yaml`, and the boxes are keepout rectangles. The rover and the arm never move at the same time.
 
 ## Repo layout
 
