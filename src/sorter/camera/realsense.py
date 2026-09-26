@@ -5,7 +5,8 @@ A capture thread keeps only the newest frame. Depth is aligned to color and conv
 stay comparable between frames. `fresh()` waits for a frame that arrived at least one frame
 period after the call, so its exposure started after the call.
 
-Needs `uv sync --extra camera` (pyrealsense2, Linux / Windows wheels).
+Needs `uv sync --extra camera` (pyrealsense2; on macOS the pyrealsense2-macosx
+build, run as root).
 """
 
 from __future__ import annotations

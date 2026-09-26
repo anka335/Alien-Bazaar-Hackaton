@@ -86,7 +86,7 @@ backends:
   camera: real
 ```
 
-**Camera** (block 1): `uv sync --extra camera` adds `pyrealsense2` (Linux / Windows). `camera.serial` picks one D435i (empty = the first found); exposure and white balance lock after `camera.warmup_frames` (`camera.exposure_us`, `camera.white_balance_k` to fix them).
+**Camera** (block 1): `uv sync --extra camera` adds `pyrealsense2` (Linux / Windows; on macOS the community `pyrealsense2-macosx` build, pinned to 2.54.2). On macOS only root can take the camera from the system driver (otherwise `failed to set power state`), so run as root with the venv's Python: `sudo .venv/bin/python -m sorter manual`. `camera.serial` picks one D435i (empty = the first found); exposure and white balance lock after `camera.warmup_frames` (`camera.exposure_us`, `camera.white_balance_k` to fix them).
 
 **Hand-eye calibration** (block 2): print the ChArUco board (`uv run python -m sorter.calibration.board`, 7 × 5 squares of 30 mm; check the printed size), lay it flat on the mat, then `uv run python -m sorter.calibration.hand_eye`: the arm visits `calibration.poses` views around `look_bg` and writes `config/hand_eye.yaml` (commit it). `--sim` rehearses it on the simulator and reports the error against the true mount.
 

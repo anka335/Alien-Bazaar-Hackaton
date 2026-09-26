@@ -42,6 +42,7 @@ A fixed, repeatable physical rig with the camera rigidly mounted on the wrist, a
 - **Minimum depth range.** For the D435i, the specified minimum-Z depends on resolution: approximately 17.5 cm at 640x480 (the configured profile) and 28 cm at 1280x720. Keep the nearest point, including the top of a full pile, beyond the applicable minimum plus a measured safety margin.
 - The gripper fingers are at fixed pixels in every frame. Keep them out of the ROIs.
 - Datasets taken by hand from other viewpoints are fine to start, but only look-pose recordings match runtime.
+- **macOS.** `pyrealsense2` comes from the community `pyrealsense2-macosx` wheel, pinned to 2.54.2: as root, 2.56.5 segfaults while opening the IMU (HID) on macOS 26. Without root the pipeline fails with `failed to set power state`, because the macOS UVC driver holds the camera. Run as root: `sudo .venv/bin/python -m sorter manual`.
 
 ## Open questions
 
