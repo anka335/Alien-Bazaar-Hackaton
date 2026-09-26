@@ -1,0 +1,85 @@
+# Task config for task_supervisor_node. Read directly as YAML (param task_config).
+# Joint poses by name live in poses.yaml (param poses_file).
+
+ready_pose: ready        # always pass through here first (unfolds the arm from home)
+planning_time_s: 5.0     # joint-space moves (Pilz PTP)
+still_velocity: 0.01     # rad/s; all joints slower than this = the arm is still
+still_timeout_s: 3.0
+
+search:                  # mode:=search only (phase 1, kept for later)
+  # Look poses, joint1..joint6 in degrees: camera pitched 60° down, joint1 turns it over the
+  # table. Re-teach on the real rig.
+  waypoints_deg:
+    - [-45.0, 59.4, 72.6, -73.2, 0.0, 0.0]
+    - [ 45.0, 59.4, 72.6, -73.2, 0.0, 0.0]
+  sweep_speed_factor: 0.5  # sweep velocity scale = execution_speed × this
+  max_sweeps: 0            # 0 = forever
+
+detect:                  # with the arm still at the look pose
+  samples: 3             # median of this many /cloth_target_pose messages (SAM3: ~0.5–1.5 s each)
+  timeout_s: 20.0
+  max_spread_m: 0.04     # samples further than this from the median → error (SAM3's grasp point jitters)
+
+approach:                # phase 2
+  # With the gripper exactly vertical the TCP reaches only z ≈ 0.12 m (x = 0.25–0.30 m), with
+  # a 20° tilt about 0.20 m (rebot_b601 IK, driver joint limits). Keep height_m small.
+  height_m: 0.10             # TCP above the cloth surface point
+  min_height_m: 0.05         # out of reach (cloth on a high pile)? then lower, down to this
+  max_tilt_deg: 20.0         # approach axis vs straight down, at the goal (and on the path)
+  max_tilt_fallback_deg: 40.0  # out of reach at every height? (far / high cloth) then up to this
+  max_roll_deg: 45.0         # turn about the approach axis at the goal, from joint6 ≈ 0
+  keep_down_on_path: true    # path constraint, used only if the start pose already satisfies it
+  position_tolerance_m: 0.002   # the goal sampler lands anywhere inside this sphere
+  planning_time_s: 10.0
+  planning_attempts: 5
+  workspace:                 # the detected cloth point must be inside, base_link, m; outside = no
+    x: [0.05, 0.45]          # motion. Clothing outside the box (someone's sleeve) is kept out by
+    y: [-0.45, 0.45]         # the detector's box region (config/detector.yaml, roi_tool) first.
+    z: [-0.02, 0.30]         # a 15 cm pile is fine; above 30 cm is beyond top-down reach anyway
+
+grasp:                   # phases 3 and 4
+  depth_m: 0.015           # TCP this far below the detected cloth top (fingers around the cloth)
+  floor_z_m: 0.005         # never lower than this, whatever the detection says (table at z = 0)
+  open_m: 0.04             # finger position (joint_left, m) before descending; 0.05 = fully open
+  close_m: 0.0             # command to close fully; the cloth stops the fingers
+  effort: 10.0             # GripperCommand max_effort (the real gripper uses its own torque limit)
+  lift_m: 0.10             # straight up after closing
+  empty_below_m: 0.002     # fingers closer than this after the lift = missed. TUNE on the real
+                           # gripper: watch "fingers at … mm" in the log for a miss and a hold
+  max_attempts: 3          # detect → approach → grasp → lift cycles
+  linear_speed: 0.5        # descent/lift velocity scale = execution_speed × this
+  check_fingers: false     # true: after the lift, fingers closed on nothing = missed → retry.
+                           # Off: always carry on to the place target
+
+scene: {}
+  # The cloth box as a collision object (walls only). Off until measured on the rig: wrong walls
+  # are phantom obstacles. Measure from the arm base (x forward, y left), then:
+  # box:
+  #   center: [0.30, 0.00]   # x, y of the box centre, m
+  #   size: [0.30, 0.25]     # outer x, y, m
+  #   height: 0.06           # wall height above the table, m
+  #   wall: 0.01
+
+place:                   # phase 5
+  max_tilt_deg: 45.0       # xyz targets: gripper within this of straight down (the cloth drops off)
+  max_roll_deg: 60.0       # xyz targets: wrist roll from joint6 ≈ 0 (free roll spins the wrist)
+  position_tolerance_m: 0.01
+  planning_time_s: 10.0
+  planning_attempts: 5
+  release_wait_s: 0.5      # after opening, before moving on
+  color_targets:           # place_target:=color: SAM3 class → place target id
+    light: 1
+    dark: 2
+    colored: 3
+
+# place_target launch argument → where the cloth goes (phase 5). Each target is either
+# [x, y, z] in base_link, metres (planned, gripper roughly down), or the NAME of a pose in
+# poses.yaml (joint move: the most predictable; record it with `record_pose bin_1`).
+# Placeholders: measure / record on the rig.
+place_targets:
+  # 1: the TCP point of the recorded pose bin_1 (poses.yaml). As a joint pose MoveIt's box
+  # collision shapes flag bin_1 (gripper_end – link4) and refuse it; as a point the planner picks
+  # a wrist configuration it accepts (gripper 16–23° from down instead of bin_1's 40°).
+  1: [0.435, 0.053, 0.167]
+  2: [0.10, -0.35, 0.15]
+  3: [-0.05, -0.35, 0.15]

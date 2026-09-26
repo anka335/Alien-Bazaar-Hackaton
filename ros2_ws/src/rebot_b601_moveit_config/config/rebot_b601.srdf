@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="reBot_Lite_RS_with_gripper">
+  <group name="arm">
+    <chain base_link="base_link" tip_link="gripper_end"/>
+  </group>
+  <group name="gripper">
+    <link name="gripper_left"/>
+    <link name="gripper_right"/>
+    <joint name="joint_left"/>
+    <joint name="joint_right"/>
+  </group>
+
+  <group_state name="home" group="arm">
+    <joint name="joint1" value="0"/>
+    <joint name="joint2" value="0"/>
+    <joint name="joint3" value="0"/>
+    <joint name="joint4" value="0"/>
+    <joint name="joint5" value="0"/>
+    <joint name="joint6" value="0"/>
+  </group_state>
+  <group_state name="open" group="gripper">
+    <joint name="joint_left" value="0.05"/>
+    <joint name="joint_right" value="0.05"/>
+  </group_state>
+  <group_state name="closed" group="gripper">
+    <joint name="joint_left" value="0"/>
+    <joint name="joint_right" value="0"/>
+  </group_state>
+
+  <end_effector name="gripper" parent_link="gripper_end" group="gripper" parent_group="arm"/>
+
+  <!-- Adjacent links -->
+  <disable_collisions link1="base_link" link2="link1" reason="Adjacent"/>
+  <disable_collisions link1="base_link" link2="table" reason="Adjacent"/>
+  <disable_collisions link1="link1" link2="link2" reason="Adjacent"/>
+  <disable_collisions link1="link2" link2="link3" reason="Adjacent"/>
+  <disable_collisions link1="link3" link2="link4" reason="Adjacent"/>
+  <disable_collisions link1="link4" link2="link5" reason="Adjacent"/>
+  <disable_collisions link1="link5" link2="link6" reason="Adjacent"/>
+  <disable_collisions link1="link6" link2="gripper_end" reason="Adjacent"/>
+  <disable_collisions link1="gripper_end" link2="gripper_left" reason="Adjacent"/>
+  <disable_collisions link1="gripper_end" link2="gripper_right" reason="Adjacent"/>
+  <disable_collisions link1="gripper_left" link2="gripper_right" reason="Default"/>
+  <disable_collisions link1="link1" link2="table" reason="Never"/>
+  <!-- Box collision shapes overlap here: wrist links two apart, and the folded home pose
+       (a real rest pose). Found with /check_state_validity. -->
+  <disable_collisions link1="link3" link2="link5" reason="Default"/>
+  <disable_collisions link1="link4" link2="link6" reason="Default"/>
+  <disable_collisions link1="link1" link2="link3" reason="Default"/>
+  <disable_collisions link1="link2" link2="link5" reason="Default"/>
+  <disable_collisions link1="gripper_end" link2="camera_link" reason="Adjacent"/>
+  <!-- the camera sits on the joint5 motor cap (link4), above the wrist -->
+  <disable_collisions link1="link4" link2="camera_link" reason="Adjacent"/>
+</robot>

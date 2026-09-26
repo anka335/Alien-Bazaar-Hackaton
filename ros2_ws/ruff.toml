@@ -1,0 +1,11 @@
+# Same rules as the root pyproject.toml; the ROS packages are their own first-party roots.
+extend = "../pyproject.toml"
+src = ["src/cloth_task", "src/rebot_b601_moveit_config"]
+
+[lint.isort]
+# The packages' launch/ folders would otherwise make ROS's `launch` look first-party.
+known-third-party = ["launch", "launch_ros"]
+
+[lint.per-file-ignores]
+# the status page's HTML/JS is embedded as one string: its lines are not Python
+"src/cloth_task/cloth_task/status_web.py" = ["E501"]
