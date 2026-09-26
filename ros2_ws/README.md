@@ -7,7 +7,7 @@ ROS 2 Jazzy + MoveIt 2 version of a single-cloth pick-and-place task ([D-014](..
 | Package | What |
 | --- | --- |
 | `rebot_b601_moveit_config` | MoveIt 2 + ros2_control for the reBot B601-RS. The robot description is built at launch from `rebot_b601/…/reBot_Lite_RS_with_gripper.urdf` (symlinked): the driver's soft joint limits, box collision shapes (real meshes for the fingers), a table, the wrist camera from `config/camera_mount.yaml`, a `<ros2_control>` block (mock hardware) |
-| `cloth_task` | `task_supervisor` (state machine), `arm_bridge` (real arm), `cloth_detector` (real camera + SAM3), `sim_cloth_detector` / `sim_gripper` (simulation), `record_pose` / `go_to_pose`, `task.launch.py`, `config/task.yaml`, `config/poses.yaml` |
+| `cloth_task` | `task_supervisor` (state machine), `arm_bridge` (real arm), `cloth_detector` (real camera + SAM3), `sim_cloth_detector` / `sim_gripper` (simulation), `record_pose` / `go_to_pose`, `leader_teleop`, `spectacles_bridge` (Spectacles teleop), `task.launch.py`, `config/task.yaml`, `config/poses.yaml` |
 
 ## Status
 
@@ -89,6 +89,7 @@ Without a region the detector warns at startup and uses the whole image. Cloth p
 | `web` / `web_port` | `true` / `8080` | Status page at http://localhost:8080 (`status_web`): phase pipeline, counters, cloth, arm, live and detection images, log |
 | `run_task` | `true` | `false`: arm, camera and MoveIt only, nothing moves by itself (record poses, `go_to_pose`) |
 | `run_stack` | `true` | `false`: only the task supervisor, on a stack already started with `run_task:=false` (position the arm with the leader first, then start the task) |
+| `spectacles` | `false` | `true`: Spectacles teleop, `spectacles_bridge` on 127.0.0.1:9100. Needs `hardware:=real` and `run_task:=false` |
 
 ## Teleop with the leader arm (StarArm102 / reBot Arm 102, "Spark")
 
@@ -104,9 +105,20 @@ ros2 run cloth_task leader_teleop               # Enter to engage; then: name + 
 ros2 run cloth_task leader_teleop --flip wrist_roll   # if one joint moves the wrong way
 ```
 
-## Teleop with Spectacles (in progress, [#27](https://github.com/anka335/Alien-Bazaar-Hackaton/issues/27))
+## Teleop with Spectacles ([#27](https://github.com/anka335/Alien-Bazaar-Hackaton/issues/27))
 
-The robot-side peer of the lens (teleop v1). Done so far: the ROS-free session, `cloth_task/spectacles_session.py` ([D-015](../docs/decisions.md)). The robot bridge node, the WebSocket on `127.0.0.1:9100` (reached through ngrok) and the launch switch are not built yet, so nothing runs on the arm.
+The robot-side peer of the lens (teleop v1): `spectacles_bridge` serves the lens on a WebSocket at `127.0.0.1:9100` (`cloth_task/spectacles_link.py`) and runs the ROS-free session `cloth_task/spectacles_session.py` ([D-015](../docs/decisions.md), [D-018](../docs/decisions.md)). Not yet tried on the real arm.
+
+```bash
+sudo apt install python3-websockets   # once (or: rosdep install --from-paths src -y)
+ros2 launch cloth_task task.launch.py hardware:=real enable_motors:=true run_task:=false spectacles:=true
+ngrok http 127.0.0.1:9100   # by hand, in another terminal, with your own token
+```
+
+- `spectacles:=true` needs `hardware:=real` and `run_task:=false`; with the cloth task (or `run_stack:=false`) the launch fails. The leader arm is not started. MoveIt and the camera or simulated detector come up but don't command the arm: `arm_bridge` refuses MoveIt goals while teleop mode is on.
+- At start the bridge turns `arm_bridge`'s teleop mode on and leaves it on; every stop below just stops publishing to `/arm_bridge/teleop_command`. With `enable_motors:=false`, or a driver already faulted, teleop mode is refused and every lens is refused (closed with 1013).
+- `arm_bridge` publishes `/arm_bridge/driver_fault` (`std_msgs/Bool`, latched): false at start, true once the driver faults, until it reconnects. The bridge passes it to the session as the driver-fault flag.
+- Each teleop frame is answered with a status, and a status is also pushed at 10 Hz so a timeout reaches the lens.
 
 - The right clutch's rising edge latches the measured `gripper_end` pose in `base_link`. Each engaged sample targets `p_ee + position` and `orientation ⊗ q_ee`, solved for the full pose from the measured joints (damped least squares, soft joint limits, no restarts). The result goes out as joint targets plus the gripper opening, clamped to 0 (closed) through 1 (open), for `/arm_bridge/teleop_command`.
 - A solve that misses 1 mm / 3° publishes nothing and `arm` stays `tracking`. Releasing the clutch stops publishing (`holding`), so `arm_bridge` holds its last setpoint.
@@ -117,7 +129,8 @@ The robot-side peer of the lens (teleop v1). Done so far: the ROS-free session, 
 - A socket is accepted only once teleop mode has been enabled and a joint measurement has arrived. If enabling teleop is refused (for example the driver is already faulted), no socket is accepted.
 
 ```bash
-PYTHONPATH=ros2_ws/src/cloth_task python -m pytest ros2_ws/src/cloth_task/test/test_spectacles_session.py
+# no ROS needed; the link tests need websockets (skipped without it)
+PYTHONPATH=ros2_ws/src/cloth_task python -m pytest ros2_ws/src/cloth_task/test/test_spectacles_session.py ros2_ws/src/cloth_task/test/test_spectacles_link.py
 ```
 
 ## Named poses

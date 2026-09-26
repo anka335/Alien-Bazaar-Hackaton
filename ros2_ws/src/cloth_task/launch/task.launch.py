@@ -6,9 +6,13 @@
     ros2 launch cloth_task task.launch.py hardware:=real camera:=real enable_motors:=true \
         grasp:=false                                                 # stops above the cloth
     ros2 launch cloth_task task.launch.py hardware:=real camera:=real enable_motors:=true
+    ros2 launch cloth_task task.launch.py hardware:=real enable_motors:=true run_task:=false \
+        spectacles:=true                                             # lens on 127.0.0.1:9100
 
 hardware:=real replaces ros2_control with arm_bridge (the rebot_b601 driver over CAN).
 camera:=real starts realsense2_camera and cloth_detector_node (SAM3; key in config/local.yaml).
+spectacles:=true starts spectacles_bridge, which turns arm_bridge's teleop mode on and leaves it
+on (MoveIt goals are then refused). ngrok is started by hand; the launch never holds its token.
 """
 
 import os
@@ -40,6 +44,14 @@ def _setup(context):
         raise RuntimeError(
             f"hardware must be mock|real, camera sim|real (got {hardware}, {camera})"
         )
+    spectacles = arg("spectacles") == "true"
+    if spectacles and (arg("run_task") == "true" or arg("run_stack") != "true"):
+        raise RuntimeError(
+            "spectacles:=true drives the arm from the lens: it cannot run with the cloth task "
+            "(add run_task:=false; run_stack:=false starts only the task)"
+        )
+    if spectacles and hardware != "real":
+        raise RuntimeError("spectacles:=true needs hardware:=real (arm_bridge takes the commands)")
     if (
         hardware == "real"
         and camera == "sim"
@@ -168,6 +180,22 @@ def _setup(context):
             )
         )
 
+    if spectacles:
+        actions.append(
+            Node(
+                package="cloth_task",
+                executable="spectacles_bridge",
+                parameters=[
+                    {
+                        "rebot_dir": os.path.join(repo, "rebot_b601"),
+                        "host": "127.0.0.1",
+                        "port": 9100,
+                    }
+                ],
+                output="screen",
+            )
+        )
+
     if arg("run_task") != "true":  # bring-up only: nothing moves by itself
         return actions
     return [*actions, _supervisor(arg), *_web(arg)]
@@ -246,6 +274,11 @@ def generate_launch_description():
         ("web", "true", "Status page at http://localhost:<web_port>"),
         ("web_port", "8080", "Port of the status page"),
         ("run_stack", "true", "false: only the task, on an already running run_task:=false stack"),
+        (
+            "spectacles",
+            "false",
+            "true: Spectacles teleop on 127.0.0.1:9100 (hardware:=real, run_task:=false)",
+        ),
     ]
     return LaunchDescription(
         [DeclareLaunchArgument(n, default_value=d, description=h) for n, d, h in args]
