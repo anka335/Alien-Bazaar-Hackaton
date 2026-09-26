@@ -447,7 +447,7 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 | --- | --- | --- |
 | `backends` | 0 | Per component `real` \| `sim`: `camera`, `arm`, `calibration`, `box_detector`, `color_classifier`. Swap stubs one at a time during integration |
 | `sim` | 0 | Simulator world: `seed`, `items` (colors in the box), `miss_prob`, `double_prob`, `motion_s` (per path segment), `vision_s` (sim vision delay), image size, `cam_height_mm`, `item_radius_mm`, `zones.<zone>` (`center_mm`, `width_mm`, `surface_z_mm`) |
-| `camera` | 1 | `index` (OpenCV device), `name` (macOS: must be among the plugged-in cameras), `width`, `height`, `fps`, `hfov_deg`, `fresh_skip_frames`, `warmup_s`, `reconnect_s` |
+| `camera` | 1 | `name` (macOS: resolved to the OpenCV index by matching this against AVFoundation device names, since the index isn't stable across USB drops), `index` (OpenCV device; used as-is off macOS or when `name` is empty), `width`, `height`, `fps`, `hfov_deg`, `fresh_skip_frames`, `warmup_s`, `reconnect_s` |
 | `views.<zone>.roi` | 1 | Pixel polygon of the zone in its look pose, excluding the gripper fingers (`rig.yaml`) |
 | `calibration` | 2 | `zones.<zone>` (homography, plane height, from `calibration.yaml`), `marker_dict` |
 | `box_detector` | 3 | `avoid_radius_px`, `min_area_px`, `empty_coverage`, `wall_margin_px`, `min_inset_px` (SAM3 settings shared with `color_classifier.sam`) |

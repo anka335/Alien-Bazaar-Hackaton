@@ -27,8 +27,8 @@ sim:
     background: {center_mm: [350, 150], width_mm: 300, surface_z_mm: 0}
 
 camera:              # block 1: SO-101 wrist camera, UVC, RGB only (D-014)
-  index: 0           # OpenCV device; `python -m sorter.camera.probe` shows which is which
-  name: HD Camera    # macOS: refuse to open if no camera with this name is plugged in
+  name: HD Camera    # macOS: found by name, the OpenCV index changes on USB drops
+  index: 0           # only without a name / off macOS; `python -m sorter.camera.probe`
   width: 1280
   height: 720
   fps: 30

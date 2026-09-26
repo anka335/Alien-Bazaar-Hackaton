@@ -11,6 +11,7 @@ dependencies = [
     "numpy>=1.26",
     "opencv-python-headless>=4.9",
     "pydantic>=2.7",
+    "pyobjc-framework-avfoundation>=10 ; sys_platform == 'darwin'",
     "pyyaml>=6.0",
     "uvicorn>=0.29",
     "websockets>=12",

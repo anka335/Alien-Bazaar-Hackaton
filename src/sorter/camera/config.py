@@ -8,8 +8,8 @@ class CameraConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    index: int = 0  # OpenCV device index; `python -m sorter.camera.probe` shows which is which
-    name: str = "HD Camera"  # macOS: refuse to open unless a camera with this name is present
+    name: str = "HD Camera"  # macOS: the camera is found by name (the index isn't stable)
+    index: int = 0  # OpenCV device index, used only if `name` is empty or not on macOS
     width: int = 1280
     height: int = 720
     fps: float = 30.0

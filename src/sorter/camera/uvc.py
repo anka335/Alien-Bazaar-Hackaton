@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 import multiprocessing as mp
-import subprocess
 import sys
 import threading
 import time
@@ -26,34 +24,40 @@ log = logging.getLogger(__name__)
 OpenFn = Callable[[CameraConfig], Any]  # returns an object with read() / release() like cv2
 
 
-def mac_camera_names() -> list[str] | None:
-    """Names of the cameras macOS sees, or None if they can't be listed."""
-    try:
-        out = subprocess.run(
-            ["system_profiler", "SPCameraDataType", "-json"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=True,
-        ).stdout
-        return [c.get("_name", "") for c in json.loads(out).get("SPCameraDataType", [])]
-    except (OSError, subprocess.SubprocessError, ValueError):
-        return None
+def mac_cameras() -> list[tuple[str, str]]:
+    """(uniqueID, name) of every camera, in OpenCV's AVFoundation index order (by uniqueID)."""
+    import AVFoundation as AV
+
+    devices = list(AV.AVCaptureDevice.devicesWithMediaType_(AV.AVMediaTypeVideo)) + list(
+        AV.AVCaptureDevice.devicesWithMediaType_(AV.AVMediaTypeMuxed)
+    )
+    return sorted((str(d.uniqueID()), str(d.localizedName())) for d in devices)
 
 
-def _check_present(cfg: CameraConfig) -> None:
-    if sys.platform == "darwin" and cfg.name:
-        # With the wrist camera unplugged, the index points at the built-in camera instead
-        names = mac_camera_names()
-        if names is not None and not any(cfg.name in n for n in names):
-            raise CameraError(f"no {cfg.name!r} among the cameras {names}: wrist camera unplugged?")
+def resolve_index(cfg: CameraConfig) -> int:
+    """The OpenCV index of the camera named `cfg.name` (macOS), else `cfg.index`.
+
+    On macOS the index follows the sorted uniqueIDs of the cameras present, so it changes
+    when the wrist camera drops off the bus: a fixed index would silently open the built-in one.
+    """
+    if sys.platform != "darwin" or not cfg.name:
+        return cfg.index
+    cams = mac_cameras()
+    for i, (_uid, name) in enumerate(cams):
+        if cfg.name in name:
+            return i
+    raise CameraError(f"no {cfg.name!r} among {[n for _, n in cams]}: wrist camera unplugged?")
 
 
 def _cv_capture(cfg: CameraConfig) -> cv2.VideoCapture:
     api = cv2.CAP_AVFOUNDATION if sys.platform == "darwin" else cv2.CAP_ANY
-    cap = cv2.VideoCapture(cfg.index, api)
+    index = resolve_index(cfg)
+    cap = cv2.VideoCapture(index, api)
     if not cap.isOpened():
-        raise CameraError(f"camera {cfg.index} can't be opened (plugged in? camera permission?)")
+        raise CameraError(f"camera {index} can't be opened (plugged in? camera permission?)")
+    if resolve_index(cfg) != index:  # the device list changed while opening
+        cap.release()
+        raise CameraError("camera list changed while opening; retrying")
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, cfg.width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cfg.height)
     cap.set(cv2.CAP_PROP_FPS, cfg.fps)
@@ -66,7 +70,10 @@ def _capture_process(cfg: CameraConfig, shm_name: str, seq, stop) -> None:
     shm = shared_memory.SharedMemory(name=shm_name)
     try:
         buf = np.ndarray((cfg.height, cfg.width, 3), np.uint8, shm.buf)
-        cap = _cv_capture(cfg)
+        try:
+            cap = _cv_capture(cfg)
+        except CameraError:
+            return  # the parent sees the process end and retries; no traceback per attempt
         while not stop.is_set():
             ok, img = cap.read()
             if not ok or img is None:
@@ -87,7 +94,7 @@ class ProcessCapture:
     ends the child, and the camera thread opens a new one."""
 
     def __init__(self, cfg: CameraConfig, stall_s: float = 2.0):
-        _check_present(cfg)
+        resolve_index(cfg)  # fail fast with a clear message if the camera is missing
         self.cfg, self.stall_s = cfg, stall_s
         ctx = mp.get_context("spawn")
         self._shm = shared_memory.SharedMemory(create=True, size=cfg.height * cfg.width * 3)
@@ -166,7 +173,9 @@ class UvcCamera:
         time.sleep(self.cfg.warmup_s)
         f = self._frame
         assert f is not None
-        log.info("camera %d: %dx%d", self.cfg.index, f.color.shape[1], f.color.shape[0])
+        log.info(
+            "camera %s: %dx%d", self.cfg.name or self.cfg.index, f.color.shape[1], f.color.shape[0]
+        )
 
     def close(self) -> None:
         self._stop.set()
@@ -205,7 +214,7 @@ class UvcCamera:
             ok, img = cap.read()
             if not ok or img is None:
                 self._error = "device returned no frame"
-                log.warning("camera %d lost, reopening", self.cfg.index)
+                log.warning("camera %s lost, reopening", self.cfg.name or self.cfg.index)
                 cap.release()
                 cap = None
                 self._stop.wait(self.cfg.reconnect_s)
