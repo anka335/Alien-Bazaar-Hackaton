@@ -408,9 +408,13 @@ def _round(a, n=3):
 
 
 class Arm:
-    def __init__(self, hz: float = C.CONTROL_HZ, max_speed_scale: float = C.MAX_SPEED_SCALE):
+    """``clock``: the time source of the control loop, trajectories and timeouts (a physics
+    simulator passes its simulated time and calls :meth:`tick` itself, see :meth:`connect`)."""
+
+    def __init__(self, hz: float = C.CONTROL_HZ, max_speed_scale: float = C.MAX_SPEED_SCALE, clock=time.monotonic):
         self.hz = hz
         self.max_speed_scale = max_speed_scale
+        self._clock = clock
         self.backend = None
         self._lock = threading.RLock()
         self._move_lock = threading.Lock()
@@ -441,12 +445,18 @@ class Arm:
     def simulated(self) -> bool:
         return bool(self.backend and self.backend.simulated)
 
-    def connect(self, enable: bool = True, simulate: bool | None = None, sim_start_deg=None) -> dict:
-        """Connect to the arm.  ``enable=False`` only reads feedback (motors stay limp)."""
+    def connect(self, enable: bool = True, simulate: bool | None = None, sim_start_deg=None, backend=None, own_loop: bool = True) -> dict:
+        """Connect to the arm.  ``enable=False`` only reads feedback (motors stay limp).
+
+        ``backend``: use this backend (e.g. a physics simulator) instead of the bus or
+        :class:`SimBackend`.  ``own_loop=False``: no control thread; the caller runs
+        :meth:`tick` at ``hz`` (in the time of ``clock``).
+        """
         if self.connected:
             raise ArmError("already connected")
         simulate = C.DRY_RUN if simulate is None else simulate
-        backend = SimBackend(None if sim_start_deg is None else np.radians(sim_start_deg)) if simulate else HardwareBackend()
+        if backend is None:
+            backend = SimBackend(None if sim_start_deg is None else np.radians(sim_start_deg)) if simulate else HardwareBackend()
         meas = backend.connect(enable)
         lo, hi = C.JOINT_LIMITS_RAD[:, 0], C.JOINT_LIMITS_RAD[:, 1]
         m = math.radians(C.POSE_SANITY_MARGIN_DEG)
@@ -477,8 +487,9 @@ class Arm:
                 raise
             self._enabled = True
         self._stop_thread.clear()
-        self._thread = threading.Thread(target=self._loop, name="rebot-control", daemon=True)
-        self._thread.start()
+        if own_loop:
+            self._thread = threading.Thread(target=self._loop, name="rebot-control", daemon=True)
+            self._thread.start()
         return self.status()
 
     def disconnect(self, go_home: bool = True, speed_scale: float | None = None) -> dict:
@@ -503,6 +514,7 @@ class Arm:
         self._stop_thread.set()
         if self._thread:
             self._thread.join(timeout=2.0)
+            self._thread = None
         self.backend.close()
         self.backend = None
         self._enabled = False
@@ -511,15 +523,19 @@ class Arm:
     # ------------------------------------------------------------------
     # control loop
     # ------------------------------------------------------------------
+    def tick(self) -> None:
+        """One control cycle, for callers that drive the loop themselves (``own_loop=False``)."""
+        try:
+            self._tick(self._clock())
+        except Exception as e:      # never let the loop die silently
+            log.exception("control loop error")
+            self._raise_fault(f"control loop error: {e!r}")
+
     def _loop(self) -> None:
         period = 1.0 / self.hz
         nxt = time.monotonic()
         while not self._stop_thread.is_set():
-            try:
-                self._tick(time.monotonic())
-            except Exception as e:      # never let the loop die silently
-                log.exception("control loop error")
-                self._raise_fault(f"control loop error: {e!r}")
+            self.tick()
             nxt += period
             d = nxt - time.monotonic()
             if d > 0:
@@ -744,11 +760,13 @@ class Arm:
                 duration = path_duration(wps, scale)
                 self._abort = None
                 self._done.clear()
-                self._traj = Trajectory(wps, duration, t0=time.monotonic())
+                self._traj = Trajectory(wps, duration, t0=self._clock())
             if not wait:
                 return {"duration_s": round(duration, 2), "speed_scale": scale}
+            deadline = self._clock() + duration + 5.0
             try:
-                finished = self._done.wait(timeout=duration + 5.0)
+                while not (finished := self._done.wait(timeout=0.05)) and self._clock() < deadline:
+                    pass
             except BaseException:            # Ctrl+C etc.: never leave a trajectory running unattended
                 self.stop()
                 raise
@@ -832,11 +850,11 @@ class Arm:
             raise ArmError("opening must be between 0 (closed) and 1 (open)")
         with self._lock:
             self._grip_target = o * math.radians(C.GRIPPER_OPEN_DEG)
-            self._grip_cmd_time = time.monotonic()
+            self._grip_cmd_time = self._clock()
         if wait:
-            deadline = time.monotonic() + 2.0
-            while time.monotonic() < deadline:
-                time.sleep(0.05)
+            deadline = self._clock() + 2.0
+            while self._clock() < deadline:
+                time.sleep(0.01)
                 if self._fault:
                     raise ArmError(f"fault while moving the gripper: {self._fault}")
                 if abs(self._grip_target - self._meas.grip_pos) < math.radians(3.0):

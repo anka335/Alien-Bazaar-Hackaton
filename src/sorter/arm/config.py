@@ -20,7 +20,7 @@ class GripperConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     open: float = 1.0  # opening before a grasp and at a release, 0 = closed .. 1 = open
-    empty_below: float = 0.05  # a closed gripper opening below this → `likely_empty`
+    empty_below: float = 0.01  # a closed gripper opening below this → `likely_empty`
 
 
 class ArmConfig(BaseModel):

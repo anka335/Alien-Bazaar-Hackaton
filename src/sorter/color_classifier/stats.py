@@ -54,11 +54,14 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--save", type=Path, help="write frames with the overlay here")
     args = p.parse_args(argv)
 
-    over = {"sim": {"time_scale": 0.0, "vision_s": 0.0}}
+    # --sim: the quick kinematic sim (its top-down render doesn't match the pinhole ROIs)
+    over = {"sim": {"engine": "kinematic", "time_scale": 0.0, "vision_s": 0.0}}
     prompts = [s.strip() for s in args.prompts.split(",")] if args.prompts else None
     sam = {"prompts": prompts, "threshold": args.threshold}
     over["color_classifier"] = {"sam": {k: v for k, v in sam.items() if v is not None}}
     cfg = load_config(overrides=over)
+    if args.sim:
+        cfg.views = {}
     classifier = create(cfg)
     frames = [(str(path), load_observation(path).frame) for path in args.paths]
     if args.sim:

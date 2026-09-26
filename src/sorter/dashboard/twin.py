@@ -34,6 +34,12 @@ def _flat(T: np.ndarray, scale: float = 1.0) -> list[float]:
     return [round(float(v), 5) for v in T.flatten()]
 
 
+def _cloth_n() -> int:
+    from sorter.sim.physics.model import CLOTH_N
+
+    return CLOTH_N
+
+
 class Twin:
     def __init__(
         self,
@@ -54,6 +60,8 @@ class Twin:
             },
             "camera": {"width": sim.width, "height": sim.height, "focal_px": sim.focal_px},
             "item_radius_mm": sim.item_radius_mm,
+            # physics: every item is a cloth grid of cloth_n x cloth_n vertices (sent in `state`)
+            "cloth_n": _cloth_n() if hasattr(self.world, "vertices") else None,
         }
 
     def state(self) -> dict[str, Any]:
@@ -74,9 +82,23 @@ class Twin:
             "items": [],
         }
         w = self.world
-        if w is not None:
+        if w is not None and hasattr(w, "vertices"):  # physics: the cloth itself
+            for it in w.items:
+                v = w.vertices(it.id)
+                loc = w.location(it.id)[0]
+                out["items"].append(
+                    {
+                        "id": it.id,
+                        "color": "#" + "".join(f"{round(c * 255):02x}" for c in it.rgb),
+                        "class": it.color.value,
+                        "location": loc,
+                        "xyz": [round(float(c), 1) for c in v.mean(axis=0)],
+                        "vertices": [round(float(c), 1) for c in v.ravel()],
+                    }
+                )
+        elif w is not None:
             with w.lock:
-                looking = w.looking_at
+                looking = w.looking_at  # kinematic world
                 out["looking_at"] = looking.value if isinstance(looking, Zone) else None
                 for it in w.items:
                     held = it.location == "gripper"

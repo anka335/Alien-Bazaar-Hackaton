@@ -7,6 +7,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "fastapi>=0.110",
+    "mujoco>=3.14.0",
     "numpy>=1.26",
     "opencv-python-headless>=4.9",
     "pydantic>=2.7",
@@ -22,6 +23,8 @@ rebot-b601 = { path = "rebot_b601", editable = true }
 
 [project.optional-dependencies]
 hardware = ["rebot-b601[hardware]"]
+# the RealSense SDK has wheels for Linux and Windows only
+camera = ["pyrealsense2>=2.55; sys_platform == 'linux' or sys_platform == 'win32'"]
 
 [project.scripts]
 sorter = "sorter.__main__:main"

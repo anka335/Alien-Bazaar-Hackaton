@@ -1,5 +1,7 @@
 """Config models for the simulator (`sim`, block 0)."""
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from sorter.core.types import ColorClass
@@ -63,6 +65,11 @@ class SimConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # physics: MuJoCo (arm dynamics, cloth, rendered RGB-D); kinematic: fast, rule-based, for tests
+    engine: Literal["physics", "kinematic"] = "kinematic"
+    realtime: float = 1.0  # physics: simulated seconds per wall second; 0 = as fast as possible
+    board: bool = False  # physics: a ChArUco board lies on the mat (hand-eye calibration)
+    use_sam3: bool = False  # physics: the real SAM3 service segments the rendered frames
     seed: int = 0
     items: list[ColorClass] = Field(
         default_factory=lambda: [

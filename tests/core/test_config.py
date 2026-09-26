@@ -15,7 +15,7 @@ def test_deep_merge_merges_nested_and_replaces_leaves():
 
 def test_committed_config_loads():
     cfg = load_config()
-    assert cfg.backends.camera is Backend.SIM
+    assert cfg.backends.camera is Backend.REAL and cfg.sim.engine == "physics"
     assert set(cfg.zones) == {Zone.BOX, Zone.BACKGROUND}
     assert {"rest", "home", "look_box", "look_bg", "place_bg"} <= set(cfg.poses)
 

@@ -52,24 +52,90 @@ def _rect_polygon(r: RectConfig, margin: float) -> list[tuple[float, float]]:
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
 
 
+def _roll_error(q: np.ndarray) -> float:
+    """Angle of the image u axis (TCP y) from the arm's x axis, folded to [-pi/2, pi/2]."""
+    R = kin.fk_tcp(q)[:3, :3]
+    a = math.atan2(R[1, 1], R[0, 1])
+    return (a + math.pi / 2) % math.pi - math.pi / 2
+
+
+def _square_up(q: np.ndarray, prefer: float | None = None) -> np.ndarray:
+    """Turn the wrist (joint 6 turns about the approach axis) so the image's long side runs
+    along the arm's x axis, like the long sides of the box and the mat. Of the two ways, the one
+    nearest `prefer` (joint 6, rad), so the off-axis camera doesn't jump sides."""
+    lo, hi = kin.JOINT_LIMITS[5]
+    prefer = q[5] if prefer is None else prefer
+    cands = []
+    for k in (-1, 0, 1):
+        for sign in (1, -1):
+            c = q.copy()
+            c[5] = q[5] + sign * _roll_error(q) + k * math.pi
+            if lo <= c[5] <= hi:
+                cands.append((round(abs(_roll_error(c)), 4), abs(c[5] - prefer), c))
+    return min(cands, key=lambda t: t[:2])[2] if cands else q
+
+
 def look_pose(sim: SimConfig, arm: ArmConfig, center: tuple[float, float]) -> np.ndarray:
-    """Joints that put the camera straight down over `center`, as high as possible."""
+    """Joints that put the camera straight down over `center`, as high as possible, the image
+    long side along the arm's x axis."""
     T_tcp_cam = camera_mount(sim)
     for tcp_z in range(LOOK_TCP_Z_MM[0], LOOK_TCP_Z_MM[1] - 1, -5):
         target = np.array([*center, tcp_z], dtype=float)
         q = _seed(*center)
-        for _ in range(
-            6
-        ):  # the camera sits off the TCP: shift the TCP until the camera is centered
+        roll = None
+        # the camera sits off the TCP: shift the TCP until the camera is centered
+        for _ in range(10):
             q = kin.solve(target, "down", q, arm.z_min_mm)
             if q is None:
                 break
+            q = _square_up(q, roll)
+            roll = q[5]
             cam = (kin.fk_tcp(q) @ T_tcp_cam)[:3, 3]
             err = np.array(center) - cam[:2]
-            if np.hypot(*err) < 0.5:
+            if np.hypot(*err) < 0.5 and abs(_roll_error(q)) < math.radians(0.5):
                 return q
             target[:2] += err
     raise SystemExit(f"no look pose puts the camera straight down over {center}")
+
+
+def zone_rois(cfg: Config, poses: dict[str, list[float]]) -> dict[str, dict]:
+    """`views.<zone>.roi`: the box inside and the mat, projected into the image from the look
+    poses, minus the rows the gripper hides at the top of the frame."""
+    from sorter.sim.physics.camera import PhysicsCamera
+    from sorter.sim.physics.world import PhysicsWorld
+
+    sim = cfg.sim.model_copy(update={"items": [], "realtime": 0})
+    world = PhysicsWorld(sim, poses)
+    camera = PhysicsCamera(world)
+    lay = cfg.sim.layout
+    zones = {
+        "box": (lay.box, lay.box.floor_z_mm, 0.0, "look_box"),
+        "background": (lay.background, 0.0, 5.0, "look_bg"),
+    }
+    out = {}
+    try:
+        for zone, (rect, z, margin, pose) in zones.items():
+            q = np.asarray(poses[pose], dtype=float)
+            world.teleport_arm(q, finger_m=0.0)
+            frame = camera.fresh(5.0)
+            no_depth = (frame.depth_mm == 0).mean(axis=1) > 0.3
+            top = int(np.argmin(no_depth)) + 10 if no_depth[0] else 0  # rows hidden by the gripper
+            T = np.linalg.inv(kin.fk_tcp(q) @ camera_mount(cfg.sim))
+            pts = []
+            for x, y in _rect_polygon(rect, margin):
+                c = T @ np.array([x, y, z, 1.0])
+                u = sim.focal_px * c[0] / c[2] + sim.width / 2
+                v = sim.focal_px * c[1] / c[2] + sim.height / 2
+                pts.append(
+                    (
+                        int(np.clip(round(u), 0, sim.width - 1)),
+                        int(np.clip(round(v), top, sim.height - 1)),
+                    )
+                )
+            out[zone] = {"roi": [list(p) for p in pts]}
+    finally:
+        camera.close()
+    return out
 
 
 def compute_poses(sim: SimConfig, arm: ArmConfig) -> dict[str, list[float]]:
@@ -174,9 +240,9 @@ def _yaml(poses: dict[str, list[float]], zones: dict[Zone, ZoneConfig], views: d
         },
     }
     head = (
-        "# Fixed rig, committed (D-007). views: block 1 (ROI tool).\n"
-        "# poses (joint angles, rad) and zones: computed for the table layout in `sim.layout`\n"
-        "# by `python -m sorter.sim.layout --write`; re-teach them on the real rig (block 5).\n"
+        "# Fixed rig, committed (D-007). Computed for the table layout in `sim.layout` by\n"
+        "# `python -m sorter.sim.layout --write`: poses (joint angles, rad) and zones (block 5),\n"
+        "# views (pixel ROIs from the look poses, block 1). Re-teach / redraw them on the rig.\n"
     )
     return head + yaml.safe_dump(body, sort_keys=False, default_flow_style=None, width=100)
 
@@ -193,7 +259,7 @@ def main(argv: list[str] | None = None) -> None:
     poses = compute_poses(cfg.sim, cfg.arm)
     zones = compute_zones(cfg.sim, cfg.arm)
     rig = Path(args.config_dir) / "rig.yaml"
-    views = (yaml.safe_load(rig.read_text()) or {}).get("views", {}) if rig.is_file() else {}
+    views = zone_rois(cfg, poses)
     text = _yaml(poses, zones, views)
     print(text)
     cfg = cfg.model_copy(update={"poses": poses, "zones": zones})

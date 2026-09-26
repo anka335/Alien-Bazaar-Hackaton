@@ -1,12 +1,24 @@
-# Fixed rig, committed (D-007). views: block 1 (ROI tool).
-# poses (joint angles, rad) and zones: computed for the table layout in `sim.layout`
-# by `python -m sorter.sim.layout --write`; re-teach them on the real rig (block 5).
-views: {}
+# Fixed rig, committed (D-007). Computed for the table layout in `sim.layout` by
+# `python -m sorter.sim.layout --write`: poses (joint angles, rad) and zones (block 5),
+# views (pixel ROIs from the look poses, block 1). Re-teach / redraw them on the real rig.
+views:
+  box:
+    roi:
+    - [31, 454]
+    - [609, 454]
+    - [610, 20]
+    - [30, 20]
+  background:
+    roi:
+    - [592, 39]
+    - [48, 39]
+    - [48, 441]
+    - [592, 441]
 poses:
   rest: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
   home: [0.0, 0.5491, 0.8481, -1.0844, 0.0, 0.0006]
-  look_box: [1.5737, 1.3859, 1.2143, -1.3963, 0.0, 0.0026]
-  look_bg: [0.0001, 1.3915, 1.2188, -1.3963, 0.0, 0.0005]
+  look_box: [1.5738, 1.3859, 1.2143, -1.3963, 0.0, 0.003]
+  look_bg: [0.2009, 1.6464, 1.4604, -1.3847, 0.0, 1.7717]
   place_bg: [0.0, 1.616, 1.3028, -1.2576, 0.0, 0.0004]
   bin_light: [-0.8698, 1.3486, 1.357, -0.7938, 0.0017, 0.0012]
   bin_dark: [-1.5656, 1.3503, 1.3583, -0.7934, 0.0037, 0.0024]

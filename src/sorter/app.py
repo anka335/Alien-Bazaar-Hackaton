@@ -6,13 +6,13 @@ import importlib
 import logging
 import threading
 
-from sorter.core.config import Backend, BackendsConfig, Config
+from sorter.core.config import Backend, Config
 from sorter.core.errors import SorterError
 from sorter.core.hub import Hub
 from sorter.core.log import HubLogHandler
 from sorter.core.observer import Observer
 from sorter.core.system import System
-from sorter.core.types import Command
+from sorter.core.types import Command, Zone
 from sorter.dashboard.twin import Twin
 from sorter.sim import backend as sim_backend
 from sorter.sim.world import SimWorld
@@ -42,19 +42,41 @@ def _real(name: str, cfg: Config):
     return backend.create(cfg)
 
 
+HARDWARE = ("camera", "arm")
+
+
 def build_system(cfg: Config, sim: bool = False) -> System:
-    """Create every component per `cfg.backends`. `sim=True` forces all of them to sim."""
+    """Create every component per `cfg.backends`. `sim=True` simulates the hardware (camera and
+    arm); the rest follows `backends`.
+
+    `sim.engine: physics` (MuJoCo) simulates only the hardware: calibration, box detector and
+    color classifier run their real code on the rendered frames. `kinematic` also has quick
+    stand-ins for them (tests).
+    """
     if sim:
-        cfg = cfg.model_copy(update={"backends": BackendsConfig()})  # all sim
-    world = (
-        SimWorld(cfg.sim, cfg.poses) if Backend.SIM in cfg.backends.model_dump().values() else None
-    )
-    parts = {
-        name: sim_backend.create(name, cfg, world)
-        if getattr(cfg.backends, name) is Backend.SIM
-        else _real(name, cfg)
-        for name in COMPONENTS
-    }
+        backends = cfg.backends.model_copy(update=dict.fromkeys(HARDWARE, Backend.SIM))
+        cfg = cfg.model_copy(update={"backends": backends})
+    simulated = [n for n in COMPONENTS if getattr(cfg.backends, n) is Backend.SIM]
+    world = None
+    if simulated and cfg.sim.engine == "physics":
+        from sorter.sim.physics import backend as physics_backend
+        from sorter.sim.physics.world import PhysicsWorld
+
+        world = PhysicsWorld(cfg.sim, cfg.poses, board=cfg.sim.board)
+        make_sim = physics_backend.create
+    elif simulated:
+        world = SimWorld(cfg.sim, cfg.poses)
+        make_sim = sim_backend.create
+    parts = {}
+    for name in COMPONENTS:  # in order: the camera comes before what depends on it
+        if name in simulated:
+            parts[name] = make_sim(name, cfg, world)
+        elif cfg.sim.engine == "physics" and "camera" in simulated and name in _PHYSICS_RIG:
+            parts[name] = _PHYSICS_RIG[name](cfg, parts)
+        else:
+            parts[name] = _real(name, cfg)
+    if world is not None and not isinstance(world, SimWorld):
+        world.start()  # physics: the scene runs from now on, like the real world
     arm = parts["arm"]
     twin = Twin(arm, parts["calibration"], cfg, world)
     return System(
@@ -68,6 +90,32 @@ def build_system(cfg: Config, sim: bool = False) -> System:
         hub=Hub(parts["camera"], on_hold=arm.hold, twin=twin),
         world=world,
     )
+
+
+# On the simulated camera the real calibration and color classifier use what the sim knows
+# exactly: the camera mount (config/hand_eye.yaml belongs to the real camera) and the rendered
+# segmentation (in place of the SAM3 service, unless `sim.use_sam3`).
+
+
+def _physics_calibration(cfg: Config, parts: dict):
+    from sorter.calibration.calibration import HandEyeCalibration
+    from sorter.sim.physics.backend import hand_eye
+
+    return HandEyeCalibration(hand_eye(cfg))
+
+
+def _physics_classifier(cfg: Config, parts: dict):
+    if cfg.sim.use_sam3:
+        return _real("color_classifier", cfg)
+    from sorter.color_classifier.classifier import Sam3ColorClassifier
+
+    view = cfg.views.get(Zone.BACKGROUND)
+    return Sam3ColorClassifier(
+        cfg.color_classifier, parts["camera"].segment, view.roi if view else ()
+    )
+
+
+_PHYSICS_RIG = {"calibration": _physics_calibration, "color_classifier": _physics_classifier}
 
 
 def run(cfg: Config, *, sim: bool = False, dashboard: bool = True, autostart: bool = False) -> None:
@@ -121,3 +169,5 @@ def run(cfg: Config, *, sim: bool = False, dashboard: bool = True, autostart: bo
         except SorterError:
             log.exception("arm shutdown failed")
         system.camera.close()
+        if system.world is not None and hasattr(system.world, "stop"):
+            system.world.stop()

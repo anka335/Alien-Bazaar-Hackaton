@@ -213,8 +213,44 @@ function clothGeometry(id) {
 
 const items = new Map(); // id → {mesh, target, location}
 let itemRadius = 0.03;
+let clothN = null; // physics sim: each item is a cloth grid of clothN x clothN vertices
+
+function clothMesh(color) {
+  const n = clothN;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(n * n * 3), 3));
+  const idx = [];
+  for (let i = 0; i < n - 1; i++) {
+    for (let j = 0; j < n - 1; j++) {
+      const a = i * n + j, b = a + 1, c = a + n, e = c + 1;
+      idx.push(a, b, e, a, e, c);
+    }
+  }
+  g.setIndex(idx);
+  const m = new THREE.Mesh(g, mat(color, { roughness: 0.95, side: THREE.DoubleSide }));
+  m.castShadow = m.receiveShadow = true;
+  m.frustumCulled = false;
+  return m;
+}
+
+function updateCloth(list) {
+  for (const it of list) {
+    let e = items.get(it.id);
+    if (!e) {
+      e = { mesh: clothMesh(it.color), target: null, location: null };
+      world.add(e.mesh);
+      items.set(it.id, e);
+    }
+    const pos = e.mesh.geometry.attributes.position;
+    for (let i = 0; i < it.vertices.length; i++) pos.array[i] = it.vertices[i] * MM;
+    pos.needsUpdate = true;
+    e.mesh.geometry.computeVertexNormals();
+    e.location = it.location;
+  }
+}
 
 function updateItems(list) {
+  if (clothN && list.length && list[0].vertices) return updateCloth(list);
   const seen = new Set();
   for (const it of list) {
     seen.add(it.id);
@@ -359,6 +395,7 @@ async function main() {
     $("mode").textContent = simulated ? "simulator" : "live arm";
     camIntr = L.camera;
     itemRadius = L.item_radius_mm * MM;
+    clothN = L.cloth_n;
     buildTable(L);
   } catch {
     badge("no layout", "error");
@@ -372,7 +409,7 @@ async function main() {
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const k = 1 - Math.exp(-clock.getDelta() * 12);
-  for (const e of items.values()) e.mesh.position.lerp(e.target, k);
+  for (const e of items.values()) if (e.target) e.mesh.position.lerp(e.target, k);
   controls.update();
   renderer.render(scene, camera);
 });

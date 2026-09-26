@@ -159,6 +159,8 @@ class Controller:
         self._gripper(self.cfg.gripper.open)
 
     def drop_to_bin(self, color: ColorClass) -> None:
+        # via home: a straight joint move from the mat would sweep the gripper through the bin walls
+        self._go("home")
         self._go(f"bin_{color.value}")
         self._gripper(self.cfg.gripper.open)
 
