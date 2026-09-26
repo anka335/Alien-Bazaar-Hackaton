@@ -156,3 +156,9 @@ Template:
 **Context:** On the rig the camera is ~100 mm out from the fingertips (D-022 calibration). With the gripper vertical the arm can't lift it above ~230 mm over a zone, and the image runs across the arm (~110° from radial): the look poses saw ~75% of the 240 × 180 box and ~84% of the 240 × 180 mat.
 **Decision:** Shrink the zones to what the camera sees whole: the box inside 140 × 200 mm (long side along y, across the arm) at (300, 0), the mat 150 × 120 mm at (180, 210); `sim.item_radius_mm` 22; the calibration marks ±50 × ±35 mm. The sim's nominal camera image runs across the arm like the rig's. A tilted look pose was the alternative (keeps the zones, more work, gain unknown).
 **Consequences:** Only small clothes fit (the pickable area in the box is ~50 × 110 mm with the 45 mm wall margin). `rig.yaml` poses and zones recomputed; on the rig the calibration page's Calibrate recomputes the look poses for the real mount. Supersedes the zone sizes of D-015.
+
+## D-025: The arm's speed is set at runtime from the dashboard (2026-09-26)
+
+**Context:** The demo should run faster than `arm.speed_scale` 0.5, and trying speeds meant editing the config and restarting.
+**Decision:** `Controller` keeps its own `speed_scale` (starts at `arm.speed_scale`), set with `set_speed_scale()` through `Hub(speed=)` and `GET/POST /api/speed`. It applies from the next motion, clamped to [0.05, `rebot_b601`'s `MAX_SPEED_SCALE`], and isn't saved. One knob for all backends: the real arm, `dry_run`, both sims (their motions are timed from the same `speed_scale`). The hard cap stays 0.6 (`REBOT_MAX_SPEED` env raises it): joint 6 lagged ~20° at 45 °/s on the rig. Sim-only waits (`sim.vision_s`, `sim.time_scale`, the gripper's 0.5 s) stay in the config.
+**Consequences:** From 0.5 the knob gives at most ×1.2 until the cap is raised after a test on the rig. The front-end control is not built yet (`speed` in `/api/status` and `/ws` is there for it).

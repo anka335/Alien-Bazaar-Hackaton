@@ -61,3 +61,4 @@ _None yet._
 - 2026-09-26 (Softjey + Claude): `/api/manual` state has `fault`, new action `clear_fault` (D-020); the page shows a fault banner with Clear fault. The page switcher greys out the page of the mode that isn't running.
 - 2026-09-26 (block 5): 3D view added. Contract changes: `Hub(..., twin=)` / `hub.twin()` (`TwinSource`), new endpoints `/twin`, `/api/twin/layout`, `/api/twin/state`, `/twin-assets/...` (architecture.md → Dashboard HTTP API).
 - 2026-09-26 (Softjey + Claude): `/calibrate` page and `GET/POST /api/calibrate` (D-021); `create_app(..., calibrate=CalibrateControl)`; `ManualControl.run()` / `.busy` let other pages run motions through it.
+- 2026-09-26 (Softjey + Claude): speed control (D-025). Contract changes: `Hub(..., speed=)` / `hub.speed()` (`SpeedControl`), new `GET/POST /api/speed`, `speed` in `/api/status` and `/ws`. No front-end control yet.

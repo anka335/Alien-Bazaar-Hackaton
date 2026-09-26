@@ -334,7 +334,7 @@ class ArmController(Protocol):
 - **`place_on_background` / `drop_to_bin`:** joint moves to the fixed poses (`place_bg`, `bin_<color>`), then open the gripper. `place_bg` holds the TCP `arm.place_release_height_mm` above the mat so the cloth lands crumpled, which makes the re-grasp easier.
 - **Hold vs disable:** disabling the motors makes **the arm fall**. The software stop (dashboard button, Ctrl+C) is `hold()`: abort the motion and hold the joints where they are. After `hold()`, every motion raises `EStopped` until `recover()`. Cutting power is the job of the hardware e-stop switch ([D-009](decisions.md)). `shutdown()` releases a hold, lifts, goes to `rest`, and only then disables.
 - **Driver faults:** `rebot_b601` latches a fault when a joint stays >12° from its setpoint for 0.4 s (blocked, collision, weak motor), on lost feedback or overheating: the motion aborts, the torque stays on holding the measured pose, and every motion raises `ArmError` until the fault is cleared. `driver.fault()` returns the message (with the commanded and measured angle), `clear_fault()` accepts it with the torque still on (`Arm.clear_fault`), or reconnects if the torque is already off ([D-020](decisions.md)).
-- **Inside block 5** ([D-014](decisions.md)): `sorter.arm.controller.Controller` implements the protocol on an `ArmDriver` (`sorter.arm.driver`: `connect`, `disconnect`, `joints`, `gripper`, `execute(waypoints, speed_scale)`, `set_gripper`, `stop`, `resume`, `fault`, `clear_fault`). `RebotDriver` wraps `rebot_b601.arm.Arm` (the CAN bus, or its simulated motors with `arm.dry_run`); the simulator has `SimDriver`. Planning (`sorter.arm.kinematics`: IK, straight-line and joint paths, joint limits, table clearance `arm.z_min_mm`) is shared. The controller also has `gripper_opening()` for the 3D view, and for the dashboard's setup mode `held`, `at`, `go_to(pose)`, `move_joints(q)`, `set_gripper(opening)`, `release()` (leave hold without moving), `fault`, `clear_fault()` and `set_pose(name, q)`; none are in the protocol. Block 2 uses `sorter.arm.kinematics` for FK.
+- **Inside block 5** ([D-014](decisions.md)): `sorter.arm.controller.Controller` implements the protocol on an `ArmDriver` (`sorter.arm.driver`: `connect`, `disconnect`, `joints`, `gripper`, `execute(waypoints, speed_scale)`, `set_gripper`, `stop`, `resume`, `fault`, `clear_fault`). `RebotDriver` wraps `rebot_b601.arm.Arm` (the CAN bus, or its simulated motors with `arm.dry_run`); the simulator has `SimDriver`. Planning (`sorter.arm.kinematics`: IK, straight-line and joint paths, joint limits, table clearance `arm.z_min_mm`) is shared. The controller also has `gripper_opening()` for the 3D view, and for the dashboard's setup mode `held`, `at`, `go_to(pose)`, `move_joints(q)`, `set_gripper(opening)`, `release()` (leave hold without moving), `fault`, `clear_fault()` and `set_pose(name, q)`, and for the dashboard's speed control (`Hub(speed=)`, D-025) `speed_scale`, `max_speed_scale`, `set_speed_scale(scale)`; none are in the protocol. Block 2 uses `sorter.arm.kinematics` for FK.
 
 ### Hub: state machine ↔ dashboard (block 0)
 
@@ -391,9 +391,19 @@ class TwinSource(Protocol):  # the 3D view's data
     def state(self) -> dict[str, Any]: ...
 
 
+class SpeedControl(Protocol):  # the arm's speed, set from the dashboard (block 5's Controller)
+    speed_scale: float  # read-only
+    max_speed_scale: float  # read-only
+    def set_speed_scale(self, scale: float) -> float: ...  # clamped; returns the speed set
+
+
 class Hub:
     def __init__(
-        self, camera: Camera, on_hold: Callable[[], None], twin: TwinSource | None = None
+        self,
+        camera: Camera,
+        on_hold: Callable[[], None],
+        twin: TwinSource | None = None,
+        speed: SpeedControl | None = None,
     ): ...
     # state machine side
     def publish_status(self, s: Status) -> None: ...
@@ -404,6 +414,7 @@ class Hub:
     def decision(self) -> Decision | None: ...
     def live_frame(self) -> Frame | None: ...  # proxy to camera.latest()
     def twin(self) -> TwinSource | None: ...
+    def speed(self) -> SpeedControl | None: ...
     def send(self, cmd: Command) -> None: ...  # HOLD → on_hold() immediately; others → queue
 ```
 
@@ -416,8 +427,10 @@ class Hub:
 | Endpoint | Content |
 | --- | --- |
 | `GET /` | Single page, no build step |
-| `GET /api/status` | `Status` as JSON, plus `now` (`time.monotonic()`, the clock of `Event.t`) for event ages |
-| `WS /ws` | The same JSON, pushed on change, at most `dashboard.status_hz` (5 Hz) |
+| `GET /api/status` | `Status` as JSON, plus `now` (`time.monotonic()`, the clock of `Event.t`) for event ages and `speed` (as `GET /api/speed`, null without a speed control) |
+| `WS /ws` | The same JSON, pushed on change (a speed change too), at most `dashboard.status_hz` (5 Hz) |
+| `GET /api/speed` | `{"speed_scale", "max_speed_scale"}` of the arm ([D-025](decisions.md)); 404 without a speed control |
+| `POST /api/speed` | `{"speed_scale": float}` → the same JSON. Works in any mode; the next motion uses it (one under way keeps its speed); clamped to [0.05, `max_speed_scale`]; not saved (a restart goes back to `arm.speed_scale`) |
 | `GET /stream/decision.mjpg` | Last decision frame with the zone ROI (`views.<zone>.roi`), the overlay, and a caption strip (phase + `summary`) drawn server-side |
 | `GET /stream/live.mjpg` | Live wrist camera (`hub.live_frame()`), at `dashboard.stream_fps` |
 | `GET /snapshot/decision.jpg`, `GET /snapshot/live.jpg` | One JPEG of the same images |
@@ -479,7 +492,7 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 | `calibration` | 2 | `hand_eye` (the transform, from `hand_eye.yaml`); hand-eye tool: `poses`, `tilt_deg`, `shift_mm`; calibration page: `marks_z_mm` (the mat top) |
 | `box_detector` | 3 | `avoid_radius_px`, `wall_margin_mm`, `floor_percentile` / `floor_depth_mm`, `cloth_height_mm`, `min_cloth_px`, `inset_px`, `smooth_px`, `depth_window_px` |
 | `color_classifier` | 4 | `sam` (SAM3 service: `url`, `api_key`, `prompts`, `threshold`, `mask_threshold`, `timeout_s`), class thresholds (`lightness_dark`, `chroma_colored`, `lightness_light`, `confidence_margin`), `erode_px`, `min_area_px`, `max_area_frac`, `overlap_max`, re-grasp (`grasp_inset_px`, `grasp_depth_tol_mm`, `depth_window_px`). The API key goes in `local.yaml` or env `SAM3_API_KEY`, never committed |
-| `arm` | 5 | `dry_run`, `speed_scale` (of `rebot_b601`'s joint speeds, capped at 0.6), `approach`, `safe_z_mm` (recover / shutdown lift), `z_min_mm` (table clearance), `place_release_height_mm`, `bin_release_height_mm` (both used by the layout tool), gripper (`open`, `empty_below`) |
+| `arm` | 5 | `dry_run`, `speed_scale` (of `rebot_b601`'s joint speeds, capped at 0.6; the start value, `POST /api/speed` changes it at runtime), `approach`, `safe_z_mm` (recover / shutdown lift), `z_min_mm` (table clearance), `place_release_height_mm`, `bin_release_height_mm` (both used by the layout tool), gripper (`open`, `empty_below`) |
 | `poses` | 5 | Joint angles (rad): `rest`, `home`, `look_box`, `look_bg`, `place_bg`, `bin_light`, `bin_dark`, `bin_colored` (`rig.yaml`; computed for `sim.layout` by `python -m sorter.sim.layout --write`, re-taught on the rig) |
 | `zones.<zone>` | 5 | `workspace_mm` (XY polygon, arm frame), `z_floor_mm`, `grasp_depth_mm`, `approach_mm`, `lift_z_mm` (`rig.yaml`, same tool) |
 | `state_machine` | 6 | `empty_confirmations`, `max_consecutive_failures`, `low_confidence`, `save_runs`, `runs_dir` |

@@ -90,7 +90,7 @@ def build_system(cfg: Config, sim: bool = False) -> System:
         box_detector=parts["box_detector"],
         color_classifier=parts["color_classifier"],
         observer=Observer(parts["camera"], arm, parts["calibration"]),
-        hub=Hub(parts["camera"], on_hold=arm.hold, twin=twin),
+        hub=Hub(parts["camera"], on_hold=arm.hold, twin=twin, speed=arm),
         world=world,
     )
 

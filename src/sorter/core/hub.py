@@ -23,6 +23,16 @@ class TwinSource(Protocol):
     def state(self) -> dict[str, Any]: ...
 
 
+class SpeedControl(Protocol):
+    """The arm's speed, set from the dashboard; the next motion uses it (block 5's Controller)."""
+
+    @property
+    def speed_scale(self) -> float: ...
+    @property
+    def max_speed_scale(self) -> float: ...
+    def set_speed_scale(self, scale: float) -> float: ...
+
+
 class Hub:
     def __init__(
         self,
@@ -30,10 +40,12 @@ class Hub:
         on_hold: Callable[[], None],
         max_events: int = 50,
         twin: TwinSource | None = None,
+        speed: SpeedControl | None = None,
     ):
         self._camera = camera
         self._on_hold = on_hold
         self._twin = twin
+        self._speed = speed
         self._lock = threading.Lock()
         self._status = Status()
         self._decision: Decision | None = None
@@ -74,6 +86,9 @@ class Hub:
 
     def twin(self) -> TwinSource | None:
         return self._twin
+
+    def speed(self) -> SpeedControl | None:
+        return self._speed
 
     def send(self, cmd: Command | str) -> None:
         """HOLD calls on_hold() immediately, in the caller's thread. Others are queued."""

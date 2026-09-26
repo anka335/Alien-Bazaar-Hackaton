@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from sorter.arm import kinematics as kin
-from sorter.arm.controller import Controller, in_polygon
+from sorter.arm.controller import MIN_SPEED_SCALE, Controller, in_polygon
 from sorter.core.config import load_config
 from sorter.core.errors import EStopped, TargetRejected
 from sorter.core.types import ArmPoint, ColorClass, Zone
@@ -19,6 +19,7 @@ class FakeDriver:
     def __init__(self, q0, grip_after_close=0.3):
         self.q = np.asarray(q0, dtype=float)
         self.paths: list[np.ndarray] = []
+        self.speeds: list[float] = []
         self.gripper_cmds: list[float] = []
         self.grip_after_close = grip_after_close
         self.stopped = False
@@ -40,6 +41,7 @@ class FakeDriver:
         if self.stopped:
             raise EStopped("held")
         self.paths.append(np.asarray(wps))
+        self.speeds.append(speed_scale)
         self.q = np.asarray(wps[-1], dtype=float)
 
     def set_gripper(self, opening):
@@ -220,3 +222,15 @@ def test_shutdown_after_a_failed_start_does_nothing(cfg):
     arm = Controller(FakeDriver(np.zeros(6)), cfg.arm, cfg.poses, cfg.zones)
     arm.shutdown()  # never connected: no motion, no error
     assert arm.driver.paths == [] and not arm.driver.connected
+
+
+def test_speed_changes_from_the_next_motion_clamped(arm, cfg):
+    assert arm.speed_scale == cfg.arm.speed_scale
+    arm.home()
+    assert arm.set_speed_scale(0.3) == 0.3
+    arm.go_to("look_bg")
+    assert arm.driver.speeds == [cfg.arm.speed_scale, 0.3]
+    assert arm.set_speed_scale(5.0) == arm.max_speed_scale
+    assert arm.set_speed_scale(0.0) == MIN_SPEED_SCALE
+    with pytest.raises(ValueError):
+        arm.set_speed_scale(float("nan"))

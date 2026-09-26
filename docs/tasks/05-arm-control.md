@@ -64,3 +64,4 @@ _None yet._
 - 2026-09-26 (Softjey + Claude): driver faults can be cleared without a restart (D-020): `ArmDriver.fault()` / `clear_fault()`, `Controller.fault` / `clear_fault()`, `rebot_b601.arm.Arm.clear_fault()`; the tracking-error message has the commanded and measured angle.
 - 2026-09-26 (Softjey + Claude): `Controller.move_tcp(xyz, linear=)` (gripper down) and `lift()` for the calibration page (D-021); not in the `ArmController` protocol.
 - 2026-09-26 (Softjey + Claude): `ee_pose()` returns `T_base_link5` (`kinematics.fk_link5`), the link the camera is fixed to (D-022); `kinematics.T_LINK5_TCP0` is the TCP in link5 with joint 6 at 0.
+- 2026-09-26 (Softjey + Claude): runtime speed (D-025): `Controller.speed_scale`, `max_speed_scale`, `set_speed_scale()` (clamped to [0.05, `rebot_b601`'s cap], from the next motion); `build_system` passes the arm as `Hub(speed=)`.

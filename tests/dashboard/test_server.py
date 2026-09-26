@@ -57,6 +57,24 @@ def test_commands(client, system):
     assert client.post("/api/command", json={"cmd": "fly"}).status_code == 400
 
 
+def test_speed(client, system):
+    s = client.get("/api/speed").json()
+    assert s == {"speed_scale": system.cfg.arm.speed_scale, "max_speed_scale": 0.6}
+    r = client.post("/api/speed", json={"speed_scale": 0.3})
+    assert r.status_code == 200 and r.json()["speed_scale"] == 0.3
+    assert system.arm.speed_scale == 0.3
+    assert client.post("/api/speed", json={"speed_scale": 9}).json()["speed_scale"] == 0.6
+    assert client.get("/api/status").json()["speed"]["speed_scale"] == 0.6
+    assert client.post("/api/speed", json={"speed_scale": "fast"}).status_code == 422
+
+
+def test_ws_pushes_speed_change(client, system):
+    with client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["speed"]["speed_scale"] == system.cfg.arm.speed_scale
+        client.post("/api/speed", json={"speed_scale": 0.2})
+        assert ws.receive_json()["speed"]["speed_scale"] == 0.2
+
+
 def test_ws_pushes_status_on_change(client, system):
     with client.websocket_connect("/ws") as ws:
         assert ws.receive_json()["phase"] == "idle"

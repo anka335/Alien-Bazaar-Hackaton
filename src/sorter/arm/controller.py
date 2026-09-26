@@ -7,10 +7,12 @@ simulator; only the driver differs.
 from __future__ import annotations
 
 import logging
+import math
 import threading
 from collections.abc import Sequence
 
 import numpy as np
+from rebot_b601 import config as rc
 
 from sorter.arm import kinematics as kin
 from sorter.arm.config import POSE_NAMES, ArmConfig, ZoneConfig
@@ -19,6 +21,8 @@ from sorter.core.errors import EStopped, TargetRejected
 from sorter.core.types import ArmPoint, ColorClass, PickResult, Pose, Zone
 
 log = logging.getLogger(__name__)
+
+MIN_SPEED_SCALE = 0.05
 
 _LOOK = {Zone.BOX: "look_box", Zone.BACKGROUND: "look_bg"}
 
@@ -56,6 +60,7 @@ class Controller:
         self.zones = zones
         self._held = threading.Event()
         self._at: str | None = None  # the named pose the arm is at, if any
+        self._speed = min(max(cfg.speed_scale, MIN_SPEED_SCALE), rc.MAX_SPEED_SCALE)
 
     # --- helpers ---
 
@@ -66,7 +71,7 @@ class Controller:
     def _run(self, wps: np.ndarray) -> None:
         self._check_held()
         self._at = None
-        self.driver.execute(wps, self.cfg.speed_scale)
+        self.driver.execute(wps, self._speed)
         self._check_held()  # a hold that arrived as the motion ended
 
     def _go(self, name: str) -> None:
@@ -184,6 +189,27 @@ class Controller:
     def gripper_opening(self) -> float:
         """Not in the ArmController protocol: for the dashboard's 3D view."""
         return self.driver.gripper()
+
+    # --- speed (the dashboard's speed control), not in the ArmController protocol ---
+
+    @property
+    def speed_scale(self) -> float:
+        """Of rebot_b601's joint speeds; starts at `arm.speed_scale`."""
+        return self._speed
+
+    @property
+    def max_speed_scale(self) -> float:
+        """rebot_b601's hard cap (`REBOT_MAX_SPEED`, 0.6 by default)."""
+        return rc.MAX_SPEED_SCALE
+
+    def set_speed_scale(self, scale: float) -> float:
+        """From the next motion on (one under way keeps its speed), clamped to
+        [MIN_SPEED_SCALE, max_speed_scale]. Returns the speed set."""
+        if not math.isfinite(scale):
+            raise ValueError(f"speed_scale must be a number, not {scale}")
+        self._speed = min(max(float(scale), MIN_SPEED_SCALE), rc.MAX_SPEED_SCALE)
+        log.info("arm speed_scale %.2f", self._speed)
+        return self._speed
 
     # --- manual control (the dashboard's setup page), not in the ArmController protocol ---
 

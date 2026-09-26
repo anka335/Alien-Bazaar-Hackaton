@@ -25,7 +25,7 @@ from rebot_b601.assets import ASSETS_DIR as TWIN_ASSETS_DIR
 
 from sorter.camera.config import ViewConfig
 from sorter.core.errors import SorterError
-from sorter.core.hub import Hub
+from sorter.core.hub import Hub, SpeedControl
 from sorter.core.types import Command, Decision, Status, Zone
 from sorter.dashboard.calibrate import CalibrateControl
 from sorter.dashboard.config import DashboardConfig
@@ -38,6 +38,10 @@ BOUNDARY = "frame"
 
 class CommandRequest(BaseModel):
     cmd: str
+
+
+class SpeedRequest(BaseModel):
+    speed_scale: float
 
 
 class ManualRequest(BaseModel):
@@ -59,9 +63,16 @@ class CalibrateRequest(BaseModel):
     pose: str | None = None
 
 
-def status_json(s: Status) -> dict[str, Any]:
-    """`Status` as JSON, plus `now` (monotonic, same clock as `Event.t`) for event ages."""
-    return {**jsonable_encoder(dataclasses.asdict(s)), "now": time.monotonic()}
+def speed_json(speed: SpeedControl | None) -> dict[str, float] | None:
+    if speed is None:
+        return None
+    return {"speed_scale": speed.speed_scale, "max_speed_scale": speed.max_speed_scale}
+
+
+def status_json(s: Status, speed: dict[str, float] | None = None) -> dict[str, Any]:
+    """`Status` as JSON, plus `now` (monotonic, same clock as `Event.t`) for event ages and
+    `speed` (`speed_json`, null without a speed control)."""
+    return {**jsonable_encoder(dataclasses.asdict(s)), "now": time.monotonic(), "speed": speed}
 
 
 class Frames:
@@ -243,7 +254,26 @@ def create_app(
 
     @app.get("/api/status")
     def status() -> dict:
-        return status_json(hub.status())
+        return status_json(hub.status(), speed_json(hub.speed()))
+
+    def speed_source() -> SpeedControl:
+        speed = hub.speed()
+        if speed is None:
+            raise HTTPException(404, "no speed control")
+        return speed
+
+    @app.get("/api/speed")
+    def speed_state() -> dict:
+        return speed_json(speed_source())
+
+    @app.post("/api/speed")
+    def set_speed(req: SpeedRequest) -> dict:
+        speed = speed_source()
+        try:
+            speed.set_speed_scale(req.speed_scale)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        return speed_json(speed)
 
     @app.post("/api/command")
     def command(req: CommandRequest) -> dict:
@@ -261,9 +291,9 @@ def create_app(
         async def push() -> None:
             last = None
             while True:
-                s = hub.status()
+                s = (hub.status(), speed_json(hub.speed()))
                 if s != last:
-                    await websocket.send_json(status_json(s))
+                    await websocket.send_json(status_json(*s))
                     last = s
                 await asyncio.sleep(1 / cfg.status_hz)
 

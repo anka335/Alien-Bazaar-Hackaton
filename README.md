@@ -94,7 +94,7 @@ backends:
 
 **Color classifier** (block 4) segments the background with a remote SAM3 service ([D-013](docs/decisions.md)). To use it (`backends.color_classifier: real`), put the API key in `config/local.yaml` (`color_classifier: {sam: {api_key: ...}}`) or in the `SAM3_API_KEY` env var. With `sim.use_sam3: true`, set `sam.prompts: [blob]` and `sam.threshold: 0.3`, since SAM3 doesn't see the rendered cloth as clothing. Tuning tool: `uv run python -m sorter.color_classifier.stats <observation.npz ...>` or `--sim 3` (`--prompts a,b`, `--threshold`); it prints the color stats of every item (`--save DIR` writes overlays).
 
-**Real arm** (block 5, [D-014](docs/decisions.md)): `uv sync --extra hardware` adds `motorbridge`. `run` without `--sim` uses it; with `arm.dry_run: true` it first runs `rebot_b601`'s simulated motors (the same control loop and safety checks, no bus). The CAN setup (`can0`, zero calibration) is in [rebot_b601/README.md](rebot_b601/README.md). The arm's speed is `arm.speed_scale` (0.5 of `rebot_b601`'s joint speeds, capped at 0.6).
+**Real arm** (block 5, [D-014](docs/decisions.md)): `uv sync --extra hardware` adds `motorbridge`. `run` without `--sim` uses it; with `arm.dry_run: true` it first runs `rebot_b601`'s simulated motors (the same control loop and safety checks, no bus). The CAN setup (`can0`, zero calibration) is in [rebot_b601/README.md](rebot_b601/README.md). The arm's speed is `arm.speed_scale` (0.5 of `rebot_b601`'s joint speeds, capped at 0.6, `REBOT_MAX_SPEED` env to raise it); `POST /api/speed {"speed_scale": 0.6}` changes it while running, until a restart.
 
 ## Working with AI agents
 
