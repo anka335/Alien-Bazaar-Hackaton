@@ -43,7 +43,7 @@ Safe, blocking, high-level arm operations for the state machine, on the Seeed re
 - The wrist camera descends with the gripper, but joint 6 (wrist roll) doesn't turn it: it is on `link5` (D-027). `sim.camera_mount_mm` (140 mm behind the fingertips, 55 mm off-axis) is an assumption: measure the real mount and update it, then recompute the poses.
 - **Hardware is the B601-RS (RobStride), not the DM** ([D-011](../decisions.md)): RS-06 on joints 1–3, RS-00 on joints 4–6 and the gripper (motor 7). On Linux bring `can0` up at 1 Mbit/s with the PCAN-USB adapter. Zero calibration is done once with Motorbridge Studio (`motorbridge-gateway`, which holds the bus: stop it before running the sorter).
 - First real-arm run (2026-09-26): going to `look_box` faulted with joint6 13.6° behind its setpoint, though nothing blocked it. That pose (from the sim layout) turns joint6 to 102°, the other poses keep it near 0°. Cause not known yet (RS-00 torque with the camera's weight, zero offset of joint6?): jog J6 in steps to find where it faults, and re-teach `look_box`.
-- Speeds: `arm.speed_scale` 0.5 of `rebot_b601`'s joint speeds (capped at 0.6). A full sim cycle at real speed takes about a minute per item.
+- Speeds (D-033): `arm.speed_scale` 1.0 at start, up to `arm.max_speed_scale` 1.4 (the motors' velocity limit); about 20 s of arm motion per item at 1.4 on the sim. Not yet run fast on the rig: the acceleration is higher than before, joint6 peaks at 56 °/s (it lagged at 45 °/s), and a control loop at ~5 Hz (above) would jerk more at speed. Start the slider low and raise it.
 
 ## Open questions
 
@@ -65,3 +65,4 @@ _None yet._
 - 2026-09-26 (Softjey + Claude): `Controller.move_tcp(xyz, linear=)` (gripper down) and `lift()` for the calibration page (D-026); not in the `ArmController` protocol.
 - 2026-09-26 (Softjey + Claude): `ee_pose()` returns `T_base_link5` (`kinematics.fk_link5`), the link the camera is fixed to (D-027); `kinematics.T_LINK5_TCP0` is the TCP in link5 with joint 6 at 0.
 - 2026-09-26 (Softjey + Claude): runtime speed (D-030): `Controller.speed_scale`, `max_speed_scale`, `set_speed_scale()` (clamped to [0.05, `rebot_b601`'s cap], from the next motion); `build_system` passes the arm as `Hub(speed=)`.
+- 2026-09-27 (Softjey + Claude): faster arm (D-033): `arm.max_speed_scale` (1.4) and `controller.speed_ceiling()`; `RebotDriver(max_speed_scale=)`; `rebot_b601` moves at constant peak speed between raised-cosine ramps (`path_timing`, `Trajectory(ramp=)`, `JOINT_ACCEL`) instead of one min-jerk profile; `arm.speed_scale` 1.0.

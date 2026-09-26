@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from sorter.arm import kinematics as kin
-from sorter.arm.controller import MIN_SPEED_SCALE, Controller, in_polygon
+from sorter.arm.controller import MIN_SPEED_SCALE, Controller, in_polygon, speed_ceiling
 from sorter.core.config import load_config
 from sorter.core.errors import EStopped, TargetRejected
 from sorter.core.types import ArmPoint, ColorClass, Zone
@@ -234,3 +234,10 @@ def test_speed_changes_from_the_next_motion_clamped(arm, cfg):
     assert arm.set_speed_scale(0.0) == MIN_SPEED_SCALE
     with pytest.raises(ValueError):
         arm.set_speed_scale(float("nan"))
+
+
+def test_max_speed_stays_under_the_motors_limit(cfg):
+    assert 1.4 < speed_ceiling() < 1.5  # 1.5 rad/s over joint 4's 60 deg/s
+    fast = cfg.arm.model_copy(update={"max_speed_scale": 5.0, "speed_scale": 5.0})
+    arm = Controller(FakeDriver(np.zeros(6)), fast, cfg.poses, cfg.zones)
+    assert arm.max_speed_scale == arm.speed_scale == speed_ceiling()

@@ -12,4 +12,9 @@ if TYPE_CHECKING:
 
 
 def create(cfg: Config) -> Controller:
-    return Controller(RebotDriver(dry_run=cfg.arm.dry_run), cfg.arm, cfg.poses, cfg.zones)
+    return Controller(
+        RebotDriver(dry_run=cfg.arm.dry_run, max_speed_scale=cfg.arm.max_speed_scale),
+        cfg.arm,
+        cfg.poses,
+        cfg.zones,
+    )

@@ -71,12 +71,23 @@ class RebotDriver:
     safety checks, no bus. Needs `uv sync --extra hardware` for the real bus.
     """
 
-    def __init__(self, dry_run: bool = False, *, arm=None, backend=None, own_loop: bool = True):
-        """`arm`, `backend`, `own_loop`: for the physics simulator, which supplies the motors
+    def __init__(
+        self,
+        dry_run: bool = False,
+        *,
+        max_speed_scale: float | None = None,
+        arm=None,
+        backend=None,
+        own_loop: bool = True,
+    ):
+        """`max_speed_scale`: rebot_b601's cap (its `REBOT_MAX_SPEED` default otherwise).
+        `arm`, `backend`, `own_loop`: for the physics simulator, which supplies the motors
         and runs the control loop in simulated time (`rebot_b601.arm.Arm.connect`)."""
         from rebot_b601.arm import Arm
 
         self.arm = arm or Arm()
+        if max_speed_scale is not None:
+            self.arm.max_speed_scale = max_speed_scale
         self.dry_run = dry_run
         self._backend = backend
         self._own_loop = own_loop

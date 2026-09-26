@@ -83,8 +83,13 @@ def plan_joints(q0: Sequence[float], q1: Sequence[float], *, z_min_mm: float) ->
 
 
 def path_duration(wps: np.ndarray, speed_scale: float) -> float:
-    """Seconds the real arm takes for `wps` at `speed_scale` (min-jerk profile)."""
+    """Seconds the real arm takes for `wps` at `speed_scale`."""
     return rb.path_duration(np.asarray(wps, dtype=float), speed_scale)
+
+
+def path_timing(wps: np.ndarray, speed_scale: float) -> tuple[float, float]:
+    """(duration, ramp) in seconds of the real arm's profile for `wps` at `speed_scale`."""
+    return rb.path_timing(np.asarray(wps, dtype=float), speed_scale)
 
 
 def solve(
