@@ -1,4 +1,4 @@
-"""Drive autonomously on the saved map (D-015): RTAB-Map localization + Nav2 + keepout filter.
+"""Drive autonomously on the saved map (D-019): RTAB-Map localization + Nav2 + keepout filter.
 
     ros2 launch rover_nav navigation.launch.py                # OAK-D on the rover's front
     ros2 launch rover_nav navigation.launch.py nav_camera:=wrist   # arm's D435i

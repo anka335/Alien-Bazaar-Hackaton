@@ -1,4 +1,4 @@
-# Nav2 for the Leo Rover carrying the reBot arm (D-015). Loaded by navigation.launch.py.
+# Nav2 for the Leo Rover carrying the reBot arm (D-019). Loaded by navigation.launch.py.
 # Localization and /map come from RTAB-Map (no AMCL, no map_server for the map itself).
 # Slow on purpose: the only depth sensor is one narrow camera, sides are blind while turning.
 #

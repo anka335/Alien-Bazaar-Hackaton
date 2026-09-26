@@ -14,7 +14,7 @@ This demo addresses the core challenge of automated laundry handling — picking
 | Camera | RGB-D (depth) camera mounted on the arm's wrist (eye-in-hand), model: _TBD_ |
 | Work area | at fixed positions: mixed-clothes box, uniform background area (mid-gray), 3 bins (light / dark / colored) |
 | Lighting | dedicated lamp for stable lighting |
-| Mobile base | Leo Rover carrying the arm, the laptop and the camera around one room (block 9, [D-015](docs/decisions.md)) |
+| Mobile base | Leo Rover carrying the arm, the laptop and the camera around one room (block 9, [D-019](docs/decisions.md)) |
 
 ## How it works
 
@@ -86,7 +86,7 @@ backends:
 
 **Real hardware:** the arm SDK ([`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py)) is not a dependency yet. Block 5 adds it with the real arm backend ([D-010](docs/decisions.md)).
 
-**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth pick-and-place task (proposed, [D-014](docs/decisions.md)). Setup and run commands: [ros2_ws/README.md](ros2_ws/README.md). Rover navigation (block 9, [D-015](docs/decisions.md)) is part of this track: RTAB-Map + Nav2 on a Leo Rover with an OAK-D on its front ([D-016](docs/decisions.md)), in `ros2_ws/src/rover_nav` (in progress; usage in [its README](ros2_ws/src/rover_nav/README.md)).
+**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth pick-and-place task (proposed, [D-014](docs/decisions.md)). Setup and run commands: [ros2_ws/README.md](ros2_ws/README.md). Rover navigation (block 9, [D-019](docs/decisions.md)) is part of this track: RTAB-Map + Nav2 on a Leo Rover with an OAK-D on its front ([D-020](docs/decisions.md)), in `ros2_ws/src/rover_nav` (in progress; usage in [its README](ros2_ws/src/rover_nav/README.md)).
 
 ## Working with AI agents
 

@@ -33,6 +33,7 @@ setup(
             "leader_teleop = cloth_task.leader_teleop:main",
             "roi_tool = cloth_task.roi_tool:main",
             "status_web = cloth_task.status_web:main",
+            "spectacles_bridge = cloth_task.spectacles_bridge:main",
         ],
     },
 )

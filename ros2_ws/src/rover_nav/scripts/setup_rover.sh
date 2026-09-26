@@ -8,7 +8,7 @@
 #   - ROBOT_NAMESPACE=leo in /etc/ros/setup.bash: every rover frame gets the `leo/` prefix
 #     (leo/base_footprint, leo/base_link, ...) and every rover topic the /leo namespace
 #     (/leo/cmd_vel, /leo/merged_odom, /leo/joint_states, ...). The reBot arm keeps `base_link`,
-#     `/joint_states` and `/robot_description` (D-015).
+#     `/joint_states` and `/robot_description` (D-019).
 #   - Deploys ../rover/robot.urdf.xacro: the stock model without the Panthera arm.
 #   - Restarts the rover's ROS services and waits for /leo/merged_odom.
 # The originals are saved once in ~/rover_nav_backup on the rover.

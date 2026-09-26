@@ -10,6 +10,9 @@ temperature and lost-feedback checks all stay active) and exposes what MoveIt an
   /arm_bridge/teleop                            std_srvs/SetBool: follow a leader arm (on/off)
   /arm_bridge/teleop_command                    sensor_msgs/JointState: joint1..6 (rad) +
                                                 "gripper" (opening 0..1), from leader_teleop
+                                                or spectacles_bridge
+  /arm_bridge/driver_fault                      std_msgs/Bool, latched: false at start, true
+                                                once the driver faults (until it reconnects)
 
 Teleop: each command moves the driver's hold setpoint towards it at most `teleop_max_dps` (just
 under the motors' own 86°/s limit), every step checked with rebot_b601's pose_is_safe (table,
@@ -40,7 +43,9 @@ from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Bool
 from std_srvs.srv import SetBool
 
 from cloth_task.core import ARM_JOINTS
@@ -194,6 +199,10 @@ class ArmBridge(Node):
                 self.get_logger().error(f"unfold failed ({e}); holding at home")
 
         cb = ReentrantCallbackGroup()
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self._fault_pub = self.create_publisher(Bool, "/arm_bridge/driver_fault", latched)
+        self._fault_sent: bool | None = None
+        self._publish_fault()
         self._js_pub = self.create_publisher(JointState, "/joint_states", 10)
         self.create_timer(1.0 / 50.0, self._publish_joints, callback_group=cb)
         self._cancel = threading.Event()
@@ -230,7 +239,14 @@ class ArmBridge(Node):
         opening = min(max(grip_pos / math.radians(self.C.GRIPPER_OPEN_DEG), 0.0), 1.0)
         return opening * self.K.FINGER_TRAVEL_M
 
+    def _publish_fault(self) -> None:
+        faulted = self.arm._fault is not None
+        if faulted != self._fault_sent:
+            self._fault_pub.publish(Bool(data=faulted))
+            self._fault_sent = faulted
+
     def _publish_joints(self) -> None:
+        self._publish_fault()
         meas = self.arm._meas
         if meas is None:
             return

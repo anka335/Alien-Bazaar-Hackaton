@@ -7,7 +7,7 @@ Single source of truth for the contracts between blocks. Block 0 implements the 
 - **Arm:** Seeed reBot Arm B601-RS (RobStride motors: RS-06 on joints 1–3, RS-00 on joints 4–6 and the gripper; 6 DoF + parallel gripper; reach roughly 0.6–0.7 m from the shoulder axis, from the URDF; see [D-011](decisions.md)). USB→CAN (PEAK PCAN-USB, SocketCAN `can0` at 1 Mbit/s on Linux), Python SDK [`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py) (Pinocchio IK/FK, metres + radians).
 - **Camera:** Intel RealSense D435i RGB-D, **mounted on the wrist** behind the gripper, looking along the gripper axis (eye-in-hand, [D-006](decisions.md)).
 - **Zones at fixed positions** ([D-007](decisions.md)): mixed box, background area (mid-gray), 3 bins (light / dark / colored). The clothes inside the box lie arbitrarily.
-- **Mobile base (block 9, [D-015](decisions.md)):** a Leo Rover (LeoOS, ROS 2 Jazzy) carries the arm, the laptop (on board, on the rover's Wi-Fi) and the wrist camera through one fixed room. Not part of the sorter loop.
+- **Mobile base (block 9, [D-019](decisions.md)):** a Leo Rover (LeoOS, ROS 2 Jazzy) carries the arm, the laptop (on board, on the rover's Wi-Fi) and the wrist camera through one fixed room. Not part of the sorter loop.
 - The arm looks at a zone from a fixed **look pose** (`look_box`, `look_bg`). Because look poses are repeatable, pixel ROIs of each zone are constants in config.
 
 ## Components
@@ -476,7 +476,7 @@ Each sim component is selected independently through `backends`, so a real compo
 
 ## Rover navigation (block 9, ROS 2 track)
 
-`ros2_ws/src/rover_nav` ([D-015](decisions.md), [D-016](decisions.md)). Ready-made nodes: RTAB-Map for SLAM, Nav2 for driving, a Nav2 keepout filter for the forbidden half of the room. Two launches: **mapping** (RTAB-Map mapping, keyboard teleop, done once) and **navigation** (RTAB-Map localization on the saved database, Nav2, keepout filter).
+`ros2_ws/src/rover_nav` ([D-019](decisions.md), [D-020](decisions.md)). Ready-made nodes: RTAB-Map for SLAM, Nav2 for driving, a Nav2 keepout filter for the forbidden half of the room. Two launches: **mapping** (RTAB-Map mapping, keyboard teleop, done once) and **navigation** (RTAB-Map localization on the saved database, Nav2, keepout filter).
 
 | Interface | Direction | Notes |
 | --- | --- | --- |
@@ -514,4 +514,4 @@ Each sim component is selected independently through `backends`, so a real compo
 | `config/hand_eye.yaml` | 2 |
 | `docs/demo.md` | 8 |
 | `ros2_ws/` (ROS 2 cloth pick-and-place track, [D-014](decisions.md); see `ros2_ws/README.md`) | ROS track |
-| `ros2_ws/src/rover_nav/` (rover navigation, [D-015](decisions.md)) | 9 |
+| `ros2_ws/src/rover_nav/` (rover navigation, [D-019](decisions.md)) | 9 |

@@ -1,4 +1,4 @@
-"""Map the room once (D-015): RTAB-Map on one RGB-D camera + the rover's odometry.
+"""Map the room once (D-019): RTAB-Map on one RGB-D camera + the rover's odometry.
 
     ros2 launch rover_nav mapping.launch.py                   # OAK-D on the rover's front
     ros2 launch rover_nav mapping.launch.py nav_camera:=wrist # arm's D435i, static camera TF

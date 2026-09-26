@@ -5,14 +5,14 @@
 
 ## Goal
 
-The Leo Rover carries the laptop and the arm, and drives autonomously inside one room on a saved SLAM map, staying out of a forbidden half of the room ([D-015](../decisions.md)). The navigation camera is an OAK-D fixed on the rover's front by default, or the arm's wrist D435i ([D-016](../decisions.md)). Searching the room for laundry comes later and builds on this.
+The Leo Rover carries the laptop and the arm, and drives autonomously inside one room on a saved SLAM map, staying out of a forbidden half of the room ([D-019](../decisions.md)). The navigation camera is an OAK-D fixed on the rover's front by default, or the arm's wrist D435i ([D-020](../decisions.md)). Searching the room for laundry comes later and builds on this.
 
 ## Scope
 
 - [x] Rover setup: namespace `leo`, model without the Panthera arm (`scripts/setup_rover.sh`, applied).
 - [x] Rover clock synced to the laptop (`scripts/setup_time_sync.sh`, applied: ~70 ms right after, converging).
 - [x] ROS 2 package `ros2_ws/src/rover_nav` (`ament_python`, launch + config + small tools), built with the rest of `ros2_ws`. Usage: [rover_nav/README.md](../../ros2_ws/src/rover_nav/README.md).
-- [x] **Camera option** `nav_camera:=oak|wrist` (D-016): OAK-D via `depthai_ros_driver` (`config/oak.yaml`, udev `scripts/setup_oak.sh`), or the wrist D435i.
+- [x] **Camera option** `nav_camera:=oak|wrist` (D-020): OAK-D via `depthai_ros_driver` (`config/oak.yaml`, udev `scripts/setup_oak.sh`), or the wrist D435i.
 - [x] **Mapping launch** (written, not yet run): RTAB-Map (RGB-D + the rover's wheel odometry) in mapping mode; the room is mapped **once by keyboard teleop** (`teleop_twist_keyboard` → `/cmd_vel`).
 - [ ] Save the result: the RTAB-Map database (localization) and the 2D occupancy grid (`map_saver_cli` → `.pgm` + `.yaml`, the base for the keepout mask).
 - [x] **Keepout mask tool** (`make_keepout`, plain Python, 11 tests; `--forbid-rect` for extra rectangles such as furniture): from the saved map and a dividing line (two points in the `map` frame) plus which side is allowed, write a Nav2 keepout filter mask (`.pgm` + `.yaml`) that marks the other side forbidden.
@@ -68,11 +68,11 @@ _None yet._
 
 ## Log
 
-- 2026-09-26: block created (D-015): RTAB-Map + Nav2 + keepout filter, map once by teleop, camera on the wrist in a `drive` pose, laptop on the rover over USB-C. Waypoints deferred.
+- 2026-09-26: block created (D-019): RTAB-Map + Nav2 + keepout filter, map once by teleop, camera on the wrist in a `drive` pose, laptop on the rover over USB-C. Waypoints deferred.
 - 2026-09-26: rover checked over its Wi-Fi: LeoOS, Jazzy, `/merged_odom` + `odom` → `base_footprint` from `odom_filter`, `/cmd_vel` to the firmware; the USB-C port is a host port, so the link is Wi-Fi; rover clock unsynchronized.
 - 2026-09-26: rover renamed to namespace `leo` (frames `leo/…`, topics `/leo/…`) and the Panthera arm removed from its model (`scripts/setup_rover.sh`); time sync script added.
 - 2026-09-26: `rover_nav` package: mapping and navigation launches (RTAB-Map, Nav2 with RPP controller, keepout filter), `make_keepout` with tests, `config/mounts.yaml` (placeholders), README. Built with colcon; not yet run (RTAB-Map, Nav2, RealSense driver not installed yet).
-- 2026-09-26: OAK-D on the rover's front as the default navigation camera, wrist D435i as `nav_camera:=wrist` (D-016).
+- 2026-09-26: OAK-D on the rover's front as the default navigation camera, wrist D435i as `nav_camera:=wrist` (D-020).
 - 2026-09-26: OAK-D tested on the laptop with `config/oak.yaml` (stereo resolution fixed to `400P`): 640×360 color + depth at ~15 Hz, synced, depth from 0.34 m, USB 2.
 - 2026-09-26: first test on the rover (OAK-D): mapping stack up, RTAB-Map at 1 Hz (~0.1 s per update), TF `map` → … → `oak_rgb_camera_optical_frame` complete; floor plane from depth: tilt error +0.9°, roll −0.8°, height −0.1 cm, so the measured mount is right. The camera needed ~40 s and two USB errors to connect on a normal start (USB 2). After a rover reboot the clock re-synced within a minute of the laptop joining its Wi-Fi.
 - 2026-09-26: final room map saved (`~/rover_nav_maps/room.*`, ~8.8 × 8.6 m). Keepout: y < −3.5 forbidden, plus the row of chairs at x = −1, y −2.5 … −1 (`--forbid-rect -1.3 -2.6 -0.7 -0.9`, new option). Bottles near (−0.5, −3.5) are in the map as obstacles; they stay in the saved map after they are removed from the room until that area is mapped again.

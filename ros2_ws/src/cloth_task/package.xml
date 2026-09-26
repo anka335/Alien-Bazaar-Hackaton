@@ -25,6 +25,8 @@
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
+  <!-- spectacles_bridge only -->
+  <exec_depend>python3-websockets</exec_depend>
   <exec_depend>rebot_b601_moveit_config</exec_depend>
 
   <test_depend>python3-pytest</test_depend>

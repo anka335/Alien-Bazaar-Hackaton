@@ -1,6 +1,6 @@
 # rover_nav: Leo Rover navigation in one room
 
-Block 9 ([task](../../../docs/tasks/09-rover-navigation.md), [D-015](../../../docs/decisions.md), [D-016](../../../docs/decisions.md)). The Leo Rover carries the laptop and the reBot arm. RTAB-Map builds a map of the room from one RGB-D camera and the rover's odometry (once, driven by keyboard); after that Nav2 drives on the saved map and stays out of a forbidden half (keepout filter). Everything runs on the laptop; the rover runs only its stock LeoOS driver.
+Block 9 ([task](../../../docs/tasks/09-rover-navigation.md), [D-019](../../../docs/decisions.md), [D-020](../../../docs/decisions.md)). The Leo Rover carries the laptop and the reBot arm. RTAB-Map builds a map of the room from one RGB-D camera and the rover's odometry (once, driven by keyboard); after that Nav2 drives on the saved map and stays out of a forbidden half (keepout filter). Everything runs on the laptop; the rover runs only its stock LeoOS driver.
 
 **Status:** rover setup applied and checked; launch files and configs written and built, **not yet run** (RTAB-Map, Nav2 and the camera drivers still to install). Mount values in `config/mounts.yaml` and the Nav2 footprint are placeholders.
 

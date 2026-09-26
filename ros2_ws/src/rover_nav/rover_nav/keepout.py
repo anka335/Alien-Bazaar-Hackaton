@@ -1,4 +1,4 @@
-"""Nav2 keepout mask from a saved map: forbid one side of a line and/or rectangles (D-015).
+"""Nav2 keepout mask from a saved map: forbid one side of a line and/or rectangles (D-019).
 
     ros2 run rover_nav make_keepout ~/rover_nav_maps/room.yaml --line X1 Y1 X2 Y2 --keep X Y \
         [--forbid-rect X1 Y1 X2 Y2 ...]

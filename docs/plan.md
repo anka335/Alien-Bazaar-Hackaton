@@ -47,7 +47,7 @@ graph LR
 - **Block 2** needs the camera mount from block 1 and FK + motion from block 5. It reuses the Seeed hand-eye script (D-006).
 - **Blocks 3 and 4** start on photos or recorded frames and switch to look-pose recordings and live frames once blocks 1 and 5 are ready.
 - **Block 6** is developed against the simulator. Real integration needs 2–5.
-- **Block 9** (ROS 2 track, D-015) moves the arm around one room on a Leo Rover. With the OAK-D on the rover (default, D-016) it depends on no other block; with the wrist camera it needs a `drive` pose from the arm and the RealSense ROS driver.
+- **Block 9** (ROS 2 track, D-019) moves the arm around one room on a Leo Rover. With the OAK-D on the rover (default, D-020) it depends on no other block; with the wrist camera it needs a `drive` pose from the arm and the RealSense ROS driver.
 - **Block 8** starts early for one thing: choose the demo clothes on day 1, since thresholds and grasp depth are tuned on them.
 
 ## Suggested order
