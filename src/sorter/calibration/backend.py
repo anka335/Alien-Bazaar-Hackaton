@@ -19,7 +19,7 @@ def create(cfg: Config) -> HandEyeCalibration:
         raise CalibrationError(
             "no hand-eye result (config/hand_eye.yaml): run python -m sorter.calibration.hand_eye"
         )
-    T = np.array(he.T_flange_cam, dtype=np.float64)
+    T = np.array(he.T_link5_cam, dtype=np.float64)
     if T.shape != (4, 4):
-        raise CalibrationError("calibration.hand_eye.T_flange_cam must be 4x4")
+        raise CalibrationError("calibration.hand_eye.T_link5_cam must be 4x4")
     return HandEyeCalibration(T)

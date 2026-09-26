@@ -1,6 +1,6 @@
 """HandEyeCalibration: the `Calibration` contract with a pinhole camera and the hand-eye result.
 
-T_base_cam = T_base_flange · T_flange_cam
+T_base_cam = T_base_link5 · T_link5_cam (the camera is fixed to link5, D-022)
 pixel (u, v) + depth Z  →  camera point (x, y, Z)  →  arm point
 """
 
@@ -23,11 +23,11 @@ def _undistort(k: Intrinsics, u: float, v: float) -> tuple[float, float]:
 
 
 class HandEyeCalibration:
-    def __init__(self, T_flange_cam: Pose):
-        self.T_flange_cam = np.asarray(T_flange_cam, dtype=np.float64)
+    def __init__(self, T_link5_cam: Pose):
+        self.T_link5_cam = np.asarray(T_link5_cam, dtype=np.float64)
 
     def cam_pose(self, ee_pose: Pose) -> Pose:
-        return np.asarray(ee_pose, dtype=np.float64) @ self.T_flange_cam
+        return np.asarray(ee_pose, dtype=np.float64) @ self.T_link5_cam
 
     def to_arm(self, obs: Observation, point: GraspPoint) -> ArmPoint:
         if obs.T_base_cam is None:

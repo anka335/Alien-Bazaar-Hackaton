@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from sorter.app import build_system
 from sorter.arm import kinematics as kin
-from sorter.calibration.marks import project
+from sorter.calibration.marks import deproject, project
 from sorter.core.config import DEFAULT_CONFIG_DIR, load_config
 from sorter.dashboard.calibrate import CalibrateControl, coverage, write_views
 from sorter.dashboard.manual import ManualControl
@@ -67,7 +67,9 @@ def _click_all(cal, system):
     n = 0
     for name in cal.marks:
         (p,) = project(T_cam, k, [cal.marks[name].xyz])
-        if p is None or not (20 <= p[0] < k.width - 20 and 60 <= p[1] < k.height - 20):
+        if p is None or not (20 <= p[0] < k.width - 20 and 20 <= p[1] < k.height - 20):
+            continue
+        if deproject(frame, *p) is None:  # under the gripper: too close for depth
             continue
         assert frame.color[int(p[1]), int(p[0])].mean() < 90  # the tape is drawn there
         cal.click(name, p[0] + 7, p[1] - 6)  # a bit off: it snaps to the square
@@ -86,11 +88,11 @@ def test_the_tip_goes_over_a_mark(cal, system):
 
 
 def test_clicks_from_views_find_the_true_mount(cal, system):
-    for i in range(2):
+    for i in range(3):
         cal.goto_view(i)
         cal.manual.wait()
         assert cal.manual.state()["error"] is None
-        assert _click_all(cal, system) >= 4
+        assert _click_all(cal, system) >= 3
     fit = cal.state()["fit"]
     assert fit["marks"] == 6
     assert fit["true_error_mm"] < 3.0 and fit["true_error_deg"] < 1.0
@@ -98,7 +100,7 @@ def test_clicks_from_views_find_the_true_mount(cal, system):
 
     path = cal.save_mount()
     he = yaml.safe_load(Path(path).read_text())["calibration"]["hand_eye"]
-    assert np.allclose(he["T_flange_cam"], cal.mount, atol=1e-5)
+    assert np.allclose(he["T_link5_cam"], cal.mount, atol=1e-5)
     assert he["method"].startswith("marks (6 marks")
 
 
@@ -117,8 +119,11 @@ def test_a_second_click_on_a_mark_replaces_the_first(cal, system):
 
 def test_look_poses_see_the_whole_zone(cal, system, rig):
     look = cal.compute_look()
+    assert look["look_box"]["fits"], look["look_box"]
+    # joint 6 doesn't turn the camera (D-022): over the mat, off to the side, the image is
+    # turned against it and the arm can't lift the camera high enough to see all of it
+    assert look["look_bg"]["coverage"] >= 0.9, look["look_bg"]
     for name in ("look_box", "look_bg"):
-        assert look[name]["fits"], look[name]
         assert look[name]["camera_mm"] >= 200
     cal.goto_look("look_box")
     cal.manual.wait()

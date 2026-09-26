@@ -218,6 +218,7 @@ def _arm(parent: ET.Element, cfg: SimConfig) -> None:
     inertial(body, "base_link")
     visuals(body, "base_link")
     ET.SubElement(body, "geom", name="base_col", type="cylinder", size="0.06 0.04", pos="0 0 0.04")
+    bodies = {}
     for i, jn in enumerate(ARM_JOINTS):
         child = f"link{i + 1}"
         j = joints[child]
@@ -230,6 +231,7 @@ def _arm(parent: ET.Element, cfg: SimConfig) -> None:
             quat=_f(*_quat(_vec(o.get("rpy")))),
             gravcomp="1",
         )
+        bodies[child] = body
         lim = j.find("limit")
         ET.SubElement(
             body,
@@ -254,12 +256,12 @@ def _arm(parent: ET.Element, cfg: SimConfig) -> None:
     inertial(tcp, "gripper_end")
     visuals(tcp, "gripper_end")
     ET.SubElement(tcp, "site", name="tcp", size="0.004")
-    # the gripper housing behind the fingers, and the camera on it
+    # the gripper housing behind the fingers; the camera is on link5, joint 6 doesn't turn it
     ET.SubElement(tcp, "geom", name="palm", type="box", size="0.042 0.09 0.034", pos="-0.115 0 0")
     T = camera_mount(cfg)
-    mount = np.array(cfg.camera_mount_mm) / 1000
+    mount = T[:3, 3] / 1000
     ET.SubElement(
-        tcp,
+        bodies["link5"],
         "geom",
         name="camera_body",
         type="box",
@@ -272,7 +274,7 @@ def _arm(parent: ET.Element, cfg: SimConfig) -> None:
     # a MuJoCo camera looks along its -z with +y up: the optical frame turned 180° about x
     x, y = T[:3, 0], -T[:3, 1]
     ET.SubElement(
-        tcp,
+        bodies["link5"],
         "camera",
         name="wrist",
         pos=_f(*mount),

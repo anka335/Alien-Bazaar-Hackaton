@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sorter.arm import kinematics as kin
 from sorter.arm.controller import Controller
 from sorter.arm.driver import RebotDriver
 from sorter.calibration.calibration import HandEyeCalibration
@@ -19,8 +18,8 @@ if TYPE_CHECKING:
 
 
 def hand_eye(cfg: Config):
-    """T_flange_cam of the simulated camera mount (what the hand-eye tool should find)."""
-    return kin.T_FLANGE_TCP @ camera_mount(cfg.sim)
+    """T_link5_cam of the simulated camera mount (what the hand-eye tool should find)."""
+    return camera_mount(cfg.sim)
 
 
 def create(name: str, cfg: Config, world: PhysicsWorld) -> Any:

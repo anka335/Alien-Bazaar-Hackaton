@@ -10,7 +10,7 @@ Convert camera observations into arm coordinates accurately enough to grasp clot
 ## Scope
 
 - [x] Hand-eye calibration, eye-in-hand ([D-006](../decisions.md)): `python -m sorter.calibration.hand_eye`: a ChArUco board on the mat, automatic views around `look_bg`, Park & Martin in numpy (OpenCV 5 has no `calibrateHandEye` in Python). In mm.
-- [x] Make sure the result is relative to the same flange frame (`end_link`) that `ArmController.ee_pose()` returns.
+- [x] Make sure the result is relative to the same frame that `ArmController.ee_pose()` returns (`link5`, the camera link, D-022).
 - [x] Save to `config/hand_eye.yaml`: 4×4 in mm, `rmse_mm`, `method`, `camera_serial`, `created`. The file is committed ([D-007](../decisions.md)).
 - [x] Implement the `Calibration` contract: `cam_pose`, `to_arm`, `to_pixel` (`HandEyeCalibration`).
 - [ ] Verification tool (touch test): from a look pose, click a point in the image (or detect a marker), move the TCP there with the arm, and measure the error. Cover box corners, box center, and background.
@@ -30,7 +30,8 @@ Convert camera observations into arm coordinates accurately enough to grasp clot
 - The error budget includes FK accuracy, hand-eye accuracy, and depth noise. Depth error grows with distance, so the look poses should be as low as the camera's minimum range allows.
 - The calibration page (`/calibrate`, D-021) is the way without a board: tape marks, clicks, a rigid fit (`sorter.calibration.marks`). The marks lie on the mat plane, so clicks from 2–3 different views are needed for a good rotation.
 - A poor fit on `/calibrate`: the page also shows each view's RMSE without the arm FK (`view_rmse`). Large in one view: a wrong label, bad depth on the tape or a tape off its spot; small in every view while the fit is poor: the FK pose differs between views (joint offsets, backlash). On the rig every clicked/detected frame (png, depth .npy, joints) and `clicks.json` go to `data/calibrate/<start time>/`.
-- On the rig the camera is turned ~135° about its optical axis from the sim's nominal mount (`sim.camera_mount_mm` and `camera_mount()` assume the image x along the TCP y): the circles of an uncalibrated overlay are rotated. The calibration finds any turn.
+- The camera is fixed to `link5`: joint 6 (wrist roll) doesn't turn it (D-022). On the rig (2026-09-26) the model with the camera on `link6` fit the clicks to 15.8 mm RMSE; on `link5` the same clicks fit to 1.9 mm. The rig camera is ~100° about its optical axis from the sim's nominal mount; the calibration finds any turn.
+- Over the mat (`look_bg`, off to the side of the arm) the image is turned ~50° against the mat, and the arm can't lift the camera high enough to see all of it: ~91% on the sim.
 - Only a change of the camera mount invalidates the hand-eye result. Moving the rig doesn't, as long as the zones stay at their positions.
 
 ## Open questions
@@ -48,3 +49,4 @@ _None yet._
 - 2026-09-26 (block 5): the flange that `ee_pose()` returns is the URDF `link6` frame; FK in mm is `sorter.arm.kinematics.fk_flange(q)` (on `rebot_b601`, D-014). Compute the hand-eye result against it. The sim calibration now applies the sim camera mount in `cam_pose`.
 - 2026-09-26 (Softjey + Claude): real backend `HandEyeCalibration` and the hand-eye tool. `--sim` runs it on the physics simulator with a rendered board and reports the error against the true mount. On the physics sim the calibration uses the exact sim mount, not `hand_eye.yaml`. Not yet run on the rig.
 - 2026-09-26 (Softjey + Claude): hand-eye from tape marks on the `/calibrate` page (D-021): `sorter.calibration.marks` (marks, `deproject`, `fit_mount` Kabsch, `project`); config key `calibration.marks_z_mm`. Result format unchanged (`method: marks (...)`).
+- 2026-09-26 (Softjey + Claude): the camera is on `link5`, not the flange (D-022): `ee_pose()` is `T_base_link5`, the hand-eye key is `T_link5_cam` (was `T_flange_cam`; old files fail to load, recalibrate). The views no longer turn the wrist.

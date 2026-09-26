@@ -2,9 +2,10 @@
 
 The arm points its tip at a spot on the mat and a tape mark goes under it: the mark's arm-frame
 position is known from FK. From any pose, the mark clicked in the image plus its depth gives its
-camera-frame position. Each click i gives p_base_i = F_i · X · p_cam_i (F_i = T_base_flange at
-that pose, X = T_flange_cam), so F_i⁻¹ · p_base_i = X · p_cam_i: X is the rigid fit (Kabsch) of
-the camera points onto the marks in the flange frame, over clicks from any poses.
+camera-frame position. Each click i gives p_base_i = F_i · X · p_cam_i (F_i = T_base_link5 at
+that pose, X = T_link5_cam; the camera is fixed to link5, D-022), so F_i⁻¹ · p_base_i = X · p_cam_i:
+X is the rigid fit (Kabsch) of the camera points onto the marks in the link5 frame, over clicks
+from any poses.
 """
 
 from __future__ import annotations
@@ -57,18 +58,18 @@ def marks(center_xy: Sequence[float], z_mm: float) -> list[Mark]:
 
 @dataclass(frozen=True)
 class Click:
-    """A mark seen in the image: `T_base_flange` when it was clicked, the camera-frame point."""
+    """A mark seen in the image: `T_base_link5` when it was clicked, the camera-frame point."""
 
     mark: str
     p_base: tuple[float, float, float]  # mm, arm frame
-    T_base_flange: Pose
+    T_base_link5: Pose
     p_cam: tuple[float, float, float]  # mm, camera optical frame
     px: tuple[float, float]
 
 
 @dataclass(frozen=True)
 class MountFit:
-    T_flange_cam: Pose
+    T_link5_cam: Pose
     rmse_mm: float
     residuals_mm: list[float]  # per click: |fit - mark|
 
@@ -198,14 +199,14 @@ def _fit(clicks: Sequence[Click]) -> MountFit | None:
     if len({c.mark for c in clicks}) < MIN_MARKS:
         return None
     cam = np.array([c.p_cam for c in clicks], dtype=float)
-    flange = np.array(
-        [(np.linalg.inv(c.T_base_flange) @ np.array([*c.p_base, 1.0]))[:3] for c in clicks]
+    link5 = np.array(
+        [(np.linalg.inv(c.T_base_link5) @ np.array([*c.p_base, 1.0]))[:3] for c in clicks]
     )
     s = np.linalg.svd(cam - cam.mean(axis=0), compute_uv=False)
     if s[1] < 10.0:  # mm: the points are (nearly) on a line, the turn about it is unknown
         return None
-    X = _kabsch(cam, flange)
-    res = np.linalg.norm((cam @ X[:3, :3].T + X[:3, 3]) - flange, axis=1)
+    X = _kabsch(cam, link5)
+    res = np.linalg.norm((cam @ X[:3, :3].T + X[:3, 3]) - link5, axis=1)
     return MountFit(X, float(np.sqrt(np.mean(res**2))), [float(r) for r in res])
 
 
@@ -249,7 +250,7 @@ def mount_change(A: Pose, B: Pose) -> tuple[float, float]:
 def hand_eye_result(fit: MountFit, n_marks: int, serial: str = "") -> dict:
     """`calibration.hand_eye` for config/hand_eye.yaml (see `HandEyeResult`)."""
     return {
-        "T_flange_cam": [[round(float(v), 6) for v in row] for row in fit.T_flange_cam],
+        "T_link5_cam": [[round(float(v), 6) for v in row] for row in fit.T_link5_cam],
         "rmse_mm": round(fit.rmse_mm, 2),
         "method": f"marks ({n_marks} marks, {len(fit.residuals_mm)} clicks)",
         "camera_serial": serial,
@@ -268,7 +269,7 @@ def _looks_down(fit: MountFit, clicks: Sequence[Click]) -> bool:
     view clicked mirrored puts it under the table (the pattern is flat)."""
     z_marks = max(c.p_base[2] for c in clicks)
     for c in clicks:
-        T = np.asarray(c.T_base_flange) @ fit.T_flange_cam
+        T = np.asarray(c.T_base_link5) @ fit.T_link5_cam
         if T[2, 3] < z_marks + 50.0 or T[2, 2] > -0.3:
             return False
     return True
@@ -279,7 +280,7 @@ def fit_mount(
     views: Sequence[int] | None = None,
     positions: dict[str, tuple[float, float, float]] | None = None,
 ) -> tuple[MountFit | None, list[int]]:
-    """T_flange_cam from the clicks, or None with fewer than 3 marks or all in a line; and the
+    """T_link5_cam from the clicks, or None with fewer than 3 marks or all in a line; and the
     views whose marks were mirrored (M2↔M3, M4↔M5) and are fixed in the fit.
 
     With `views` (the view of each click) and `positions` (every mark's position), each view is
@@ -306,7 +307,7 @@ def fit_mount(
 
 
 def plausible(nominal: Pose, T: Pose) -> bool:
-    """T_flange_cam near the nominal mount in position and viewing direction; the turn about
+    """T_link5_cam near the nominal mount in position and viewing direction; the turn about
     the optical axis is free (the camera may be mounted any way round)."""
     nominal, T = np.asarray(nominal), np.asarray(T)
     axis = np.degrees(np.arccos(np.clip(nominal[:3, 2] @ T[:3, 2], -1.0, 1.0)))

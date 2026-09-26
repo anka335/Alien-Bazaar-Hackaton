@@ -1,7 +1,8 @@
 """Arm kinematics and path planning in sorter units (mm, rad), on top of `rebot_b601` (D-014).
 
-The flange is the URDF `link6` frame (`ee_pose()`), the TCP is `gripper_end`, the end of the
-gripper. Its +x axis is the approach direction (wrist → fingertips).
+The flange is the URDF `link6` frame, the TCP is `gripper_end`, the end of the gripper. Its +x
+axis is the approach direction (wrist → fingertips). The wrist camera is fixed to `link5`: joint 6
+(wrist roll) turns the gripper, not the camera (D-022). `ee_pose()` is T_base_link5.
 """
 
 from __future__ import annotations
@@ -28,8 +29,13 @@ def _mm(T: np.ndarray) -> Pose:
 
 
 def fk_flange(q: Sequence[float]) -> Pose:
-    """T_base_flange, mm."""
+    """T_base_link5, mm."""
     return _mm(rk.joint_frames(q)[N_JOINTS - 1])
+
+
+def fk_link5(q: Sequence[float]) -> Pose:
+    """T_base_link5, mm: the link the wrist camera is fixed to."""
+    return _mm(rk.joint_frames(q)[N_JOINTS - 2])
 
 
 def fk_tcp(q: Sequence[float]) -> Pose:
@@ -39,6 +45,7 @@ def fk_tcp(q: Sequence[float]) -> Pose:
 
 _F0 = rk.joint_frames(np.zeros(N_JOINTS))
 T_FLANGE_TCP: Pose = _mm(np.linalg.inv(_F0[N_JOINTS - 1]) @ _F0[N_JOINTS])
+T_LINK5_TCP0: Pose = _mm(np.linalg.inv(_F0[N_JOINTS - 2]) @ _F0[N_JOINTS])  # joint 6 at 0
 
 
 def plan_to(

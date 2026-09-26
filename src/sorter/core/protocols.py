@@ -51,7 +51,7 @@ class Calibration(Protocol):
     """Block 2. The only place where pixel ↔ arm conversion happens."""
 
     def cam_pose(self, ee_pose: Pose) -> Pose:
-        """T_base_flange → T_base_cam."""
+        """T_base_link5 (`ArmController.ee_pose()`) → T_base_cam."""
         ...
 
     def to_arm(self, obs: Observation, point: GraspPoint) -> ArmPoint:
@@ -88,7 +88,8 @@ class ArmController(Protocol):
     def drop_to_bin(self, color: ColorClass) -> None: ...
 
     def ee_pose(self) -> Pose:
-        """T_base_flange from FK of the measured joints."""
+        """T_base_link5 from FK of the measured joints: the link the camera is fixed to (it
+        doesn't turn with joint 6, D-022)."""
         ...
 
     def joints(self) -> tuple[float, ...]: ...

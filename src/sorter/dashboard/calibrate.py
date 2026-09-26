@@ -3,7 +3,7 @@
 1. **Marks.** The arm points its tip at spots around the mat center (`calibration.marks`), a
    few mm above the mat; a small dark tape mark goes right under the tip.
 2. **Camera mount.** From a few views, each mark is clicked in the live image; click + depth give
-   the camera-frame point, and the fit of all clicks gives T_flange_cam. Saved to
+   the camera-frame point, and the fit of all clicks gives T_link5_cam. Saved to
    `config/hand_eye.yaml` and used at once (the 3D view, the overlay).
 3. **Look poses.** `look_box` / `look_bg` recomputed for that mount: the camera straight over
    the zone, as low as it can still see the whole zone with depth. Saved to `config/rig.yaml`
@@ -63,13 +63,21 @@ log = logging.getLogger(__name__)
 HOVER_MM = 5.0  # the tip stops this far above a mark
 MIN_DEPTH_MM = 200.0  # the D435i has no depth closer than ~18 cm at 640x480
 LOOK_TCP_Z_MM = (60, 200)  # look poses: the TCP heights tried, low to high, 5 mm steps
-# views for the clicks: (dx, dy) of the camera center from the marks' center (mm), wrist turn (°)
-VIEWS = ((0.0, 0.0, 0.0), (35.0, 25.0, 15.0), (-35.0, -25.0, -15.0))
+# views for the clicks: (dx, dy) of the camera center from the marks' center (mm). No wrist turn:
+# the camera is on link5 and joint 6 doesn't turn it (D-022)
+VIEWS = ((0.0, 0.0), (35.0, 25.0), (-35.0, -25.0))
+# measured joints of one pose wander by a few mrad while the arm holds it: the same pose (view)
+SAME_POSE_RAD = 0.01
 VIEW_TCP_Z_MM = (160, 80)  # the highest TCP height tried for a view, then lower
 LOOKS = {
     "look_box": Zone.BOX,
     "look_bg": Zone.BACKGROUND,
 }
+
+
+def _same(a, b) -> bool:
+    """Joints `a` and `b` are one pose (view)."""
+    return bool(np.allclose(a, b, atol=SAME_POSE_RAD))
 
 
 def _corners(r: RectConfig, z: float, margin: float = 0.0) -> list[tuple[float, float, float]]:
@@ -155,7 +163,7 @@ class CalibrateControl:
         self._fixed: list[int] = []  # views whose mirrored labels the last fit fixed (1-based)
         self._detected: dict[str, Any] | None = None  # the last detection: squares, marks
         # the mount a fit is checked against: the nominal one, not a (maybe wrong) saved one
-        self.prior = kin.T_FLANGE_TCP @ camera_mount(cfg.sim)
+        self.prior = camera_mount(cfg.sim)
         self._saved: str | None = None
         self._look: dict[str, dict[str, Any]] = {}
         self._look_saved: str | None = None
@@ -169,7 +177,7 @@ class CalibrateControl:
 
     @property
     def mount(self) -> Pose:
-        """T_flange_cam in use: what the 3D view and the pipeline use now."""
+        """T_link5_cam in use: what the 3D view and the pipeline use now."""
         return np.asarray(self.calibration.cam_pose(np.eye(4)), dtype=float)
 
     def _plausible(self, T: Pose) -> bool:
@@ -179,7 +187,7 @@ class CalibrateControl:
     def _preview(self) -> Pose:
         """The fitted mount if there is one, else the one in use: what the overlay shows."""
         with self._lock:
-            return self._fit.T_flange_cam if self._fit is not None else self.mount
+            return self._fit.T_link5_cam if self._fit is not None else self.mount
 
     def _intrinsics(self) -> Intrinsics | None:
         frame = self.camera.latest()
@@ -248,17 +256,14 @@ class CalibrateControl:
         """Joints of view `i` over the marks."""
         if not 0 <= i < len(VIEWS):
             raise ValueError(f"view {i} out of range 0..{len(VIEWS) - 1}")
-        dx, dy, turn = VIEWS[i]
+        dx, dy = VIEWS[i]
         pts = np.array([self._mark(n) for n in self.marks])
         cx, cy, z = pts[:, 0].mean() + dx, pts[:, 1].mean() + dy, pts[0, 2]
         # aimed with the nominal mount: a fit from one view can be off enough to lose the marks,
         # and the nominal aim keeps them in sight on the rig
-        T_tcp_cam = np.linalg.inv(kin.T_FLANGE_TCP) @ self.prior
-        lo, hi = kin.JOINT_LIMITS[5]
         for tcp_z in range(VIEW_TCP_Z_MM[0], VIEW_TCP_Z_MM[1] - 1, -10):
-            q = camera_over(self.cfg.arm, (cx, cy), tcp_z, T_tcp_cam, z)
-            if q is not None and lo <= q[5] + np.radians(turn) <= hi:
-                q[5] += np.radians(turn)
+            q = camera_over(self.cfg.arm, (cx, cy), tcp_z, self.prior, z)
+            if q is not None:
                 return q
         raise TargetRejected(f"no pose puts the camera over the marks for view {i + 1}")
 
@@ -292,7 +297,7 @@ class CalibrateControl:
             self._detected = {"squares": len(pts), "marks": names}
             if found is None:
                 return []
-            self._clicks = [(c, cq) for c, cq in self._clicks if not np.allclose(cq, q, atol=1e-3)]
+            self._clicks = [(c, cq) for c, cq in self._clicks if not _same(cq, q)]
             for i, name in sorted(found[0].items(), key=lambda t: t[1]):
                 u, v, p = pts[i]
                 self._clicks.append((Click(name, positions[name], F, p, (u, v)), q))
@@ -323,9 +328,7 @@ class CalibrateControl:
         with self._lock:
             # one click per mark and pose: a second one corrects the first
             self._clicks = [
-                (o, oq)
-                for o, oq in self._clicks
-                if not (o.mark == name and np.allclose(oq, q, atol=1e-3))
+                (o, oq) for o, oq in self._clicks if not (o.mark == name and _same(oq, q))
             ]
             self._clicks.append((c, q))
             self._refit()
@@ -349,7 +352,7 @@ class CalibrateControl:
         poses: list[tuple[float, ...]] = []
         out = []
         for _, q in self._clicks:
-            i = next((j for j, p in enumerate(poses) if np.allclose(q, p, atol=1e-3)), None)
+            i = next((j for j, p in enumerate(poses) if _same(q, p)), None)
             if i is None:
                 poses.append(q)
                 i = len(poses) - 1
@@ -424,7 +427,7 @@ class CalibrateControl:
                     "p_cam": list(c.p_cam),
                     "px": list(c.px),
                     "joints": list(q),
-                    "T_base_flange": np.asarray(c.T_base_flange).tolist(),
+                    "T_base_link5": np.asarray(c.T_base_link5).tolist(),
                 }
                 for c, q in self._clicks
             ],
@@ -432,7 +435,7 @@ class CalibrateControl:
             "fit": None
             if fit is None
             else {
-                "T_flange_cam": np.asarray(fit.T_flange_cam).tolist(),
+                "T_link5_cam": np.asarray(fit.T_link5_cam).tolist(),
                 "rmse_mm": fit.rmse_mm,
                 "residuals_mm": fit.residuals_mm,
             },
@@ -451,8 +454,8 @@ class CalibrateControl:
             n = len({c.mark for c, _ in self._clicks})
         if fit is None:
             raise ValueError(f"click at least 3 marks (not in a line) first; have {n}")
-        if not self._plausible(fit.T_flange_cam):
-            dist, _ = mount_change(self.prior, fit.T_flange_cam)
+        if not self._plausible(fit.T_link5_cam):
+            dist, _ = mount_change(self.prior, fit.T_link5_cam)
             raise ValueError(
                 f"the fit puts the camera {dist:.0f} mm from the nominal mount or looking away "
                 "from the gripper: a click is on the wrong mark; delete the biggest errors"
@@ -462,8 +465,8 @@ class CalibrateControl:
         self.hand_eye_file.parent.mkdir(parents=True, exist_ok=True)
         text = yaml.safe_dump({"calibration": {"hand_eye": result}}, sort_keys=False)
         self.hand_eye_file.write_text(text)
-        if hasattr(self.calibration, "T_flange_cam"):
-            self.calibration.T_flange_cam = np.array(fit.T_flange_cam)
+        if hasattr(self.calibration, "T_link5_cam"):
+            self.calibration.T_link5_cam = np.array(fit.T_link5_cam)
         self.method = result["method"]
         self._saved = str(self.hand_eye_file)
         with self._lock:
@@ -487,17 +490,16 @@ class CalibrateControl:
         if k is None:
             raise ValueError("no camera frame yet")
         X = self.mount
-        T_tcp_cam = np.linalg.inv(kin.T_FLANGE_TCP) @ X
         out = {}
         for name, zone in LOOKS.items():
             rect, surface, margin = self._zone(zone)
             corners = _corners(rect, surface, margin)
             best = None
             for tcp_z in range(LOOK_TCP_Z_MM[0], LOOK_TCP_Z_MM[1] + 1, 5):
-                q = camera_over(self.cfg.arm, rect.center_mm, tcp_z, T_tcp_cam, surface)
+                q = camera_over(self.cfg.arm, rect.center_mm, tcp_z, X, surface)
                 if q is None:
                     continue
-                T_cam = kin.fk_flange(q) @ X
+                T_cam = kin.fk_link5(q) @ X
                 px = project(T_cam, k, corners)
                 cand = {
                     "q": [round(float(v), 4) for v in q],
@@ -624,11 +626,11 @@ class CalibrateControl:
         q_now = self.arm.joints()
         poses: list[tuple[float, ...]] = []  # the distinct poses clicked from, in order
         for _, q in clicks:
-            if not any(np.allclose(q, p, atol=1e-3) for p in poses):
+            if not any(_same(q, p) for p in poses):
                 poses.append(q)
         fit_json = None
         if fit is not None:
-            dist, angle = mount_change(self.mount, fit.T_flange_cam)
+            dist, angle = mount_change(self.mount, fit.T_link5_cam)
             fit_json = {
                 "rmse_mm": round(fit.rmse_mm, 2),
                 "change_mm": round(dist, 1),
@@ -636,10 +638,10 @@ class CalibrateControl:
                 "marks": len({c.mark for c, _ in clicks}),
                 "fixed_views": self._fixed,
                 "views": view_fits,
-                "plausible": self._plausible(fit.T_flange_cam),
+                "plausible": self._plausible(fit.T_link5_cam),
             }
             if self.true_mount is not None:
-                err, err_deg = mount_change(self.true_mount, fit.T_flange_cam)
+                err, err_deg = mount_change(self.true_mount, fit.T_link5_cam)
                 fit_json["true_error_mm"] = round(err, 2)
                 fit_json["true_error_deg"] = round(err_deg, 2)
         return {
@@ -662,8 +664,8 @@ class CalibrateControl:
                 {
                     "mark": c.mark,
                     "px": [round(c.px[0], 1), round(c.px[1], 1)],
-                    "here": bool(np.allclose(q, q_now, atol=1e-3)),
-                    "pose": next(j for j, p in enumerate(poses) if np.allclose(q, p, atol=1e-3)),
+                    "here": bool(_same(q, q_now)),
+                    "pose": next(j for j, p in enumerate(poses) if _same(q, p)),
                     "residual_mm": (None if fit is None else round(fit.residuals_mm[i], 1)),
                 }
                 for i, (c, q) in enumerate(clicks)

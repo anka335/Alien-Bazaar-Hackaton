@@ -26,7 +26,7 @@ from sorter.core.config import DEFAULT_CONFIG_DIR, Config, load_config
 from sorter.core.errors import SorterError
 from sorter.core.types import ArmPoint, Zone
 from sorter.sim.config import RectConfig, SimConfig
-from sorter.sim.world import camera_mount
+from sorter.sim.world import camera_mount, camera_pose
 
 LOOK_TCP_Z_MM = (120, 60)  # the highest TCP height tried for a look pose, then lower in 5 mm steps
 BOX_MARGIN_MM = 25.0  # the grasp stays this far from the box walls (fingers + wrist camera)
@@ -53,29 +53,6 @@ def _rect_polygon(r: RectConfig, margin: float) -> list[tuple[float, float]]:
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
 
 
-def _roll_error(q: np.ndarray, T_tcp_cam: np.ndarray) -> float:
-    """Angle of the image u axis from the arm's x axis, folded to [-pi/2, pi/2]."""
-    u = (kin.fk_tcp(q) @ T_tcp_cam)[:3, 0]
-    a = math.atan2(u[1], u[0])
-    return (a + math.pi / 2) % math.pi - math.pi / 2
-
-
-def _square_up(q: np.ndarray, T_tcp_cam: np.ndarray, prefer: float | None = None) -> np.ndarray:
-    """Turn the wrist (joint 6 turns about the approach axis) so the image's long side runs
-    along the arm's x axis, like the long sides of the box and the mat. Of the two ways, the one
-    nearest `prefer` (joint 6, rad), so the off-axis camera doesn't jump sides."""
-    lo, hi = kin.JOINT_LIMITS[5]
-    prefer = q[5] if prefer is None else prefer
-    cands = []
-    for k in (-1, 0, 1):
-        for sign in (1, -1):
-            c = q.copy()
-            c[5] = q[5] + sign * _roll_error(q, T_tcp_cam) + k * math.pi
-            if lo <= c[5] <= hi:
-                cands.append((round(abs(_roll_error(c, T_tcp_cam)), 4), abs(c[5] - prefer), c))
-    return min(cands, key=lambda t: t[:2])[2] if cands else q
-
-
 def axis_hit(T_base_cam: np.ndarray, z_mm: float) -> np.ndarray | None:
     """Where the camera's optical axis meets the plane z = `z_mm` (x, y), or None."""
     o, d = T_base_cam[:3, 3], T_base_cam[:3, 2]
@@ -88,38 +65,34 @@ def camera_over(
     arm: ArmConfig,
     center: Sequence[float],
     tcp_z: float,
-    T_tcp_cam: np.ndarray,
+    T_link5_cam: np.ndarray,
     surface_z: float = 0.0,
 ) -> np.ndarray | None:
     """Joints with the gripper vertical, the TCP at `tcp_z`, and the camera's optical axis
-    through `center` on the surface at `surface_z`, the image long side along the arm's x axis.
-    None if the arm can't."""
+    through `center` on the surface at `surface_z`. None if the arm can't. The camera is on
+    link5 (D-022): joint 6 doesn't turn the image, so its turn is whatever the arm gives."""
     target = np.array([*center, tcp_z], dtype=float)
     q = _seed(*center)
-    roll = None
     # the camera sits off the TCP: shift the TCP until the camera is centered
     for _ in range(10):
         q = kin.solve(target, "down", q, arm.z_min_mm)
         if q is None:
             return None
-        q = _square_up(q, T_tcp_cam, roll)
-        roll = q[5]
-        hit = axis_hit(kin.fk_tcp(q) @ T_tcp_cam, surface_z)
+        hit = axis_hit(kin.fk_link5(q) @ T_link5_cam, surface_z)
         if hit is None:
             return None
         err = np.asarray(center, dtype=float) - hit
-        if np.hypot(*err) < 0.5 and abs(_roll_error(q, T_tcp_cam)) < math.radians(0.5):
+        if np.hypot(*err) < 0.5:
             return q
         target[:2] += err
     return None
 
 
 def look_pose(sim: SimConfig, arm: ArmConfig, center: tuple[float, float]) -> np.ndarray:
-    """Joints that put the camera straight down over `center`, as high as possible, the image
-    long side along the arm's x axis."""
-    T_tcp_cam = camera_mount(sim)
+    """Joints that put the camera straight down over `center`, as high as possible."""
+    T_link5_cam = camera_mount(sim)
     for tcp_z in range(LOOK_TCP_Z_MM[0], LOOK_TCP_Z_MM[1] - 1, -5):
-        q = camera_over(arm, center, tcp_z, T_tcp_cam)
+        q = camera_over(arm, center, tcp_z, T_link5_cam)
         if q is not None:
             return q
     raise SystemExit(f"no look pose puts the camera straight down over {center}")
@@ -147,7 +120,7 @@ def zone_rois(cfg: Config, poses: dict[str, list[float]]) -> dict[str, dict]:
             frame = camera.fresh(5.0)
             no_depth = (frame.depth_mm == 0).mean(axis=1) > 0.3
             top = int(np.argmin(no_depth)) + 10 if no_depth[0] else 0  # rows hidden by the gripper
-            T = np.linalg.inv(kin.fk_tcp(q) @ camera_mount(cfg.sim))
+            T = np.linalg.inv(camera_pose(cfg.sim, q))
             pts = []
             for x, y in _rect_polygon(rect, margin):
                 c = T @ np.array([x, y, z, 1.0])
@@ -297,7 +270,7 @@ def main(argv: list[str] | None = None) -> None:
     print(text)
     cfg = cfg.model_copy(update={"poses": poses, "zones": zones})
     for name in ("look_box", "look_bg"):
-        cam = (kin.fk_tcp(poses[name]) @ camera_mount(cfg.sim))[:3, 3]
+        cam = (camera_pose(cfg.sim, poses[name]))[:3, 3]
         w = cfg.sim.width * cam[2] / cfg.sim.focal_px
         h = cfg.sim.height * cam[2] / cfg.sim.focal_px
         print(f"# {name}: camera at z {cam[2]:.0f} mm sees {w:.0f} x {h:.0f} mm of the table")

@@ -156,9 +156,12 @@ def test_shutdown_rests_before_disabling(arm, cfg):
     assert np.allclose(arm.driver.q, cfg.poses["rest"]) and not arm.driver.connected
 
 
-def test_ee_pose_is_the_flange(arm, cfg):
-    T = arm.ee_pose() @ kin.T_FLANGE_TCP
-    assert np.allclose(T, kin.fk_tcp(cfg.poses["look_box"]))
+def test_ee_pose_is_link5_the_camera_does_not_turn_with_joint6(arm, cfg):
+    assert np.allclose(arm.ee_pose(), kin.fk_link5(cfg.poses["look_box"]))
+    q = np.array(cfg.poses["look_box"])
+    turned = q + [0, 0, 0, 0, 0, 1.0]
+    assert np.allclose(kin.fk_link5(turned), kin.fk_link5(q))
+    assert np.allclose(kin.fk_link5(q) @ kin.T_LINK5_TCP0, kin.fk_tcp(q), atol=0.1)  # q6 ≈ 0
 
 
 def test_missing_pose_is_a_clear_error(cfg):

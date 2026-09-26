@@ -9,7 +9,7 @@ class HandEyeResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    T_flange_cam: list[list[float]]  # 4x4, mm; camera = optical frame (x right, y down, z forward)
+    T_link5_cam: list[list[float]]  # 4x4, mm; camera = optical frame (x right, y down, z forward)
     rmse_mm: float | None = None  # spread of the board position over the calibration poses
     method: str = ""
     camera_serial: str = ""

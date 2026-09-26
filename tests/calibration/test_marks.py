@@ -56,14 +56,14 @@ def _clicks(noise_mm=0.0, seed=0):
 def test_fit_finds_the_mount():
     fit, _ = fit_mount(_clicks())
     assert fit is not None
-    dist, angle = mount_change(X_TRUE, fit.T_flange_cam)
+    dist, angle = mount_change(X_TRUE, fit.T_link5_cam)
     assert dist < 1e-6 and angle < 1e-3
     assert fit.rmse_mm < 1e-6
 
 
 def test_fit_with_noisy_depth_stays_close():
     fit, _ = fit_mount(_clicks(noise_mm=1.0))
-    dist, angle = mount_change(X_TRUE, fit.T_flange_cam)
+    dist, angle = mount_change(X_TRUE, fit.T_link5_cam)
     assert dist < 3.0 and angle < 1.0
     assert 0.3 < fit.rmse_mm < 3.0
 
@@ -74,7 +74,7 @@ def test_view_rmse_tells_an_fk_error_from_a_bad_click():
     shift = np.eye(4)
     shift[:3, 3] = [15.0, 0.0, 0.0]
     views = [clicks[i * 6 : (i + 1) * 6] for i in range(3)]
-    views[1] = [dataclasses.replace(c, T_base_flange=shift @ c.T_base_flange) for c in views[1]]
+    views[1] = [dataclasses.replace(c, T_base_link5=shift @ c.T_base_link5) for c in views[1]]
     fit, _ = fit_mount([c for v in views for c in v])
     assert fit.rmse_mm > 5.0
     assert all(view_rmse(v) < 1e-6 for v in views)
@@ -138,7 +138,7 @@ def test_a_view_clicked_mirrored_is_fixed():
     swapped = [mirrored(c, positions) if v == 0 else c for c, v in zip(clicks, views, strict=True)]
     for n in (len(ms), len(clicks)):  # one view, all views
         fit, fixed = fit_mount(swapped[:n], views[:n], positions)
-        dist, angle = mount_change(X_TRUE, fit.T_flange_cam)
+        dist, angle = mount_change(X_TRUE, fit.T_link5_cam)
         assert fixed == [0] and dist < 1e-3 and angle < 1e-3
 
 

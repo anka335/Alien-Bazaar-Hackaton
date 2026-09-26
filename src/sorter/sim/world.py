@@ -73,20 +73,26 @@ def in_rect(x: float, y: float, r: RectConfig, margin: float = 0.0) -> bool:
 
 
 def camera_mount(cfg: SimConfig) -> Pose:
-    """T_tcp_cam: the camera `camera_mount_mm` off the TCP, optical axis along the approach."""
+    """T_link5_cam: the camera is fixed to link5, so joint 6 doesn't turn it (D-022). Where it
+    is with joint 6 at 0: `camera_mount_mm` off the TCP, optical axis along the approach."""
+    return kin.T_LINK5_TCP0 @ _camera_on_tcp(cfg)
+
+
+def _camera_on_tcp(cfg: SimConfig) -> Pose:
+    """T_tcp_cam with joint 6 at 0."""
     T = np.eye(4)
     T[:3, :3] = [
         [0, 0, 1],
+        [0, -1, 0],
         [1, 0, 0],
-        [0, 1, 0],
-    ]  # columns: x_cam = y_tcp, y_cam = z_tcp, z_cam = x_tcp
+    ]  # columns: x_cam = z_tcp, y_cam = -y_tcp, z_cam = x_tcp: the image's long side radial
     T[:3, 3] = cfg.camera_mount_mm
     return T
 
 
 def camera_pose(cfg: SimConfig, q: Sequence[float]) -> Pose:
     """T_base_cam for joints `q`."""
-    return kin.fk_tcp(q) @ camera_mount(cfg)
+    return kin.fk_link5(q) @ camera_mount(cfg)
 
 
 class JointMotion:
@@ -196,8 +202,7 @@ class SimWorld:
             )
         self.poses = {k: np.asarray(v, dtype=float) for k, v in poses.items()}
         self.motion = JointMotion(self.poses["rest"])
-        self.T_tcp_cam = camera_mount(cfg)
-        self.T_flange_cam = kin.T_FLANGE_TCP @ self.T_tcp_cam
+        self.T_link5_cam = camera_mount(cfg)
         box = self.layout.box
         surfaces = {Zone.BOX: box.floor_z_mm, Zone.BACKGROUND: 0.0}
         self.views = {

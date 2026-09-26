@@ -1,4 +1,4 @@
-"""Hand-eye calibration, eye-in-hand (D-006): find T_flange_cam from views of a ChArUco board.
+"""Hand-eye calibration, eye-in-hand (D-006): find T_link5_cam from views of a ChArUco board.
 
     uv run python -m sorter.calibration.hand_eye            # the real rig → config/hand_eye.yaml
     uv run python -m sorter.calibration.hand_eye --sim      # the physics simulator (a check)
@@ -54,7 +54,7 @@ def view_poses(cfg: Config, rng: np.random.Generator) -> list[np.ndarray]:
 
 
 def collect(system, cfg: Config, seed: int = 0) -> list[tuple[Pose, Pose]]:
-    """(T_base_flange, T_cam_board) for every view where the board was found."""
+    """(T_base_link5, T_cam_board) for every view where the board was found."""
     arm = system.arm
     arm.start()
     arm.look(Zone.BACKGROUND)
@@ -81,7 +81,7 @@ def collect(system, cfg: Config, seed: int = 0) -> list[tuple[Pose, Pose]]:
 
 
 def park(pairs: list[tuple[Pose, Pose]]) -> Pose:
-    """AX = XB by Park & Martin, over every pair of views. A = G_i⁻¹ G_j (flange motion),
+    """AX = XB by Park & Martin, over every pair of views. A = G_i⁻¹ G_j (link5 motion),
     B = C_i C_j⁻¹ (camera motion), since G_i X C_i is the same board for every i.
     (OpenCV 5 dropped `cv2.calibrateHandEye` from its Python package.)"""
     A, B = [], []
@@ -105,7 +105,7 @@ def park(pairs: list[tuple[Pose, Pose]]) -> Pose:
 
 
 def solve(pairs: list[tuple[Pose, Pose]]) -> tuple[Pose, float]:
-    """T_flange_cam (mm) and the spread of the board position through the views (mm)."""
+    """T_link5_cam (mm) and the spread of the board position through the views (mm)."""
     if len(pairs) < 4:
         raise SorterError(f"only {len(pairs)} views of the board; need at least 4")
     X = park(pairs)
@@ -137,7 +137,7 @@ def main(argv: list[str] | None = None) -> None:
         system.camera.close()
         if hasattr(system.world, "stop"):
             system.world.stop()
-    print(f"T_flange_cam (mm):\n{np.round(X, 3)}\nboard spread {rmse:.2f} mm")
+    print(f"T_link5_cam (mm):\n{np.round(X, 3)}\nboard spread {rmse:.2f} mm")
     if args.sim:
         from sorter.sim.physics.backend import hand_eye
 
@@ -148,7 +148,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     result = {
-        "T_flange_cam": np.round(X, 4).tolist(),
+        "T_link5_cam": np.round(X, 4).tolist(),
         "rmse_mm": round(rmse, 3),
         "method": "charuco + Park-Martin",
         "camera_serial": getattr(system.camera, "serial", "") or ("sim" if args.sim else ""),

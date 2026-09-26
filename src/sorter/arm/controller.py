@@ -166,7 +166,8 @@ class Controller:
         self._go("home")  # and back the same way, clear of the walls
 
     def ee_pose(self) -> Pose:
-        return kin.fk_flange(self.driver.joints())
+        """T_base_link5: the link the camera is fixed to (it doesn't turn with joint 6)."""
+        return kin.fk_link5(self.driver.joints())
 
     def joints(self) -> tuple[float, ...]:
         return tuple(float(v) for v in self.driver.joints())

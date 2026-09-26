@@ -14,7 +14,7 @@ class SimCalibration:
         self.world = world
 
     def cam_pose(self, ee_pose: Pose) -> Pose:
-        return np.asarray(ee_pose, dtype=np.float64) @ self.world.T_flange_cam
+        return np.asarray(ee_pose, dtype=np.float64) @ self.world.T_link5_cam
 
     def to_arm(self, obs: Observation, point: GraspPoint) -> ArmPoint:
         if obs.T_base_cam is None:
