@@ -1,6 +1,30 @@
 # Plan
 
-## Status board
+## Current: rover stages
+
+The arm now rides on a rover and works in two modes, load and unload ([D-032](decisions.md)). The work is three stages: preparation first, then loading and unloading in parallel. Every stage is accepted on the simulator; hardware is a later stage 3, planned when A and B pass.
+
+```mermaid
+graph LR
+  S0[0 Preparation] --> SA[A Loading]
+  S0 --> SB[B Unloading]
+  SA --> S3((3 Hardware))
+  SB --> S3
+```
+
+| Stage | Status | Owner | Branch | Notes |
+| --- | --- | --- | --- | --- |
+| [0: Preparation](rover/0-preparation.md) | todo | — | — | contracts, rover sim scene, reach layout, benchmark |
+| [A: Loading](rover/a-loading.md) | todo | — | — | needs 0 |
+| [B: Unloading](rover/b-unloading.md) | todo | — | — | needs 0 |
+
+Task-level progress is tracked in each stage file.
+
+## Table setup (blocks 0–8, superseded by the rover stages)
+
+The blocks below built the table sorter. Their code is the base the rover stages reuse (arm, calibration, camera, box detector, color logic, dashboard); stage 0 decides what stays.
+
+### Status board
 
 Agents and humans update this table when they pick up, finish, or get blocked on a block.
 Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
@@ -17,7 +41,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | 7 | [Dashboard](tasks/07-dashboard.md) | review | Softjey + Claude | `block/07-dashboard` | — |
 | 8 | [Demo preparation](tasks/08-demo.md) | todo | — | — | — |
 
-## Dependencies
+### Dependencies
 
 ```mermaid
 graph LR
@@ -47,7 +71,7 @@ graph LR
 - **Block 6** is developed against the simulator. Real integration needs 2–5.
 - **Block 8** starts early for one thing: choose the demo clothes on day 1, since thresholds and grasp depth are tuned on them.
 
-## Suggested order
+### Suggested order
 
 1. **First hours:** block 0 (contracts), block 1 (rig), and a manual grasp test: move the arm by hand-coded commands and check that it can pick real clothes from the box. Grasping is the main project risk. Validate it before investing in vision.
 2. **Parallel:** blocks 3, 4, 5, 6, 7 on stubs and recordings. Block 2 once the rig and arm are ready.

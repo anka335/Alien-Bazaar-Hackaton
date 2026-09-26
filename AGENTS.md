@@ -8,7 +8,8 @@ A robotic arm sorts clothes by color: it picks an item from a mixed box, uses an
 
 ## Where things are
 
-- [docs/plan.md](docs/plan.md): blocks, dependency graph, **status board**
+- [docs/plan.md](docs/plan.md): stages, blocks, dependency graph, **status board**
+- [docs/rover/](docs/rover/): the current rover stages (0 preparation, A loading, B unloading), one file per stage with its task table
 - [docs/tasks/NN-*.md](docs/tasks/): one file per block, the unit of work for an agent
 - [docs/architecture.md](docs/architecture.md): components, data flow, coordinate frames, **interfaces (contracts between blocks)**
 - [docs/decisions.md](docs/decisions.md): decision log

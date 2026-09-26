@@ -35,6 +35,8 @@ Every cycle starts by looking at the background, so missed grasps, double grasps
 
 ## Project plan
 
+**The setup is moving to a rover** ([D-032](docs/decisions.md)): the arm collects socks from the floor into a cargo box on the rover (load) and sorts them into 3 laundry bins at a station (unload). The work is tracked in three stages: [0 Preparation](docs/rover/0-preparation.md), then [A Loading](docs/rover/a-loading.md) and [B Unloading](docs/rover/b-unloading.md) in parallel, all on the simulator first. The table blocks below are the code base they reuse.
+
 The work is split into blocks 0–8 that can be developed in parallel by different people or agents:
 
 | # | Block | Task file |
@@ -58,6 +60,7 @@ The dependency graph and the live status board are in [docs/plan.md](docs/plan.m
 | [docs/plan.md](docs/plan.md) | Blocks, dependencies, status board (who is doing what) |
 | [docs/architecture.md](docs/architecture.md) | Components, data flow, coordinate frames, interfaces |
 | [docs/decisions.md](docs/decisions.md) | Log of design decisions and why they were made |
+| [docs/rover/](docs/rover/) | Rover stages: tasks, status, acceptance criteria |
 | [docs/tasks/](docs/tasks/) | One file per block: scope, acceptance criteria, open questions |
 | [AGENTS.md](AGENTS.md) | Rules for AI coding agents (and humans) working in this repo |
 
