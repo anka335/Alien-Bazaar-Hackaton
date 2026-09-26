@@ -147,7 +147,7 @@ python -m rebot_b601 fetch-assets      # opcjonalnie: ponowne pobranie siatek CA
 ## Zabezpieczenia
 
 * Limity przegubów: cel poza limitem jest **odrzucany**, nie przycinany po cichu.
-* Prędkość: profil min-jerk; `speed_scale` domyślnie 0,3, twardy limit serwera 0,6 (`REBOT_MAX_SPEED`); szczyt na skali 1 to 30–90°/s zależnie od przegubu.
+* Prędkość: stała prędkość szczytowa między łagodnymi rampami (podniesiony cosinus), przyspieszenie `JOINT_ACCEL` × prędkość przegubu na sekundę (`REBOT_JOINT_ACCEL`, 4); `speed_scale` domyślnie 0,3, twardy limit serwera 0,6 (`REBOT_MAX_SPEED`, `Arm(max_speed_scale=)`); szczyt na skali 1 to 30–60°/s zależnie od przegubu.
 * Skrzynka robocza TCP (±0,6 m, z 0,03–0,7 m) i prosty strażnik stołu/bazy sprawdzany wzdłuż całej ścieżki (`REBOT_Z_MIN`). **Brak unikania kolizji z przedmiotami.**
 * Błąd śledzenia: przegub > 12° od zadanej pozycji przez 0,4 s (blokada, kolizja) przerywa ruch, trzyma pozę i blokuje dalsze ruchy do `clear_fault()` (moment zostaje włączony, trzyma bieżącą pozę) albo ponownego połączenia. Komunikat podaje kąt zadany i zmierzony.
 * Temperatura MOSFET: 125 °C przerywa ruch, 135 °C wyłącza moment. Utrata sprzężenia zwrotnego > 0,3 s także przerywa.

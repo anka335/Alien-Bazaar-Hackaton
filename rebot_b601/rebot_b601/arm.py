@@ -1,7 +1,7 @@
 """High level driver for the reBot Arm B601-RS.
 
 * :class:`Arm` runs a 50 Hz control thread that streams the current setpoint to
-  the motors, executes smooth (minimum-jerk) joint trajectories, drives the
+  the motors, executes smooth joint trajectories (constant speed between raised-cosine ramps), drives the
   gripper and enforces safety checks (soft limits, tracking error, temperature,
   lost feedback).
 * :class:`HardwareBackend` talks to the motors through the ``motorbridge``
@@ -43,17 +43,53 @@ class ArmError(RuntimeError):
 # --------------------------------------------------------------------------
 
 
-def _min_jerk(tau: float) -> float:
-    tau = min(max(tau, 0.0), 1.0)
-    return 10 * tau**3 - 15 * tau**4 + 6 * tau**5
+def _path_length(waypoints: np.ndarray) -> float:
+    """Seconds the path takes with every segment at the peak speed of its slowest joint at
+    speed_scale 1 (the path parameter of :class:`Trajectory`)."""
+    seg = np.abs(np.diff(waypoints, axis=0)) / np.radians(C.JOINT_SPEED_DPS)
+    return float(np.sum(np.max(seg, axis=1))) if len(seg) else 0.0
+
+
+def path_timing(waypoints: np.ndarray, speed_scale: float) -> tuple[float, float]:
+    """``(duration, ramp)`` [s] of ``waypoints`` (M,6 rad) at ``speed_scale``.
+
+    The path runs at the limiting joint's peak speed (``JOINT_SPEED_DPS`` x scale), reached and
+    left in a raised-cosine ramp (smooth acceleration, peak ``JOINT_ACCEL`` x ``JOINT_SPEED_DPS``
+    per second). A path too short for full speed is two ramps with a lower peak.
+    """
+    length, a = _path_length(waypoints), C.JOINT_ACCEL
+    ramp = math.pi * speed_scale / (2 * a)
+    if length >= speed_scale * ramp:
+        duration = length / speed_scale + ramp
+    else:  # peak rate p: two ramps of pi p / 2a each cover p x ramp = length
+        peak = math.sqrt(2 * a * length / math.pi)
+        ramp = math.pi * peak / (2 * a)
+        duration = 2 * ramp
+    if duration < C.MIN_MOVE_TIME_S:  # stretch the whole profile
+        ramp *= C.MIN_MOVE_TIME_S / max(duration, 1e-9)
+        duration = C.MIN_MOVE_TIME_S
+    return duration, ramp
 
 
 def path_duration(waypoints: np.ndarray, speed_scale: float) -> float:
-    """Time needed to run ``waypoints`` (M,6 rad) with a min-jerk profile at ``speed_scale``."""
-    vmax = np.radians(C.JOINT_SPEED_DPS) * speed_scale
-    seg = np.abs(np.diff(waypoints, axis=0)) / vmax
-    total = float(np.sum(np.max(seg, axis=1))) if len(seg) else 0.0
-    return max(C.MIN_MOVE_TIME_S, 1.875 * total)     # min-jerk peak speed = 1.875 x mean
+    """Time needed to run ``waypoints`` (M,6 rad) at ``speed_scale`` (see :func:`path_timing`)."""
+    return path_timing(waypoints, speed_scale)[0]
+
+
+def _progress(t: float, duration: float, ramp: float) -> float:
+    """0..1 along the path at ``t``: raised-cosine ramp up, constant speed, ramp down."""
+    t = min(max(t, 0.0), duration)
+    ramp = min(ramp, duration / 2)
+    peak = 1.0 / (duration - ramp)  # two ramps at half the peak rate + the cruise = 1
+
+    def up(x: float) -> float:
+        return peak / 2 * (x - ramp / math.pi * math.sin(math.pi * x / ramp)) if ramp > 0 else 0.0
+
+    if t < ramp:
+        return up(t)
+    if t <= duration - ramp:
+        return peak * ramp / 2 + peak * (t - ramp)
+    return 1.0 - up(duration - t)
 
 
 @dataclass
@@ -61,6 +97,7 @@ class Trajectory:
     waypoints: np.ndarray            # (M,6) rad
     duration: float
     t0: float = 0.0
+    ramp: float | None = None        # s; None: all ramp (no constant-speed part)
     _u: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self):
@@ -68,9 +105,11 @@ class Trajectory:
         d = np.max(np.abs(np.diff(self.waypoints, axis=0)) / vmax, axis=1)
         cum = np.concatenate([[0.0], np.cumsum(d)])
         self._u = cum / cum[-1] if cum[-1] > 0 else np.linspace(0.0, 1.0, len(cum))
+        if self.ramp is None:
+            self.ramp = self.duration / 2
 
     def sample(self, t: float) -> np.ndarray:
-        s = _min_jerk(t / self.duration)
+        s = _progress(t, self.duration, self.ramp)
         return np.array([np.interp(s, self._u, self.waypoints[:, j]) for j in range(6)])
 
 
@@ -842,10 +881,10 @@ class Arm:
                 start = self._q_cmd.copy()
                 wps = np.array(wps, dtype=float)
                 wps[0] = start                       # begin exactly where the setpoint is now
-                duration = path_duration(wps, scale)
+                duration, ramp = path_timing(wps, scale)
                 self._abort = None
                 self._done.clear()
-                self._traj = Trajectory(wps, duration, t0=self._clock())
+                self._traj = Trajectory(wps, duration, t0=self._clock(), ramp=ramp)
             if not wait:
                 return {"duration_s": round(duration, 2), "speed_scale": scale}
             deadline = self._clock() + duration + 5.0

@@ -1,6 +1,6 @@
 """SimDriver: an ArmDriver that plays planned paths back on the SimWorld.
 
-Motions take as long as on the real arm (rebot_b601's min-jerk timing) times `sim.time_scale`.
+Motions take as long as on the real arm (rebot_b601's timing and profile) times `sim.time_scale`.
 The gripper acts on the world: closing grabs the cloth under the fingertips, opening drops it.
 """
 
@@ -9,7 +9,6 @@ from __future__ import annotations
 import threading
 
 import numpy as np
-from rebot_b601 import config as rc
 
 from sorter.arm import kinematics as kin
 from sorter.core.errors import EStopped
@@ -48,9 +47,10 @@ class SimDriver:
     def execute(self, waypoints: np.ndarray, speed_scale: float) -> None:
         if self._stopped.is_set():
             raise EStopped("arm is held")
-        seconds = kin.path_duration(waypoints, min(speed_scale, rc.MAX_SPEED_SCALE))
+        seconds, ramp = kin.path_timing(waypoints, speed_scale)
+        k = self.world.cfg.time_scale
         with self.world.lock:
-            self.world.motion.start(waypoints, seconds * self.world.cfg.time_scale)
+            self.world.motion.start(waypoints, seconds * k, ramp * k)
         self._wait(seconds)
 
     def set_gripper(self, opening: float) -> float:

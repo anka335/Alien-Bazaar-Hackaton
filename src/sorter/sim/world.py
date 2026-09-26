@@ -97,7 +97,7 @@ def camera_pose(cfg: SimConfig, q: Sequence[float]) -> Pose:
 
 
 class JointMotion:
-    """The arm's joints over time: planned paths played back with the real min-jerk profile."""
+    """The arm's joints over time: planned paths played back with the real arm's profile."""
 
     def __init__(self, q: Sequence[float]):
         self._q = np.asarray(q, dtype=float)
@@ -117,13 +117,13 @@ class JointMotion:
         self.joints(now)
         return self._traj is not None
 
-    def start(self, waypoints: np.ndarray, duration_s: float) -> None:
+    def start(self, waypoints: np.ndarray, duration_s: float, ramp_s: float | None = None) -> None:
         wps = np.array(waypoints, dtype=float)
         wps[0] = self.joints()
         if duration_s <= 0 or len(wps) < 2:
             self._q, self._traj = wps[-1], None
         else:
-            self._traj = Trajectory(wps, duration_s, t0=time.monotonic())
+            self._traj = Trajectory(wps, duration_s, t0=time.monotonic(), ramp=ramp_s)
 
     def freeze(self) -> None:
         self._q, self._traj = self.joints(), None

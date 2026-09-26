@@ -65,7 +65,8 @@ color_classifier:    # block 4 (D-013)
   depth_window_px: 5           # window for the robust depth of the grasp point
 arm:                 # block 5 (D-019)
   dry_run: false     # real backend: rebot_b601's simulated motors instead of the CAN bus
-  speed_scale: 0.5   # of rebot_b601's joint speeds (capped at 0.6)
+  speed_scale: 1.0      # of rebot_b601's joint speeds at start; the dashboard changes it
+  max_speed_scale: 1.4  # the dashboard's maximum; at most ~1.43, the motors' velocity limit
   safe_z_mm: 100     # recover() / shutdown() first lift the TCP to this height
   z_min_mm: 3        # table clearance for every point of the arm
   place_release_height_mm: 90   # TCP above the mat at place_bg (sim.layout tool)
