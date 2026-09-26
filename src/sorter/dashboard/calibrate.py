@@ -1,4 +1,4 @@
-"""The camera calibration page (`/calibrate`, setup mode), without a printed board (D-021).
+"""The camera calibration page (`/calibrate`, setup mode), without a printed board (D-026).
 
 1. **Marks.** The arm points its tip at spots around the mat center (`calibration.marks`), a
    few mm above the mat; a small dark tape mark goes right under the tip.
@@ -64,7 +64,7 @@ HOVER_MM = 5.0  # the tip stops this far above a mark
 MIN_DEPTH_MM = 200.0  # the D435i has no depth closer than ~18 cm at 640x480
 LOOK_TCP_Z_MM = (60, 200)  # look poses: the TCP heights tried, low to high, 10 mm steps
 # views for the clicks: (dx, dy) of the camera center from the marks' center (mm). No wrist turn:
-# the camera is on link5 and joint 6 doesn't turn it (D-022)
+# the camera is on link5 and joint 6 doesn't turn it (D-027)
 VIEWS = ((0.0, 0.0), (35.0, 25.0), (-35.0, -25.0))
 # measured joints of one pose wander by a few mrad while the arm holds it: the same pose (view)
 SAME_POSE_RAD = 0.01

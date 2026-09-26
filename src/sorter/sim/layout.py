@@ -71,7 +71,7 @@ def camera_over(
 ) -> np.ndarray | None:
     """Joints with the gripper vertical, the TCP at `tcp_z`, and the camera's optical axis
     through `center` on the surface at `surface_z`. None if the arm can't. The camera is on
-    link5 (D-022): joint 6 doesn't turn the image, so its turn is whatever the arm gives.
+    link5 (D-027): joint 6 doesn't turn the image, so its turn is whatever the arm gives.
     `exact=False`: if the arm can't center the camera there (the TCP would have to go where it
     can't reach), the reachable pose whose camera axis comes closest to `center`."""
     center = np.asarray(center, dtype=float)

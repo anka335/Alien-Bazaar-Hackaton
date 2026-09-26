@@ -1,6 +1,6 @@
 """HandEyeCalibration: the `Calibration` contract with a pinhole camera and the hand-eye result.
 
-T_base_cam = T_base_link5 · T_link5_cam (the camera is fixed to link5, D-022)
+T_base_cam = T_base_link5 · T_link5_cam (the camera is fixed to link5, D-027)
 pixel (u, v) + depth Z  →  camera point (x, y, Z)  →  arm point
 """
 

@@ -1,4 +1,4 @@
-"""Real arm backend (block 5): the controller on the reBot B601-RS (D-014)."""
+"""Real arm backend (block 5): the controller on the reBot B601-RS (D-019)."""
 
 from __future__ import annotations
 

@@ -1,9 +1,9 @@
-"""Hand-eye calibration from tape marks on the mat, no printed board (the /calibrate page, D-021).
+"""Hand-eye calibration from tape marks on the mat, no printed board (the /calibrate page, D-026).
 
 The arm points its tip at a spot on the mat and a tape mark goes under it: the mark's arm-frame
 position is known from FK. From any pose, the mark clicked in the image plus its depth gives its
 camera-frame position. Each click i gives p_base_i = F_i · X · p_cam_i (F_i = T_base_link5 at
-that pose, X = T_link5_cam; the camera is fixed to link5, D-022), so F_i⁻¹ · p_base_i = X · p_cam_i:
+that pose, X = T_link5_cam; the camera is fixed to link5, D-027), so F_i⁻¹ · p_base_i = X · p_cam_i:
 X is the rigid fit (Kabsch) of the camera points onto the marks in the link5 frame, over clicks
 from any poses.
 """

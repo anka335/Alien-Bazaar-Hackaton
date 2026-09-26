@@ -89,7 +89,7 @@ class ArmController(Protocol):
 
     def ee_pose(self) -> Pose:
         """T_base_link5 from FK of the measured joints: the link the camera is fixed to (it
-        doesn't turn with joint 6, D-022)."""
+        doesn't turn with joint 6, D-027)."""
         ...
 
     def joints(self) -> tuple[float, ...]: ...

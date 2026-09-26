@@ -63,7 +63,7 @@ color_classifier:    # block 4 (D-013)
   grasp_inset_px: 15           # the re-grasp point is at least this far inside the blob
   grasp_depth_tol_mm: 5        # points this close to the highest count as the highest
   depth_window_px: 5           # window for the robust depth of the grasp point
-arm:                 # block 5 (D-014)
+arm:                 # block 5 (D-019)
   dry_run: false     # real backend: rebot_b601's simulated motors instead of the CAN bus
   speed_scale: 0.5   # of rebot_b601's joint speeds (capped at 0.6)
   safe_z_mm: 100     # recover() / shutdown() first lift the TCP to this height

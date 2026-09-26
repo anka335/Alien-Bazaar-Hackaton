@@ -120,7 +120,7 @@ def test_a_second_click_on_a_mark_replaces_the_first(cal, system):
 def test_look_poses_see_the_whole_zone(cal, system, rig):
     look = cal.compute_look()
     assert look["look_box"]["fits"], look["look_box"]
-    # joint 6 doesn't turn the camera (D-022): over the mat, off to the side, the image is
+    # joint 6 doesn't turn the camera (D-027): over the mat, off to the side, the image is
     # turned against it and the arm can't lift the camera high enough to see all of it
     assert look["look_bg"]["coverage"] >= 0.9, look["look_bg"]
     for name in ("look_box", "look_bg"):

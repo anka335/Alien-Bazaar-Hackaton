@@ -73,7 +73,7 @@ def in_rect(x: float, y: float, r: RectConfig, margin: float = 0.0) -> bool:
 
 
 def camera_mount(cfg: SimConfig) -> Pose:
-    """T_link5_cam: the camera is fixed to link5, so joint 6 doesn't turn it (D-022). Where it
+    """T_link5_cam: the camera is fixed to link5, so joint 6 doesn't turn it (D-027). Where it
     is with joint 6 at 0: `camera_mount_mm` off the TCP, optical axis along the approach."""
     return kin.T_LINK5_TCP0 @ _camera_on_tcp(cfg)
 

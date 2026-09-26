@@ -57,7 +57,7 @@ Keep docs short and factual. Describe the current state, not history: history li
 ## Conventions
 
 - Commit messages: English, [Conventional Commits](https://www.conventionalcommits.org/) (`feat(vision): ...`, `fix(arm): ...`, `docs: ...`). Use the block name as scope.
-- Python 3.11, uv, pytest, ruff ([D-005](docs/decisions.md), [D-010](docs/decisions.md)). The dashboard's front end is React + TypeScript + Vite in `frontend/` ([D-026](docs/decisions.md)). Package layout and path ownership: [docs/architecture.md → Repo layout](docs/architecture.md#repo-layout).
+- Python 3.11, uv, pytest, ruff ([D-005](docs/decisions.md), [D-010](docs/decisions.md)). The dashboard's front end is React + TypeScript + Vite in `frontend/` ([D-031](docs/decisions.md)). Package layout and path ownership: [docs/architecture.md → Repo layout](docs/architecture.md#repo-layout).
 - Commands (from the repo root):
   - install: `uv sync`
   - run on the simulator: `uv run python -m sorter run --sim` (dashboard at http://127.0.0.1:8000)

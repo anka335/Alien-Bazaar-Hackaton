@@ -1,8 +1,8 @@
-"""Arm kinematics and path planning in sorter units (mm, rad), on top of `rebot_b601` (D-014).
+"""Arm kinematics and path planning in sorter units (mm, rad), on top of `rebot_b601` (D-019).
 
 The flange is the URDF `link6` frame, the TCP is `gripper_end`, the end of the gripper. Its +x
 axis is the approach direction (wrist → fingertips). The wrist camera is fixed to `link5`: joint 6
-(wrist roll) turns the gripper, not the camera (D-022). `ee_pose()` is T_base_link5.
+(wrist roll) turns the gripper, not the camera (D-027). `ee_pose()` is T_base_link5.
 """
 
 from __future__ import annotations

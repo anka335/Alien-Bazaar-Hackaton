@@ -1,4 +1,4 @@
-"""The dashboard's operator mode switch: AUTO (the state machine), MANUAL, CALIBRATE (D-026).
+"""The dashboard's operator mode switch: AUTO (the state machine), MANUAL, CALIBRATE (D-031).
 
 One process serves all three. The mode itself lives in the Hub (it gates the run commands); this
 adds what the setup side needs: a change waits for no manual motion to run, the arm's motors go

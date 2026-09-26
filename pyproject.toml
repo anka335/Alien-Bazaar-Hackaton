@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-# the arm kinematics, planner and driver (D-014); `uv sync --extra hardware` adds the motor bus
+# the arm kinematics, planner and driver (D-019); `uv sync --extra hardware` adds the motor bus
 rebot-b601 = { path = "rebot_b601", editable = true }
 
 [project.optional-dependencies]

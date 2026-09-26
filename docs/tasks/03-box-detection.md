@@ -51,4 +51,4 @@ _None yet._
 - 2026-09-25: contract fixed: stateless `detect(frame, avoid)` with `BoxStatus` GRASP / EMPTY / NO_GRASP; frames come from the wrist camera at `look_box` (D-006, D-008).
 - 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/box_detector/config.py` (placeholder). Real backend: `sorter/box_detector/backend.py` → `create(cfg) -> BoxDetector`. `avoid_radius_px` is already a field (the simulator uses it). See architecture.md → Wiring.
 - 2026-09-25 (block 6): run logs are written: `data/runs/<run_id>/<cycle:04d>_<phase>.npz` + `.json` per sense phase (vision result, decision). Usable as test data; format in architecture.md → Recording format.
-- 2026-09-26 (Softjey + Claude): `DepthBoxDetector`, the real backend. It runs in the physics simulator on rendered depth (D-016). Config: `wall_margin_mm` replaces the pixel margin.
+- 2026-09-26 (Softjey + Claude): `DepthBoxDetector`, the real backend. It runs in the physics simulator on rendered depth (D-021). Config: `wall_margin_mm` replaces the pixel margin.

@@ -1,0 +1,8 @@
+# Straight-line (Pilz LIN) limits for the TCP, before the request's scaling factors.
+# 0.5 m/s² made joint2 exceed its 1 rad/s² limit on a 10 cm lift near the box (Pilz refuses
+# the plan then); 0.25 keeps LIN moves inside the joint limits at full execution_speed.
+cartesian_limits:
+  max_trans_vel: 0.2
+  max_trans_acc: 0.25
+  max_trans_dec: -0.25
+  max_rot_vel: 1.0

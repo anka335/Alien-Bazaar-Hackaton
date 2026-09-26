@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 
 def view_poses(cfg: Config, rng: np.random.Generator) -> list[np.ndarray]:
     """Joint targets around `look_bg`: the TCP shifted, the gripper tilted. Not turned about its
-    axis: joint 6 doesn't turn the camera (D-022)."""
+    axis: joint 6 doesn't turn the camera (D-027)."""
     c = cfg.calibration
     q_look = np.asarray(cfg.poses["look_bg"], dtype=float)
     tcp = kin.fk_tcp(q_look)[:3, 3]
