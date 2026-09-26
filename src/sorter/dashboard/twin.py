@@ -65,11 +65,14 @@ class Twin:
         }
 
     def state(self) -> dict[str, Any]:
-        q = np.asarray(self.arm.joints(), dtype=float)
-        opening = float(getattr(self.arm, "gripper_opening", lambda: 0.0)())
+        if getattr(self.arm, "connected", True):
+            q = np.asarray(self.arm.joints(), dtype=float)
+            opening = float(getattr(self.arm, "gripper_opening", lambda: 0.0)())
+        else:  # not started yet (`run` before Start): motors off, so the arm is at rest
+            q, opening = np.asarray(self.arm.poses["rest"], dtype=float), 0.0
         tcp = kin.fk_tcp(q)[:3, 3]
         try:
-            cam = _flat(self.calibration.cam_pose(self.arm.ee_pose()), 1e-3)
+            cam = _flat(self.calibration.cam_pose(kin.fk_link5(q)), 1e-3)
         except Exception:  # no hand-eye result yet: no camera in the view
             cam = None
         out: dict[str, Any] = {

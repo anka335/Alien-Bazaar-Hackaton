@@ -173,6 +173,11 @@ class Controller:
         """T_base_link5: the link the camera is fixed to (it doesn't turn with joint 6)."""
         return kin.fk_link5(self.driver.joints())
 
+    @property
+    def connected(self) -> bool:
+        """Not in the ArmController protocol: the motors are on (`start()` done)."""
+        return self.driver.connected
+
     def joints(self) -> tuple[float, ...]:
         return tuple(float(v) for v in self.driver.joints())
 
