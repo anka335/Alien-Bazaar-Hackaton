@@ -495,3 +495,4 @@ Each sim component is selected independently through `backends`, so a real compo
 | `config/rig.yaml` | `views`: 1; `poses`, `zones`: 5 |
 | `config/hand_eye.yaml` | 2 |
 | `docs/demo.md` | 8 |
+| `3d_printing/` (Fusion archive, builder, and licensed source CAD) | `projects/3d` |

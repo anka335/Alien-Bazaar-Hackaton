@@ -60,6 +60,7 @@ The dependency graph and the live status board are in [docs/plan.md](docs/plan.m
 | [docs/decisions.md](docs/decisions.md) | Log of design decisions and why they were made |
 | [docs/tasks/](docs/tasks/) | One file per block: scope, acceptance criteria, open questions |
 | [AGENTS.md](AGENTS.md) | Rules for AI coding agents (and humans) working in this repo |
+| [3d_printing/](3d_printing/) | Autodesk Fusion reference assembly, source CAD, and regeneration script |
 
 ## Getting started
 
@@ -83,6 +84,8 @@ backends:
 **Color classifier** (block 4) segments the background with a remote SAM3 service ([D-013](docs/decisions.md)). To use it (`backends.color_classifier: real`), put the API key in `config/local.yaml` (`color_classifier: {sam: {api_key: ...}}`) or in the `SAM3_API_KEY` env var. On the simulator, set `sam.prompts: [blob]` and `sam.threshold: 0.3`, since SAM3 doesn't see the rendered cloth as clothing. Tuning tool: `uv run python -m sorter.color_classifier.stats <observation.npz ...>` or `--sim 3` (`--prompts a,b`, `--threshold`); it prints the color stats of every item (`--save DIR` writes overlays).
 
 **Real hardware:** the arm SDK ([`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py)) is not a dependency yet. Block 5 adds it with the real arm backend ([D-010](docs/decisions.md)).
+
+**3D reference assembly:** open `3d_printing/fusion_output/alien_bazaar_reference_assembly.f3d` in Autodesk Fusion. The source assets and regeneration steps are in [3d_printing/README.md](3d_printing/README.md).
 
 ## Working with AI agents
 

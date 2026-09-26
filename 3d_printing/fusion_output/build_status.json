@@ -1,0 +1,4 @@
+{
+  "status": "failed",
+  "error": "Traceback (most recent call last):\n  File \"C:/Users/joann/AppData/Roaming/Autodesk/Autodesk Fusion 360/API/AddIns/AlienBazaarAssembly/AlienBazaarAssembly.py\", line 315, in run\n    _build()\n    ~~~~~~^^\n  File \"C:/Users/joann/AppData/Roaming/Autodesk/Autodesk Fusion 360/API/AddIns/AlienBazaarAssembly/AlienBazaarAssembly.py\", line 286, in _build\n    app.doEvents()\n    ^^^^^^^^^^^^\nAttributeError: 'Application' object has no attribute 'doEvents'. Did you mean: 'documents'?\n"
+}

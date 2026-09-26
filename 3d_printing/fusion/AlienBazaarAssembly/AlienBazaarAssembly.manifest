@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "addin",
+  "id": "df693a4b-95a0-44e4-a458-236025ee1dc9",
+  "author": "Alien Bazaar team",
+  "description": {
+    "": "Builds the Alien Bazaar 3D-printing reference assembly and exports an F3D archive."
+  },
+  "version": "1.0.0",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "editEnabled": true
+}

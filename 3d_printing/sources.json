@@ -1,0 +1,28 @@
+{
+  "leorover": {
+    "source": "https://github.com/LeoRover/leo_common-ros2",
+    "license": "MIT",
+    "representation": "Official collision meshes assembled with transforms from leo_description/urdf/macros.xacro",
+    "files": {
+      "Chassis_outline.stl": "a8e97e6ac235ace896cf33c15a72a9d08b051630dfcc16ff44a791129b10c561",
+      "Rocker_outline.stl": "a16cc1f0ed0ec225051b5e607d3e3b4439b7f172c8f23e7350a99a2bfd22fc31",
+      "Wheel_outline.stl": "509d672a71b948d5e2bc91606bb1fb30ca23c8d18c5c3bf06099abab7cc4566c"
+    }
+  },
+  "rebot_b601_dm": {
+    "source": "https://github.com/Seeed-Projects/reBot-DevArm/tree/main/hardware/reBot_B601_DM",
+    "license": "CERN-OHL-W-2.0",
+    "representation": "Official complete B601-DM v1.1 STEP assembly",
+    "files": {
+      "reBot_B601_DM_v1.1_20260625.step": "667d1e2f3c82d67274d4ec19f7d082a479a588da1c005d95d049a489937bccd2"
+    }
+  },
+  "lrs_600n2_48": {
+    "source": "https://www.meanwell.com/Upload/PDF/LRS-600N2/LRS-600N2-spec.pdf",
+    "representation": "Parametric 225 x 124 x 41 mm Case No. 292 envelope with fan and terminal clearances"
+  },
+  "laptop": {
+    "source": "Project-authored generic envelope",
+    "representation": "Generic 15-inch medium laptop: 340 x 240 x 18 mm base and 340 x 12 x 220 mm display"
+  }
+}
