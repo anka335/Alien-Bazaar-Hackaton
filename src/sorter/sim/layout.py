@@ -67,25 +67,39 @@ def camera_over(
     tcp_z: float,
     T_link5_cam: np.ndarray,
     surface_z: float = 0.0,
+    exact: bool = True,
 ) -> np.ndarray | None:
     """Joints with the gripper vertical, the TCP at `tcp_z`, and the camera's optical axis
     through `center` on the surface at `surface_z`. None if the arm can't. The camera is on
-    link5 (D-022): joint 6 doesn't turn the image, so its turn is whatever the arm gives."""
+    link5 (D-022): joint 6 doesn't turn the image, so its turn is whatever the arm gives.
+    `exact=False`: if the arm can't center the camera there (the TCP would have to go where it
+    can't reach), the reachable pose whose camera axis comes closest to `center`."""
+    center = np.asarray(center, dtype=float)
     target = np.array([*center, tcp_z], dtype=float)
-    q = _seed(*center)
+    q, ok, best, misses = _seed(*center), None, None, 0
     # the camera sits off the TCP: shift the TCP until the camera is centered
-    for _ in range(10):
-        q = kin.solve(target, "down", q, arm.z_min_mm)
-        if q is None:
-            return None
+    for _ in range(12):
+        q_new = kin.solve(target, "down", q, arm.z_min_mm)
+        if q_new is None:
+            misses += 1  # a failed IK takes ~250 ms (restarts): back off twice at most
+            if ok is None or misses > 2:
+                break
+            target = (target + ok) / 2  # out of reach: back off halfway
+            continue
+        q, ok = q_new, target.copy()
         hit = axis_hit(kin.fk_link5(q) @ T_link5_cam, surface_z)
         if hit is None:
             return None
-        err = np.asarray(center, dtype=float) - hit
-        if np.hypot(*err) < 0.5:
+        err = center - hit
+        d = float(np.hypot(*err))
+        if d < 0.5:
             return q
+        if best is not None and d > best[0] - 0.5:  # no longer getting closer: the reach limit
+            break
+        if best is None or d < best[0]:
+            best = (d, q)
         target[:2] += err
-    return None
+    return None if exact or best is None else best[1]
 
 
 def look_pose(sim: SimConfig, arm: ArmConfig, center: tuple[float, float]) -> np.ndarray:

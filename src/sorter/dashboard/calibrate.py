@@ -50,7 +50,7 @@ from sorter.calibration.marks import (
 from sorter.core.errors import TargetRejected
 from sorter.core.types import Intrinsics, Pose, Zone
 from sorter.dashboard.manual import Busy, ManualControl, write_pose
-from sorter.sim.layout import camera_over
+from sorter.sim.layout import axis_hit, camera_over
 from sorter.sim.world import camera_mount
 
 if TYPE_CHECKING:
@@ -62,7 +62,7 @@ log = logging.getLogger(__name__)
 
 HOVER_MM = 5.0  # the tip stops this far above a mark
 MIN_DEPTH_MM = 200.0  # the D435i has no depth closer than ~18 cm at 640x480
-LOOK_TCP_Z_MM = (60, 200)  # look poses: the TCP heights tried, low to high, 5 mm steps
+LOOK_TCP_Z_MM = (60, 200)  # look poses: the TCP heights tried, low to high, 10 mm steps
 # views for the clicks: (dx, dy) of the camera center from the marks' center (mm). No wrist turn:
 # the camera is on link5 and joint 6 doesn't turn it (D-022)
 VIEWS = ((0.0, 0.0), (35.0, 25.0), (-35.0, -25.0))
@@ -259,12 +259,22 @@ class CalibrateControl:
         dx, dy = VIEWS[i]
         pts = np.array([self._mark(n) for n in self.marks])
         cx, cy, z = pts[:, 0].mean() + dx, pts[:, 1].mean() + dy, pts[0, 2]
-        # aimed with the nominal mount: a fit from one view can be off enough to lose the marks,
-        # and the nominal aim keeps them in sight on the rig
+        # aimed with the saved mount, else the nominal one (not with a fit in progress: a fit
+        # from one view can be off enough to lose the marks); as close as the arm can
+        X = self.prior if self.method == "nominal" else self.mount
+        best = None  # (how far off the marks' center, joints)
         for tcp_z in range(VIEW_TCP_Z_MM[0], VIEW_TCP_Z_MM[1] - 1, -10):
-            q = camera_over(self.cfg.arm, (cx, cy), tcp_z, self.prior, z)
-            if q is not None:
-                return q
+            q = camera_over(self.cfg.arm, (cx, cy), tcp_z, X, z, exact=False)
+            if q is None:
+                continue
+            hit = axis_hit(kin.fk_link5(q) @ X, z)
+            off = np.inf if hit is None else float(np.hypot(hit[0] - cx, hit[1] - cy))
+            if off < 2.0:
+                return q  # the highest centered one
+            if best is None or off < best[0]:
+                best = (off, q)
+        if best is not None:
+            return best[1]
         raise TargetRejected(f"no pose puts the camera over the marks for view {i + 1}")
 
     def goto_view(self, i: int) -> None:
@@ -484,8 +494,10 @@ class CalibrateControl:
         return lay.background, self.cfg.calibration.marks_z_mm, 5.0
 
     def compute_look(self) -> dict[str, dict[str, Any]]:
-        """`look_box` / `look_bg` for the mount in use: over the zone center, the lowest TCP
-        height at which the camera sees the whole zone with depth (else the best one)."""
+        """`look_box` / `look_bg` for the mount in use: over the zone center (or as close as the
+        arm can put the camera), the lowest TCP height at which the camera sees the whole zone
+        with depth, else the best one. Heights above the highest reachable one aren't tried: the
+        IK search runs in the arm's process and a long one starves its control loop."""
         k = self._intrinsics()
         if k is None:
             raise ValueError("no camera frame yet")
@@ -495,9 +507,11 @@ class CalibrateControl:
             rect, surface, margin = self._zone(zone)
             corners = _corners(rect, surface, margin)
             best = None
-            for tcp_z in range(LOOK_TCP_Z_MM[0], LOOK_TCP_Z_MM[1] + 1, 5):
-                q = camera_over(self.cfg.arm, rect.center_mm, tcp_z, X, surface)
+            for tcp_z in range(LOOK_TCP_Z_MM[0], LOOK_TCP_Z_MM[1] + 1, 10):
+                q = camera_over(self.cfg.arm, rect.center_mm, tcp_z, X, surface, exact=False)
                 if q is None:
+                    if best is not None:
+                        break  # too high from here on
                     continue
                 T_cam = kin.fk_link5(q) @ X
                 px = project(T_cam, k, corners)
@@ -519,6 +533,8 @@ class CalibrateControl:
                     best["coverage"],
                 ):
                     best = cand
+                elif best["depth_ok"] and cand["coverage"] < best["coverage"] - 0.02:
+                    break  # past the best: higher, the arm pulls the camera off the zone
             if best is None:
                 raise TargetRejected(f"no pose puts the camera straight over the {zone} zone")
             h = best["camera_mm"]
