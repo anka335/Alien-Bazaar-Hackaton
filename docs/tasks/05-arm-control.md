@@ -40,6 +40,8 @@ Safe, blocking, high-level arm operations for the state machine, on the Seeed re
 - The Seeed docs recommend Ubuntu; check the USB-CAN adapter and Pinocchio on the team laptop early.
 - The SDK requires Python < 3.12 and has no `[build-system]` (D-010): clone it next to the repo and add it as a path / editable dependency (e.g. `uv add --editable ../reBotArm_control_py`, may need a small `[build-system]` patch). Its `config/` and `urdf/` are loaded by relative path; check that they are found.
 
+- Standalone clothing-follow preview is verified; hardware following is not. Its cached RGB-D pairs lack an age check, and fault recovery offers torque disable after physical-support confirmation, which needs review against the rest-pose-only rule.
+
 ## Open questions
 
 - Gripper force and `empty_below` threshold: can the gripper opening tell "holding cloth" from "empty" at all? If not, set it so `likely_empty` is never true.
@@ -55,3 +57,5 @@ _None yet._
 - 2026-09-25: arm fixed (reBot B601-RS); `park()` replaced by `look(zone)`; `pick(target, zone) -> PickResult`; `hold` / `recover` instead of e-stop (D-006, D-009).
 - 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/arm/config.py` (placeholder). Real backend: `sorter/arm/backend.py` → `create(cfg) -> ArmController`. Python is 3.11 and the SDK is not in `pyproject.toml` yet: this block adds it (D-010). See architecture.md → Wiring.
 - 2026-09-25: corrected the arm model everywhere: it is the **B601-RS (RobStride)**, not the DM (Damiao) ([D-011](../decisions.md)); RS hardware notes and the top-down reach limit added to *Notes & risks*.
+- 2026-09-26: added a separate guarded clothing-follow integration test around the standalone `rebot_b601` driver. It remains outside the block-5 `ArmController` acceptance criteria and defaults to camera-only preview (D-015).
+- 2026-09-26: camera-only clothing preview passed on Windows/WSL with ROS 2 Jazzy in Docker and SAM3. Physical following remains unverified. Manual tests are on `block/05-manual-arm-tests`; the block backend remains todo.

@@ -5,6 +5,9 @@ description = "Inverse kinematics, motion scripts and an MCP server for the reBo
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.26", "mcp>=1.10,<2", "motorbridge"]
 
+[dependency-groups]
+dev = ["pytest>=8"]
+
 [project.scripts]
 rebot-b601 = "rebot_b601.cli:main"
 rebot-b601-mcp = "rebot_b601.mcp_server:main"
