@@ -308,6 +308,97 @@ class HardwareBackend:
 
 
 # --------------------------------------------------------------------------
+# Planning (shared by Arm and by simulators that execute paths their own way)
+# --------------------------------------------------------------------------
+
+
+def check_xyz(xyz) -> np.ndarray:
+    p = np.asarray(xyz, dtype=float).reshape(3)
+    if not np.all(np.isfinite(p)):
+        raise ArmError("target contains NaN/inf")
+    for name, v, (lo, hi) in zip("xyz", p, (C.WORKSPACE_X, C.WORKSPACE_Y, C.WORKSPACE_Z)):
+        if not lo <= v <= hi:
+            raise ArmError(f"{name}={v:.3f} m is outside the allowed workspace box [{lo:.2f}, {hi:.2f}] m")
+    return p
+
+
+def check_limits(q: np.ndarray, what: str = "target") -> None:
+    tol = math.radians(0.5)
+    lo, hi = C.JOINT_LIMITS_RAD[:, 0], C.JOINT_LIMITS_RAD[:, 1]
+    for j in range(6):
+        if q[j] < lo[j] - tol or q[j] > hi[j] + tol:
+            raise ArmError(
+                f"{what}: joint{j + 1} = {math.degrees(q[j]):.1f} deg is outside its limit "
+                f"[{C.JOINT_LIMITS_DEG[j, 0]:.0f}, {C.JOINT_LIMITS_DEG[j, 1]:.0f}] deg"
+            )
+
+
+def check_path(wps: np.ndarray, n_samples: int = 60, z_min: float | None = None) -> None:
+    """Sample the planned path and reject it if it dips below the table / hits the base."""
+    z_min = C.Z_MIN if z_min is None else z_min
+    traj = Trajectory(wps, 1.0)
+    for s in np.linspace(0.0, 1.0, n_samples):
+        q = np.array([np.interp(s, traj._u, wps[:, j]) for j in range(6)])
+        ok, why = K.pose_is_safe(q, z_min=z_min)
+        if not ok:
+            # the start pose may legitimately be low (e.g. resting); only reject if it gets worse
+            if s == 0.0:
+                continue
+            raise ArmError(f"path rejected: {why}")
+
+
+def plan_path(q0, target, approach=None, linear: bool = False, z_min: float | None = None):
+    """IK + checks for a move of the TCP from joints ``q0`` to ``target`` [m].
+
+    Returns ``(q_goal, waypoints (M,6) rad, IKResult)``; raises :class:`ArmError` if the
+    target or the path is not feasible.  ``linear`` = straight line in Cartesian space.
+    ``z_min`` overrides the table clearance (``REBOT_Z_MIN``).
+    """
+    z_min = C.Z_MIN if z_min is None else z_min
+    q0 = np.asarray(q0, dtype=float)
+    target = np.asarray(target, dtype=float).reshape(3)
+    lim = C.JOINT_LIMITS_RAD
+    res = K.solve_ik(target, approach, q0, lim, z_min=z_min)
+    if not res.success:
+        raise ArmError(f"target {np.round(target, 3).tolist()} is not reachable: {res.message}")
+    q_goal = res.q
+    check_limits(q_goal)
+    if not linear:
+        wps = np.vstack([q0, q_goal])
+        check_path(wps, z_min=z_min)
+        return q_goal, wps, res
+    # straight line in Cartesian space, IK continued waypoint by waypoint
+    p0, _ = K.fk(q0)
+    dist = float(np.linalg.norm(target - p0))
+    n = max(2, int(math.ceil(dist / 0.01)) + 1)
+    wps = [q0]
+    q = q0
+    # blend the approach direction from the current one to the requested one along the path,
+    # otherwise the very first waypoint would demand an instant re-orientation of the wrist
+    a_goal = K.parse_approach(approach)
+    a_start = K.approach_vector(q0)
+    for k in range(1, n):
+        s = k / (n - 1)
+        pk = p0 + (target - p0) * s
+        if a_goal is None:
+            ak = None
+        else:
+            ak = (1.0 - s) * a_start + s * a_goal
+            ak = a_goal if np.linalg.norm(ak) < 1e-6 else ak / np.linalg.norm(ak)
+        r = K.solve_ik(pk, ak, q, lim, n_random_starts=0, z_min=z_min)
+        if not r.success:
+            raise ArmError(f"straight-line path fails at {np.round(pk, 3).tolist()}: {r.message}")
+        if np.max(np.abs(r.q - q)) > math.radians(12.0):
+            raise ArmError("straight-line path needs a large joint jump (singularity or configuration change); use linear=False")
+        check_limits(r.q, "path")
+        wps.append(r.q)
+        q = r.q
+    wps = np.array(wps)
+    check_path(wps, n_samples=max(60, n), z_min=z_min)
+    return q_goal, wps, res
+
+
+# --------------------------------------------------------------------------
 # Arm
 # --------------------------------------------------------------------------
 
@@ -531,6 +622,11 @@ class Arm:
         with self._lock:
             return self._meas.q.copy()
 
+    def joints(self) -> np.ndarray:
+        """Measured joint angles [rad] (6,)."""
+        self._require(motion=False)
+        return self._q_meas()
+
     def status(self) -> dict:
         if not self.connected:
             return {"connected": False}
@@ -598,35 +694,13 @@ class Arm:
     # planning
     # ------------------------------------------------------------------
     def _check_xyz(self, xyz) -> np.ndarray:
-        p = np.asarray(xyz, dtype=float).reshape(3)
-        if not np.all(np.isfinite(p)):
-            raise ArmError("target contains NaN/inf")
-        for name, v, (lo, hi) in zip("xyz", p, (C.WORKSPACE_X, C.WORKSPACE_Y, C.WORKSPACE_Z)):
-            if not lo <= v <= hi:
-                raise ArmError(f"{name}={v:.3f} m is outside the allowed workspace box [{lo:.2f}, {hi:.2f}] m")
-        return p
+        return check_xyz(xyz)
 
     def _check_limits(self, q: np.ndarray, what: str = "target") -> None:
-        tol = math.radians(0.5)
-        lo, hi = C.JOINT_LIMITS_RAD[:, 0], C.JOINT_LIMITS_RAD[:, 1]
-        for j in range(6):
-            if q[j] < lo[j] - tol or q[j] > hi[j] + tol:
-                raise ArmError(
-                    f"{what}: joint{j + 1} = {math.degrees(q[j]):.1f} deg is outside its limit "
-                    f"[{C.JOINT_LIMITS_DEG[j, 0]:.0f}, {C.JOINT_LIMITS_DEG[j, 1]:.0f}] deg"
-                )
+        check_limits(q, what)
 
     def _check_path(self, wps: np.ndarray, n_samples: int = 60) -> None:
-        """Sample the planned path and reject it if it dips below the table / hits the base."""
-        traj = Trajectory(wps, 1.0)
-        for s in np.linspace(0.0, 1.0, n_samples):
-            q = np.array([np.interp(s, traj._u, wps[:, j]) for j in range(6)])
-            ok, why = K.pose_is_safe(q, z_min=C.Z_MIN)
-            if not ok:
-                # the start pose may legitimately be low (e.g. resting); only reject if it gets worse
-                if s == 0.0:
-                    continue
-                raise ArmError(f"path rejected: {why}")
+        check_path(wps, n_samples)
 
     def _speed(self, scale: float | None) -> float:
         s = C.DEFAULT_SPEED_SCALE if scale is None else float(scale)
@@ -653,45 +727,7 @@ class Arm:
         }
 
     def _plan(self, q0, target, approach, linear):
-        lim = C.JOINT_LIMITS_RAD
-        res = K.solve_ik(target, approach, q0, lim, z_min=C.Z_MIN)
-        if not res.success:
-            raise ArmError(f"target {np.round(target, 3).tolist()} is not reachable: {res.message}")
-        q_goal = res.q
-        self._check_limits(q_goal)
-        if not linear:
-            wps = np.vstack([q0, q_goal])
-            self._check_path(wps)
-            return q_goal, wps, res
-        # straight line in Cartesian space, IK continued waypoint by waypoint
-        p0, _ = K.fk(q0)
-        dist = float(np.linalg.norm(target - p0))
-        n = max(2, int(math.ceil(dist / 0.01)) + 1)
-        wps = [q0]
-        q = q0
-        # blend the approach direction from the current one to the requested one along the path,
-        # otherwise the very first waypoint would demand an instant re-orientation of the wrist
-        a_goal = K.parse_approach(approach)
-        a_start = K.approach_vector(q0)
-        for k in range(1, n):
-            s = k / (n - 1)
-            pk = p0 + (target - p0) * s
-            if a_goal is None:
-                ak = None
-            else:
-                ak = (1.0 - s) * a_start + s * a_goal
-                ak = a_goal if np.linalg.norm(ak) < 1e-6 else ak / np.linalg.norm(ak)
-            r = K.solve_ik(pk, ak, q, lim, n_random_starts=0, z_min=C.Z_MIN)
-            if not r.success:
-                raise ArmError(f"straight-line path fails at {np.round(pk, 3).tolist()}: {r.message}")
-            if np.max(np.abs(r.q - q)) > math.radians(12.0):
-                raise ArmError("straight-line path needs a large joint jump (singularity or configuration change); use linear=False")
-            self._check_limits(r.q, "path")
-            wps.append(r.q)
-            q = r.q
-        wps = np.array(wps)
-        self._check_path(wps, n_samples=max(60, n))
-        return q_goal, wps, res
+        return plan_path(q0, target, approach, linear)
 
     # ------------------------------------------------------------------
     # motion
@@ -724,6 +760,19 @@ class Arm:
             return {"duration_s": round(duration, 2), "speed_scale": scale}
         finally:
             self._move_lock.release()
+
+    def execute_path(self, waypoints, speed_scale: float | None = None) -> dict:
+        """Run a joint path (M,6 rad, e.g. from :func:`plan_path`) that starts at the current pose.
+
+        The path is checked against the joint limits only; plan it with :func:`plan_path`.
+        """
+        self._require()
+        wps = np.asarray(waypoints, dtype=float)
+        if wps.ndim != 2 or wps.shape[1] != 6 or len(wps) < 2 or not np.all(np.isfinite(wps)):
+            raise ArmError("waypoints must be an (M>=2, 6) array of finite joint angles [rad]")
+        for q in wps[1:]:
+            check_limits(q, "path")
+        return self._execute(wps, speed_scale)
 
     def move_to_xyz(self, x, y, z, approach=None, linear: bool = False, speed_scale: float | None = None) -> dict:
         """Move the TCP to (x, y, z) [m] in the base frame.

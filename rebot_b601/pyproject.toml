@@ -3,7 +3,13 @@ name = "rebot-b601"
 version = "0.1.0"
 description = "Inverse kinematics, motion scripts and an MCP server for the reBot Arm B601-RS"
 requires-python = ">=3.10"
-dependencies = ["numpy>=1.26", "mcp>=1.10,<2", "motorbridge"]
+# The sorter uses only the kinematics, planning and the simulated arm; the MCP server and the
+# motor bus are extras (the standalone install in README.md uses requirements.txt).
+dependencies = ["numpy>=1.26"]
+
+[project.optional-dependencies]
+hardware = ["motorbridge"]
+mcp = ["mcp>=1.10,<2"]
 
 [project.scripts]
 rebot-b601 = "rebot_b601.cli:main"

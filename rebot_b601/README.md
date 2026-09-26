@@ -4,6 +4,11 @@
 > ([D-011](../docs/decisions.md)). It talks to the motors through `motorbridge` directly (not through `reBotArm_control_py`) and can seed block 5's
 > `ArmDriver`: kinematics, trajectories, safety checks, simulator. The folder is excluded from the repository-wide `ruff` run (see `ruff.toml`)
 > and from the root `pytest` (`testpaths = ["tests"]`).
+>
+> The sorter uses it as a path dependency ([D-014](../docs/decisions.md)): `sorter.arm` plans with `rebot_b601.arm.plan_path`
+> (module-level, also `check_path` / `check_limits`) and drives the arm with `Arm.execute_path`, `Arm.set_gripper`, `Arm.joints`.
+> In `pyproject.toml` only `numpy` is required; `motorbridge` is the `hardware` extra and `mcp` the `mcp` extra
+> (the standalone install below still uses `requirements.txt`).
 
 Kinematyka (FK/IK), skrypty „jedź do punktu xyz” oraz serwer MCP, dzięki któremu agent może sam poruszać ramieniem.
 
