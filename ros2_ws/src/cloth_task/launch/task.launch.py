@@ -92,8 +92,9 @@ def _setup(context):
                         "rebot_dir": rebot_dir,
                         "enable_motors": arg("enable_motors") == "true",
                         "driver_sim": arg("driver_sim") == "true",
-                        # the task starts right away: unfold out of home first
-                        "unfold_on_start": arg("run_task") == "true",
+                        # the task starts right away, and Spectacles teleop refuses MoveIt
+                        # goals: unfold out of home first
+                        "unfold_on_start": arg("run_task") == "true" or spectacles,
                     }
                 ],
                 output="screen",

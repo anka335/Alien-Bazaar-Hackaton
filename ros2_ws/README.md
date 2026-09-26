@@ -116,6 +116,7 @@ ngrok http 127.0.0.1:9100   # by hand, in another terminal, with your own token
 ```
 
 - `spectacles:=true` needs `hardware:=real` and `run_task:=false`; with the cloth task (or `run_stack:=false`) the launch fails. The leader arm is not started. MoveIt and the camera or simulated detector come up but don't command the arm: `arm_bridge` refuses MoveIt goals while teleop mode is on.
+- With the motors on and the arm folded at home, `arm_bridge` first unfolds it to `park_via_deg` (as for the task), because MoveIt can't move it once teleop mode is on. Clear the space around the arm before launching.
 - At start the bridge turns `arm_bridge`'s teleop mode on and leaves it on; every stop below just stops publishing to `/arm_bridge/teleop_command`. With `enable_motors:=false`, or a driver already faulted, teleop mode is refused and every lens is refused (closed with 1013).
 - `arm_bridge` publishes `/arm_bridge/driver_fault` (`std_msgs/Bool`, latched): false at start, true once the driver faults, until it reconnects. The bridge passes it to the session as the driver-fault flag.
 - Each teleop frame is answered with a status, and a status is also pushed at 10 Hz so a timeout reaches the lens.
