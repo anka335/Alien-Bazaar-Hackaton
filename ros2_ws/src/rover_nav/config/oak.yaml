@@ -1,0 +1,29 @@
+# DepthAI driver parameters for the OAK-D navigation camera (nav_camera:=oak, D-015).
+# The node runs as /rover_nav/oak. Parameter names: depthai_ros_driver 2.12.
+/rover_nav/oak:
+  ros__parameters:
+    camera:
+      i_pipeline_type: RGBD   # color + stereo depth
+      i_nn_type: none         # no on-camera neural network
+      i_enable_imu: false     # the rover's odometry already fuses its own IMU
+      i_enable_ir: false      # the plain OAK-D has no IR projector
+    pipeline_gen:
+      i_enable_sync: true     # color and depth with the same timestamp
+    rgb:
+      i_fps: 15.0
+      i_synced: true
+      i_set_isp_scale: true   # 1080p sensor scaled 1/3 → 640x360: enough for RTAB-Map, light on USB
+      i_isp_num: 1
+      i_isp_den: 3
+    left:
+      i_resolution: '400'     # 400p stereo: depth from ~0.35 m (800p: ~0.7 m), less CPU
+      i_fps: 15.0
+    right:
+      i_resolution: '400'
+      i_fps: 15.0
+    stereo:
+      i_align_depth: true     # depth in the color camera's frame and size
+      i_synced: true
+      i_extended_disp: true   # depth from ~0.2 m: obstacles right in front of the rover
+      i_subpixel: false       # (extended disparity instead; subpixel helps only far away)
+      i_lr_check: true        # fewer false depths at object edges

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Leo Rover's robot model, deployed to the rover's /etc/ros/urdf/robot.urdf.xacro by
+  scripts/setup_rover.sh. Stock LeoOS file minus the Panthera arm it shipped with. That arm is not
+  on our rover, and its links (link1..link6, L_finger, R_finger) and its mount on plain base_link
+  clash with the reBot arm's frames. The reBot arm hangs under leo/base_link through the mount
+  transform published by rover_nav (D-015).
+  No colon followed by a space in this comment. The rover's launch file passes the expanded model
+  as a parameter string, and ROS tries to parse such a string as YAML first.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro"
+  name="leo">
+
+  <xacro:arg name="link_prefix" default="" />
+  <xacro:arg name="mecanum_wheels" default="false" />
+
+  <xacro:include filename="$(find leo_description)/urdf/macros.xacro" />
+
+  <xacro:leo default_antenna="true"
+    rockers_fixed="true"
+    footprint_link="true"
+    link_prefix="$(arg link_prefix)"
+    joint_prefix=""
+    mecanum_wheels="$(arg mecanum_wheels)" />
+
+</robot>

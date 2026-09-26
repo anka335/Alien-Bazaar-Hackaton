@@ -55,3 +55,4 @@ _None yet._
 
 - 2026-09-25: camera moved from an overhead stand to the wrist (D-006); zones fixed (D-007); ROI and record tools added to scope.
 - 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/camera/config.py` (placeholder). The real backend still needs to be implemented at `sorter/camera/backend.py` with `create(cfg) -> Camera`. See architecture.md → Wiring.
+- 2026-09-26 (block 9): the wrist camera can also be the rover's SLAM camera (`nav_camera:=wrist`, D-015; the default is an OAK-D on the rover, D-016). Block 9 reuses the RealSense ROS driver of the ROS track (`/camera/camera/...`) and needs the camera mount to stay unchanged between mapping and navigation.

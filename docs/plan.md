@@ -16,6 +16,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | 6 | [State machine](tasks/06-state-machine.md) | review | Softjey + Claude | `block/06-state-machine` | — |
 | 7 | [Dashboard](tasks/07-dashboard.md) | review | Softjey + Claude | `block/07-dashboard` | — |
 | 8 | [Demo preparation](tasks/08-demo.md) | todo | — | — | — |
+| 9 | [Rover navigation](tasks/09-rover-navigation.md) | in progress | Slava + Claude | `block/09-rover-navigation` | first real run (packages to install, mounts to measure) |
 
 ## Dependencies
 
@@ -38,6 +39,7 @@ graph LR
   B6 --> INT
   B7 --> INT
   INT --> B8[8 Demo]
+  B5 -. drive pose, wrist camera only .-> B9[9 Rover navigation]
 ```
 
 - **Block 0 comes first and is short.** It fixes the stack, the repo layout, the interfaces, and the stubs. After it, blocks 3–7 run fully in parallel.
@@ -45,6 +47,7 @@ graph LR
 - **Block 2** needs the camera mount from block 1 and FK + motion from block 5. It reuses the Seeed hand-eye script (D-006).
 - **Blocks 3 and 4** start on photos or recorded frames and switch to look-pose recordings and live frames once blocks 1 and 5 are ready.
 - **Block 6** is developed against the simulator. Real integration needs 2–5.
+- **Block 9** (ROS 2 track, D-015) moves the arm around one room on a Leo Rover. With the OAK-D on the rover (default, D-016) it depends on no other block; with the wrist camera it needs a `drive` pose from the arm and the RealSense ROS driver.
 - **Block 8** starts early for one thing: choose the demo clothes on day 1, since thresholds and grasp depth are tuned on them.
 
 ## Suggested order

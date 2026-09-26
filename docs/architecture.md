@@ -7,6 +7,7 @@ Single source of truth for the contracts between blocks. Block 0 implements the 
 - **Arm:** Seeed reBot Arm B601-RS (RobStride motors: RS-06 on joints 1–3, RS-00 on joints 4–6 and the gripper; 6 DoF + parallel gripper; reach roughly 0.6–0.7 m from the shoulder axis, from the URDF; see [D-011](decisions.md)). USB→CAN (PEAK PCAN-USB, SocketCAN `can0` at 1 Mbit/s on Linux), Python SDK [`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py) (Pinocchio IK/FK, metres + radians).
 - **Camera:** Intel RealSense D435i RGB-D, **mounted on the wrist** behind the gripper, looking along the gripper axis (eye-in-hand, [D-006](decisions.md)).
 - **Zones at fixed positions** ([D-007](decisions.md)): mixed box, background area (mid-gray), 3 bins (light / dark / colored). The clothes inside the box lie arbitrarily.
+- **Mobile base (block 9, [D-015](decisions.md)):** a Leo Rover (LeoOS, ROS 2 Jazzy) carries the arm, the laptop (on board, on the rover's Wi-Fi) and the wrist camera through one fixed room. Not part of the sorter loop.
 - The arm looks at a zone from a fixed **look pose** (`look_box`, `look_bg`). Because look poses are repeatable, pixel ROIs of each zone are constants in config.
 
 ## Components
@@ -473,6 +474,23 @@ Each block defines the model for its own section in `src/sorter/<package>/config
 
 Each sim component is selected independently through `backends`, so a real component can run against the rest of the sim (e.g. real vision on sim frames).
 
+## Rover navigation (block 9, ROS 2 track)
+
+`ros2_ws/src/rover_nav` ([D-015](decisions.md), [D-016](decisions.md)). Ready-made nodes: RTAB-Map for SLAM, Nav2 for driving, a Nav2 keepout filter for the forbidden half of the room. Two launches: **mapping** (RTAB-Map mapping, keyboard teleop, done once) and **navigation** (RTAB-Map localization on the saved database, Nav2, keepout filter).
+
+| Interface | Direction | Notes |
+| --- | --- | --- |
+| `/rover_nav/oak/rgb/image_rect`, `/rover_nav/oak/stereo/image_raw`, `/rover_nav/oak/rgb/camera_info` | in | `nav_camera:=oak` (default): OAK-D on the rover's front, DepthAI driver started by `rover_nav` in `/rover_nav`; TF `leo/base_link` → `oak` → `oak_rgb_camera_optical_frame` from the driver's description |
+| `/camera/camera/color/image_raw`, `/camera/camera/aligned_depth_to_color/image_raw`, `.../color/camera_info` | in | `nav_camera:=wrist`: the RealSense driver as started by `cloth_task` (640×480, 15 fps, TF off); reused, never started twice |
+| TF `leo/base_link` → arm `base_link` → … → `camera_color_optical_frame` | in | Rover → arm base: static, measured mount, published by `rover_nav` (always). Arm → camera: the arm stack's `robot_state_publisher` with the arm in the `drive` pose, or a static transform in the drive pose while the arm stack isn't available |
+| `/leo/merged_odom` (`nav_msgs/Odometry`, 100 Hz) + `leo/odom` → `leo/base_footprint` TF | in | The rover's `odom_filter` (LeoOS, wheel odometry + IMU), over the rover's Wi-Fi |
+| `/leo/cmd_vel` (`geometry_msgs/Twist`) | out | To the rover firmware. Nav2, or `teleop_twist_keyboard` while mapping |
+| `/map` + `map` → `leo/odom` TF | internal | RTAB-Map |
+| Keepout mask (`.pgm` + `.yaml`) | internal | Generated from the saved 2D map and a dividing line by `rover_nav`'s mask tool |
+
+- **Names:** the arm owns the plain names (`base_link`, `/joint_states`, `/robot_description`). The rover runs with LeoOS's `ROBOT_NAMESPACE=leo`: frames `leo/…`, topics `/leo/…` (`rover_nav/scripts/setup_rover.sh`). TF tree: `map` → `leo/odom` → `leo/base_footprint` → `leo/base_link` → `base_link` (arm) → … → camera.
+- With `nav_camera:=wrist`, the arm stays in `drive` while the rover moves: moving it breaks mapping and localization. With `oak` the arm is free.
+
 ## Repo layout
 
 | Path | Owner |
@@ -496,3 +514,4 @@ Each sim component is selected independently through `backends`, so a real compo
 | `config/hand_eye.yaml` | 2 |
 | `docs/demo.md` | 8 |
 | `ros2_ws/` (ROS 2 cloth pick-and-place track, [D-014](decisions.md); see `ros2_ws/README.md`) | ROS track |
+| `ros2_ws/src/rover_nav/` (rover navigation, [D-015](decisions.md)) | 9 |

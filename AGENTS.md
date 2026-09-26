@@ -4,7 +4,7 @@ Instructions for AI coding agents (Claude Code, Codex, Cursor, …) and humans w
 
 ## Project in one paragraph
 
-A robotic arm sorts clothes by color: it picks an item from a mixed box, uses an RGB-D camera on its wrist to find the grasp point, places the item on a uniform background, classifies its color (light / dark / colored), and drops it into one of 3 bins. A live dashboard shows the process. This is a **hackathon project**: favor simple, working, demo-able solutions over generality. Details are in [README.md](README.md).
+A robotic arm sorts clothes by color: it picks an item from a mixed box, uses an RGB-D camera on its wrist to find the grasp point, places the item on a uniform background, classifies its color (light / dark / colored), and drops it into one of 3 bins. A live dashboard shows the process. A Leo Rover will carry the arm around one room (block 9, ROS 2). This is a **hackathon project**: favor simple, working, demo-able solutions over generality. Details are in [README.md](README.md).
 
 ## Where things are
 

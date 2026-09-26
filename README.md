@@ -14,6 +14,7 @@ This demo addresses the core challenge of automated laundry handling — picking
 | Camera | RGB-D (depth) camera mounted on the arm's wrist (eye-in-hand), model: _TBD_ |
 | Work area | at fixed positions: mixed-clothes box, uniform background area (mid-gray), 3 bins (light / dark / colored) |
 | Lighting | dedicated lamp for stable lighting |
+| Mobile base | Leo Rover carrying the arm, the laptop and the camera around one room (block 9, [D-015](docs/decisions.md)) |
 
 ## How it works
 
@@ -35,7 +36,7 @@ Every cycle starts by looking at the background, so missed grasps, double grasps
 
 ## Project plan
 
-The work is split into blocks 0–8 that can be developed in parallel by different people or agents:
+The work is split into blocks 0–9 that can be developed in parallel by different people or agents:
 
 | # | Block | Task file |
 | --- | --- | --- |
@@ -48,6 +49,7 @@ The work is split into blocks 0–8 that can be developed in parallel by differe
 | 6 | State machine | [docs/tasks/06-state-machine.md](docs/tasks/06-state-machine.md) |
 | 7 | Dashboard | [docs/tasks/07-dashboard.md](docs/tasks/07-dashboard.md) |
 | 8 | Demo preparation | [docs/tasks/08-demo.md](docs/tasks/08-demo.md) |
+| 9 | Rover navigation (ROS 2) | [docs/tasks/09-rover-navigation.md](docs/tasks/09-rover-navigation.md) |
 
 The dependency graph and the live status board are in [docs/plan.md](docs/plan.md).
 
@@ -84,7 +86,7 @@ backends:
 
 **Real hardware:** the arm SDK ([`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py)) is not a dependency yet. Block 5 adds it with the real arm backend ([D-010](docs/decisions.md)).
 
-**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth pick-and-place task (proposed, [D-014](docs/decisions.md)). Setup and run commands: [ros2_ws/README.md](ros2_ws/README.md).
+**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth pick-and-place task (proposed, [D-014](docs/decisions.md)). Setup and run commands: [ros2_ws/README.md](ros2_ws/README.md). Rover navigation (block 9, [D-015](docs/decisions.md)) is part of this track: RTAB-Map + Nav2 on a Leo Rover with an OAK-D on its front ([D-016](docs/decisions.md)), in `ros2_ws/src/rover_nav` (in progress; usage in [its README](ros2_ws/src/rover_nav/README.md)).
 
 ## Working with AI agents
 

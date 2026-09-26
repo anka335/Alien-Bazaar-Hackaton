@@ -46,7 +46,7 @@ Safe, blocking, high-level arm operations for the state machine, on the Seeed re
 
 ## Requests from other blocks
 
-_None yet._
+- **Block 9 (rover navigation), only for `nav_camera:=wrist`** (the default navigation camera is now an OAK-D on the rover, D-016): a named **`drive` pose** for when the rover moves: arm tucked inside the rover footprint and stable, wrist camera looking forward and slightly down (floor visible from ~0.3 m ahead, horizon in the upper part of the image), camera ≥ ~0.2 m above the floor. It must be exactly repeatable (mapping and navigation use the same camera pose). In the ROS track this is an entry in `ros2_ws/src/cloth_task/config/poses.yaml` (`record_pose drive`).
 - **Hardware is the B601-RS (RobStride), not the DM** ([D-011](../decisions.md)). The SDK reads `config/rebotarm_rs.yaml` (selected by `hardware_yaml` in `config/rebotarm.yaml`): RS-06 on joints 1–3, RS-00 on joints 4–6 and the gripper (motor 7). On Linux bring `can0` up at 1 Mbit/s with the PCAN-USB adapter; there is no serial port (that is the DM path). Zero calibration is done once with Motorbridge Studio (`motorbridge-gateway`, which holds the bus: stop it before running the SDK). A standalone RS driver, IK and simulator that can seed `ArmDriver` lives in `rebot_b601/`.
 - **Top-down reach is limited** (computed from the URDF with `rebot_b601/`, not verified on the hardware): with the tool pointing straight down the TCP only reaches z ≲ 0.14 m above the base plate (x ≈ 0.1–0.45 m); pointing forward only z ≳ 0.15 m. Choose `look_*` poses, `safe_z_mm` and the approach height with this in mind, or relax the top-down requirement for the approach.
 
