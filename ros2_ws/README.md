@@ -104,6 +104,18 @@ ros2 run cloth_task leader_teleop               # Enter to engage; then: name + 
 ros2 run cloth_task leader_teleop --flip wrist_roll   # if one joint moves the wrong way
 ```
 
+## Teleop with Spectacles (in progress, [#27](https://github.com/anka335/Alien-Bazaar-Hackaton/issues/27))
+
+The robot-side peer of the lens (teleop v1). Done so far: the ROS-free session, `cloth_task/spectacles_session.py` ([D-015](../docs/decisions.md)). The robot bridge node, the WebSocket on `127.0.0.1:9100` (reached through ngrok), the watchdog and the launch switch are not built yet, so nothing runs on the arm.
+
+- The right clutch's rising edge latches the measured `gripper_end` pose in `base_link`. Each engaged sample targets `p_ee + position` and `orientation ⊗ q_ee`, solved for the full pose from the measured joints (damped least squares, soft joint limits, no restarts). The result goes out as joint targets plus the gripper opening, clamped to 0 (closed) through 1 (open), for `/arm_bridge/teleop_command`.
+- A solve that misses 1 mm / 3° publishes nothing and `arm` stays `tracking`. Releasing the clutch stops publishing (`holding`), so `arm_bridge` holds its last setpoint.
+- The left clutch is never accepted, because there is no mobile base: `base` is always `idle`.
+
+```bash
+PYTHONPATH=ros2_ws/src/cloth_task python -m pytest ros2_ws/src/cloth_task/test/test_spectacles_session.py
+```
+
 ## Named poses
 
 `config/poses.yaml` holds joint poses in degrees (`home`, `ready`, `box_view`, …). `ready` unfolds the arm from the folded home pose; the task always passes through it.
