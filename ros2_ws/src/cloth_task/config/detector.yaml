@@ -1,0 +1,5 @@
+# Real cloth detector settings. `roi`: the box in the camera image from the look pose (box_view),
+# pixel corners [u, v] of a polygon; SAM3 detections outside it are ignored. Empty = the whole
+# image (the detector warns). Set it with:  ros2 run cloth_task roi_tool
+# Re-mark it whenever box_view or the box moves.
+roi: []

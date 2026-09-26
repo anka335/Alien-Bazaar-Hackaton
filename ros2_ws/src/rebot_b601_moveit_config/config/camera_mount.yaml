@@ -1,0 +1,15 @@
+# The RealSense on the wrist.
+#
+# parent: the link the camera is bolted to. Ours sits on the cap of the joint5 motor = link4: it
+#   moves with joints 1-4, NOT with the wrist yaw (joint5) or roll (joint6). Keep link4.
+# measured_from: where the xyz numbers start, with the wrist straight (joint5 = joint6 = 0):
+#   gripper_end = the fingertip centre; link6 = the flange the gripper is mounted on
+#   (the fingertips are 166 mm beyond it).
+# xyz / rpy: to the COLOUR lens. Axes: x along the gripper, positive towards the fingertips;
+#   y to the left; z towards the side the camera is on. A camera behind the flange looking the
+#   same way as the gripper has x < 0, z > 0, rpy = [0, 0, 0]. Metres / radians.
+# Check in RViz: camera_link must sit where the real camera is.
+parent: link4
+measured_from: gripper_end
+xyz: [-0.19, 0.0, 0.12]    # matches the real camera in RViz (checked by eye)
+rpy: [0.0, 0.0, 0.0]

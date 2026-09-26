@@ -1,0 +1,15 @@
+# Planning limits (MoveIt + Pilz). Velocities = the driver's JOINT_SPEED_DPS × its speed cap
+# MAX_SPEED_SCALE 0.6 (rebot_b601/config.py), so MoveIt plans what the real arm will run and
+# arm_bridge's retime() stays a guard, not a routine fix-up. Positions come from the patched URDF.
+# The per-request velocity scaling (launch arg execution_speed) multiplies these.
+default_velocity_scaling_factor: 0.1
+default_acceleration_scaling_factor: 0.1
+joint_limits:
+  joint1: {has_velocity_limits: true, max_velocity: 0.419, has_acceleration_limits: true, max_acceleration: 1.0}
+  joint2: {has_velocity_limits: true, max_velocity: 0.314, has_acceleration_limits: true, max_acceleration: 1.0}
+  joint3: {has_velocity_limits: true, max_velocity: 0.314, has_acceleration_limits: true, max_acceleration: 1.0}
+  joint4: {has_velocity_limits: true, max_velocity: 0.628, has_acceleration_limits: true, max_acceleration: 2.0}
+  joint5: {has_velocity_limits: true, max_velocity: 0.628, has_acceleration_limits: true, max_acceleration: 2.0}
+  joint6: {has_velocity_limits: true, max_velocity: 0.942, has_acceleration_limits: true, max_acceleration: 2.0}
+  joint_left: {has_velocity_limits: true, max_velocity: 0.05, has_acceleration_limits: true, max_acceleration: 0.5}
+  joint_right: {has_velocity_limits: true, max_velocity: 0.05, has_acceleration_limits: true, max_acceleration: 0.5}

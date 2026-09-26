@@ -84,6 +84,8 @@ backends:
 
 **Real hardware:** the arm SDK ([`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py)) is not a dependency yet. Block 5 adds it with the real arm backend ([D-010](docs/decisions.md)).
 
+**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth pick-and-place task (proposed, [D-014](docs/decisions.md)). Setup and run commands: [ros2_ws/README.md](ros2_ws/README.md).
+
 ## Working with AI agents
 
 Every block is designed to be handed to an agent on its own. See [AGENTS.md](AGENTS.md) for the parallel workflow. In Claude Code:

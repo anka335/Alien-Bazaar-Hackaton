@@ -1,0 +1,15 @@
+# Real arm: cloth_task's arm_bridge serves the arm's FollowJointTrajectory action. The gripper is
+# driven through its GripperCommand action by the task, not by MoveIt.
+moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
+moveit_simple_controller_manager:
+  controller_names: [arm_controller]
+  arm_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints: [joint1, joint2, joint3, joint4, joint5, joint6]
+trajectory_execution:
+  allowed_execution_duration_scaling: 2.0   # the driver may stretch a too-fast trajectory
+  allowed_goal_duration_margin: 2.0
+  allowed_start_tolerance: 0.03
+  execution_duration_monitoring: true

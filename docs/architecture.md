@@ -495,3 +495,4 @@ Each sim component is selected independently through `backends`, so a real compo
 | `config/rig.yaml` | `views`: 1; `poses`, `zones`: 5 |
 | `config/hand_eye.yaml` | 2 |
 | `docs/demo.md` | 8 |
+| `ros2_ws/` (ROS 2 cloth pick-and-place track, [D-014](decisions.md); see `ros2_ws/README.md`) | ROS track |

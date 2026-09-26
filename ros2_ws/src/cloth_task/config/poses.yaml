@@ -1,0 +1,10 @@
+# Named arm poses: joint1..joint6 in degrees.
+# Record the current arm pose:  ros2 run cloth_task record_pose <name>
+# Move to a pose:               ros2 run cloth_task go_to_pose <name> [<name> ...]
+# `ready` unfolds the arm from the folded home pose (shoulder first); the task goes through it.
+
+poses:
+  home: [0.00, 0.00, 0.00, 0.00, 0.00, 0.00]
+  ready: [0.00, 20.00, 15.00, 0.00, 0.00, 0.00]
+  box_view: [-33.95, 89.87, 110.04, -79.94, 2.44, -6.53]
+  bin_1: [-1.48, 89.70, 73.94, -35.51, 11.89, 6.06]
