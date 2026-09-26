@@ -1,8 +1,9 @@
 """Manual arm control for setting up the rig: the dashboard's `/manual` page, no state machine.
 
-Named poses (with a tour through them), joint jog, gripper, and re-teaching a pose into
-`config/rig.yaml`. One motion at a time, each in its own thread; Hold works throughout
-(`POST /api/command {"cmd": "hold"}` → `arm.hold()`).
+Named poses (with a tour through them), joint jog, gripper, re-teaching a pose into
+`config/rig.yaml`, and clearing an arm fault (a blocked joint) without a restart. One motion at
+a time, each in its own thread; Hold works throughout (`POST /api/command {"cmd": "hold"}` →
+`arm.hold()`).
 """
 
 from __future__ import annotations
@@ -129,6 +130,9 @@ class ManualControl:
     def release(self) -> None:
         self._submit("release hold", self.arm.release)
 
+    def clear_fault(self) -> None:
+        self._submit("clear fault", self.arm.clear_fault)
+
     def save_pose(self, name: str) -> str:
         """The current joints become pose `name`, now and in rig.yaml. Returns the YAML line."""
         if name not in POSE_NAMES:
@@ -155,6 +159,7 @@ class ManualControl:
             "last": last,
             "error": error,
             "held": self.arm.held,
+            "fault": self.arm.fault,
             "at": self.arm.at,
             "joints": [round(float(v), 4) for v in q],
             "gripper": round(float(self.arm.gripper_opening()), 3),

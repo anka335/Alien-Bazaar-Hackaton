@@ -37,6 +37,10 @@
         <img id="live" src="/stream/live.mjpg" alt="Live view from the camera on the robot's wrist">
         <figcaption class="tag"><span class="live-dot"></span>Wrist camera</figcaption>
         <div class="alerts">
+          <div class="alert alert-error alert-fault" id="fault" hidden>
+            <p><b>Arm fault.</b> <span id="fault-msg"></span></p>
+            <button type="button" id="clear-fault" title="Hold where the arm is now and allow motion again; the motors stay on">Clear fault</button>
+          </div>
           <p class="alert alert-conn" id="conn" hidden>No connection to the sorter. Hold may not reach the arm. Retrying…</p>
           <p class="alert alert-error" id="error" hidden></p>
         </div>

@@ -70,3 +70,9 @@ class SimDriver:
 
     def resume(self) -> None:
         self._stopped.clear()
+
+    def fault(self) -> str | None:
+        return None
+
+    def clear_fault(self) -> None:
+        pass

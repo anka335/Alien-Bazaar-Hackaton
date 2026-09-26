@@ -48,6 +48,16 @@ class ArmDriver(Protocol):
 
     def resume(self) -> None: ...
 
+    def fault(self) -> str | None:
+        """A latched fault (joint blocked, lost feedback, overheating): motions fail until
+        `clear_fault()`. None when fine."""
+        ...
+
+    def clear_fault(self) -> None:
+        """Accept the fault and hold where the arm is now. Keeps the torque on if it still is;
+        otherwise reconnects (the motors were already off)."""
+        ...
+
 
 class RebotDriver:
     """The reBot B601-RS through `rebot_b601.arm.Arm` (motorbridge, SocketCAN `can0`).
@@ -105,6 +115,16 @@ class RebotDriver:
 
     def resume(self) -> None:
         self._stopped.clear()
+
+    def fault(self) -> str | None:
+        return self.arm.status().get("fault")
+
+    def clear_fault(self) -> None:
+        if self.arm.connected and self.arm.status()["torque_enabled"]:
+            self._call(self.arm.clear_fault)
+        else:  # torque already off: nothing more can drop
+            self._call(self.arm.disconnect, go_home=False)
+            self.connect()
 
     def _call(self, fn, *args, **kwargs):
         from rebot_b601.arm import ArmError as RebotError

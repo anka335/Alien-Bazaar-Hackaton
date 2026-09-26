@@ -596,7 +596,8 @@ class Arm:
                 elif now - self._err_since[j] > C.TRACKING_ERR_TIME_S:
                     self._raise_fault(
                         f"joint{j + 1} is {err[j]:.1f} deg away from its commanded position "
-                        "(blocked, collision or motor fault); motion aborted and pose held"
+                        f"(commanded {math.degrees(q_cmd[j]):.1f}, measured {math.degrees(meas.q[j]):.1f} deg; "
+                        "blocked, collision or motor fault); motion aborted and pose held"
                     )
                     return
             else:
@@ -632,7 +633,7 @@ class Arm:
             if not self._enabled:
                 raise ArmError("motors are not enabled (connected read-only, or torque was disabled); reconnect with enable=True")
             if self._fault:
-                raise ArmError(f"arm is in a fault state: {self._fault}. Inspect the arm, then disconnect and connect again")
+                raise ArmError(f"arm is in a fault state: {self._fault}. Inspect the arm, then clear_fault (or disconnect and connect again)")
 
     def _q_meas(self) -> np.ndarray:
         with self._lock:
@@ -870,6 +871,26 @@ class Arm:
             self._traj = None
             self._done.set()
         return {"ok": True, "message": "motion stopped, holding position"}
+
+    def clear_fault(self) -> dict:
+        """Accept a fault without cutting torque: hold where the arm is now and allow motion again.
+
+        Only while the motors are still enabled (a tracking, feedback or temperature fault);
+        after the torque went off, disconnect and connect.  A cause that persists faults again.
+        """
+        self._require(motion=False)
+        if not self._enabled:
+            raise ArmError("torque is off; disconnect and connect again")
+        with self._lock:
+            fault = self._fault
+            self._hold = np.clip(self._meas.q, C.JOINT_LIMITS_RAD[:, 0], C.JOINT_LIMITS_RAD[:, 1])
+            self._q_cmd = self._hold.copy()
+            self._traj = None
+            self._err_since[:] = np.nan
+            self._fault = self._abort = None
+        if fault:
+            log.warning("fault cleared: %s", fault)
+        return {"ok": True, "message": "fault cleared, holding position" if fault else "no fault"}
 
     def emergency_disable(self) -> dict:
         """Cut motor torque immediately.  The arm will fall / sag under gravity!"""

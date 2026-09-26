@@ -39,7 +39,7 @@ class CommandRequest(BaseModel):
 
 
 class ManualRequest(BaseModel):
-    action: str  # go | tour_next | tour_reset | jog | gripper | release | save
+    action: str  # go | tour_next | tour_reset | jog | gripper | release | clear_fault | save
     pose: str | None = None
     joint: int | None = None  # 0..5
     delta_deg: float = 0.0
@@ -147,6 +147,8 @@ def create_app(
                     m.gripper(req.open)
                 case "release":
                     m.release()
+                case "clear_fault":
+                    m.clear_fault()
                 case "save":
                     return {"ok": True, "line": m.save_pose(req.pose or "")}
                 case _:

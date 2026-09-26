@@ -54,6 +54,12 @@ class FakeDriver:
     def resume(self):
         self.stopped = False
 
+    def fault(self):
+        return None
+
+    def clear_fault(self):
+        pass
+
 
 @pytest.fixture
 def cfg():
@@ -182,5 +188,26 @@ def test_real_driver_dry_run():
             d.execute(np.array([q1, q0]), 0.5)
         d.resume()
         d.execute(np.array([q1, q0]), 0.5)
+    finally:
+        d.disconnect()
+
+
+def test_real_driver_clears_a_fault_with_the_torque_on():
+    from sorter.arm.driver import RebotDriver
+    from sorter.core.errors import ArmError
+
+    d = RebotDriver(dry_run=True)
+    d.connect()
+    try:
+        q0 = d.joints()
+        d.arm.backend.blocked = {5}  # joint6 stuck
+        with pytest.raises(ArmError, match="joint6"):
+            d.execute(np.array([q0, q0 + np.radians([0, 0, 0, 0, 0, 40])]), 0.5)
+        assert "joint6" in d.fault()
+        d.arm.backend.blocked = set()
+        d.clear_fault()
+        assert d.fault() is None and d.arm.status()["torque_enabled"]
+        q1 = d.joints() + np.radians([0, 0, 0, 0, 0, 5])
+        d.execute(np.array([d.joints(), q1]), 0.5)
     finally:
         d.disconnect()

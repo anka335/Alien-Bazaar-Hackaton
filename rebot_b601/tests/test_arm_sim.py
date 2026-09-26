@@ -130,6 +130,24 @@ def test_blocked_joint_triggers_fault(arm):
         arm.move_joints([0, 0, 0, 0, 0, 0])
 
 
+def test_clear_fault_keeps_torque_and_allows_motion(arm):
+    arm.backend.blocked = {0}
+    with pytest.raises(ArmError, match=r"commanded [\d.]+, measured [\d.]+ deg"):
+        arm.move_joints([60, 0, 0, 0, 0, 0], speed_scale=1.0)
+    arm.backend.blocked = set()
+    arm.clear_fault()
+    s = arm.status()
+    assert s["fault"] is None and s["torque_enabled"]
+    arm.move_joints([10, 0, 0, 0, 0, 0], speed_scale=1.0)
+    assert abs(arm.status()["joints_deg"][0] - 10) < 2
+
+
+def test_clear_fault_needs_torque(arm):
+    arm.emergency_disable()
+    with pytest.raises(ArmError, match="torque is off"):
+        arm.clear_fault()
+
+
 def test_gripper(arm):
     r = arm.set_gripper(1.0)
     assert r["gripper_opening"] > 0.9

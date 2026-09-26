@@ -186,6 +186,11 @@ class Controller:
         """The named pose the arm is at, if any."""
         return self._at
 
+    @property
+    def fault(self) -> str | None:
+        """A latched driver fault (e.g. a blocked joint); every motion fails until clear_fault()."""
+        return self.driver.fault()
+
     def go_to(self, name: str) -> None:
         """Straight joint move to a named pose. ArmError if the path hits the table or base."""
         if name not in self.poses:
@@ -206,6 +211,11 @@ class Controller:
         self.driver.resume()
         self._at = None
         log.info("arm hold released")
+
+    def clear_fault(self) -> None:
+        """Accept a driver fault after inspecting the arm: hold where it is now, leave hold."""
+        self.driver.clear_fault()
+        self.release()
 
     def set_pose(self, name: str, q: Sequence[float]) -> None:
         """Replace a named pose for this process (a re-taught pose)."""

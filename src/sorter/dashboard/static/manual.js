@@ -96,13 +96,15 @@ function render() {
   if (!s) return;
   if (!built) build(s);
 
+  const stuck = s.held || !!s.fault;
   let phase = "Ready";
-  if (s.held) phase = "Held";
+  if (s.fault) phase = "Fault";
+  else if (s.held) phase = "Held";
   else if (s.busy) phase = `Moving: ${s.action}`;
   $("phase").textContent = phase;
-  $("phase").toggleAttribute("data-alarm", s.held);
-  $("mode").textContent = s.held ? "Held" : s.busy ? "Moving" : "Manual";
-  $("mode").dataset.mode = s.held ? "paused" : s.busy ? "running" : "idle";
+  $("phase").toggleAttribute("data-alarm", stuck);
+  $("mode").textContent = s.fault ? "Fault" : s.held ? "Held" : s.busy ? "Moving" : "Manual";
+  $("mode").dataset.mode = stuck ? "paused" : s.busy ? "running" : "idle";
   $("where").textContent = s.at ? `at ${s.at}` : s.last ? `last: ${s.last}` : "";
   $("hold").toggleAttribute("data-engaged", s.held);
 
@@ -110,12 +112,16 @@ function render() {
   $("grip").textContent = s.gripper.toFixed(2);
   s.joints.forEach((q, j) => { $(`j${j}`).textContent = `${deg(q).toFixed(1)}°`; });
 
-  for (const b of document.querySelectorAll("[data-busy]")) b.disabled = s.busy || s.held;
-  $("release").disabled = !s.held || s.busy;
+  for (const b of document.querySelectorAll("[data-busy]")) b.disabled = s.busy || stuck;
+  $("release").disabled = !s.held || !!s.fault || s.busy;
+  $("fault").hidden = !s.fault;
+  $("fault-msg").textContent = s.fault ?? "";
+  $("clear-fault").disabled = s.busy;
   for (const b of document.querySelectorAll("[data-pose]")) b.toggleAttribute("data-at", b.dataset.pose === s.at);
   renderTour(s);
 
-  const err = localError ?? (s.held ? "Arm held. Press Release hold, then move on." : s.error);
+  // A fault has its own banner; the failed action's error just repeats it.
+  const err = localError ?? (s.fault ? null : s.held ? "Arm held. Press Release hold, then move on." : s.error);
   $("error").hidden = !err;
   $("error").textContent = err ?? "";
 }
@@ -146,6 +152,13 @@ $("tour-reset").addEventListener("click", () => act("tour_reset"));
 $("grip-open").addEventListener("click", () => act("gripper", { open: true }));
 $("grip-close").addEventListener("click", () => act("gripper", { open: false }));
 $("release").addEventListener("click", () => act("release"));
+$("clear-fault").addEventListener("click", () => {
+  const ok = confirm(
+    "Check the arm first: nothing blocks it and the joints turn freely.\n\n" +
+      "Clear the fault? The arm stays powered and holds where it is now.",
+  );
+  if (ok) act("clear_fault");
+});
 $("save").addEventListener("click", async () => {
   const name = $("save-name").value;
   if (!confirm(`Overwrite pose "${name}" with the current joints?`)) return;

@@ -92,6 +92,18 @@ def test_hold_then_release(manual, system):
     assert system.arm.at == "home" and not manual.state()["held"]
 
 
+def test_fault_blocks_until_cleared(manual, system, monkeypatch):
+    fault = ["joint6 is 13.6 deg away from its commanded position"]
+    monkeypatch.setattr(system.arm.driver, "fault", lambda: fault[0])
+    monkeypatch.setattr(system.arm.driver, "clear_fault", lambda: fault.__setitem__(0, None))
+    system.arm.hold()
+    assert manual.state()["fault"].startswith("joint6")
+    manual.clear_fault()
+    manual.wait()
+    s = manual.state()
+    assert s["fault"] is None and not s["held"] and s["error"] is None
+
+
 def test_save_pose(manual, system, rig):
     manual.go("home")
     manual.wait()
@@ -117,6 +129,9 @@ def test_api(system, manual):
         s = c.get("/api/manual").json()
         assert s["at"] == "home" and len(s["joints"]) == 6 and len(s["tcp_mm"]) == 3
         assert c.post("/api/manual", json={"action": "go", "pose": "moon"}).status_code == 400
+        assert c.post("/api/manual", json={"action": "clear_fault"}).status_code == 200
+        manual.wait()
+        assert c.get("/api/manual").json()["fault"] is None
         assert c.post("/api/manual", json={"action": "fly"}).status_code == 400
 
 
