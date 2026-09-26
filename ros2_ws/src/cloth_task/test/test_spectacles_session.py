@@ -51,11 +51,25 @@ class Motor:
         self.gripper: list[float] = []
 
 
+class Clock:
+    def __init__(self):
+        self.t = 50.0
+
+    def __call__(self):
+        return self.t
+
+
 @pytest.fixture
-def rig():
+def clock():
+    return Clock()
+
+
+@pytest.fixture
+def rig(clock):
     motor = Motor()
-    s = Session(K, C.JOINT_LIMITS_RAD, motor.joints.append, motor.gripper.append)
+    s = Session(K, C.JOINT_LIMITS_RAD, motor.joints.append, motor.gripper.append, clock)
     s.on_joint_state(Q0)
+    s.on_connect()
     return s, motor
 
 
@@ -169,3 +183,140 @@ def test_status_before_any_teleop():
     assert s.status() == {
         "v": 1, "type": "status", "echoSeq": None, "base": "idle", "arm": "holding", "fault": None
     }
+
+
+TIMED_OUT = {"base": "fault", "arm": "fault", "fault": "timeout"}
+
+
+def link(s):
+    st = s.status()
+    return {k: st[k] for k in ("base", "arm", "fault")}
+
+
+def test_silence_after_accept_times_out(rig, clock):
+    s, _ = rig
+    clock.t += 0.19
+    s.tick()
+    assert s.status()["fault"] is None
+    clock.t += 0.02
+    s.tick()
+    assert link(s) == TIMED_OUT
+
+
+def test_timeout_while_tracking_stops_publishing(rig, clock):
+    s, motor = rig
+    s.on_teleop(teleop(0, arm=True))
+    clock.t += 0.25
+    s.tick()
+    sent = len(motor.joints)
+    s.tick()
+
+    assert link(s) == TIMED_OUT
+    assert len(motor.joints) == sent
+
+
+def test_open_clutches_refresh_the_timer_and_hold(rig, clock):
+    s, motor = rig
+    for seq in range(5):
+        clock.t += 0.15
+        s.on_teleop(teleop(seq))
+    s.tick()
+
+    assert link(s) == {"base": "idle", "arm": "holding", "fault": None}
+    assert motor.joints == []
+
+
+def test_malformed_teleop_does_not_refresh_the_timer_or_echo_seq(rig, clock):
+    s, _ = rig
+    s.on_teleop(teleop(4))
+    clock.t += 0.15
+    bad = teleop(5)
+    bad["arm"]["position"] = [0.0, 0.0]
+    s.on_teleop(bad)
+    assert s.status()["echoSeq"] == 4
+    clock.t += 0.1
+    s.tick()
+    assert link(s) == TIMED_OUT
+    assert s.status()["echoSeq"] == 4
+
+
+def test_the_timer_ignores_the_lens_timestamp_and_skipped_seqs(rig, clock):
+    s, motor = rig
+    for seq in (0, 7, 30):
+        clock.t += 0.15
+        msg = teleop(seq, arm=True)
+        msg["timestamp"] = 1.0  # stale on the lens clock
+        s.on_teleop(msg)
+    assert s.status()["fault"] is None
+    assert s.status()["echoSeq"] == 30
+    assert len(motor.joints) == 3
+
+
+def test_timeout_clearing_frame_with_clutch_held_does_not_track(rig, clock):
+    s, motor = rig
+    s.on_teleop(teleop(0, arm=True))
+    sent = len(motor.joints)
+    clock.t += 0.3
+    s.on_teleop(teleop(1, arm=True))
+
+    assert link(s) == {"base": "idle", "arm": "holding", "fault": None}
+    assert s.status()["echoSeq"] == 1
+    assert len(motor.joints) == sent
+
+
+def test_after_timeout_both_hands_must_release(rig, clock):
+    s, motor = rig
+    clock.t += 0.3
+    s.tick()
+    s.on_teleop(teleop(0, arm=True, base=True))  # clears the fault, both still held
+    s.on_teleop(teleop(1, arm=False, base=True))  # right released, left still held
+    s.on_teleop(teleop(2, arm=True, base=True))
+    assert motor.joints == []
+    s.on_teleop(teleop(3, arm=True, base=False))  # right was re-grabbed while blocked
+    assert motor.joints == []
+    s.on_teleop(teleop(4))
+    s.on_teleop(teleop(5, arm=True))
+
+    assert len(motor.joints) == 1
+    assert s.status()["arm"] == "tracking"
+
+
+def test_first_socket_accepts_the_first_right_clutch(clock):
+    motor = Motor()
+    s = Session(K, C.JOINT_LIMITS_RAD, motor.joints.append, motor.gripper.append, clock)
+    s.on_joint_state(Q0)
+    s.on_connect()
+    s.on_teleop(teleop(0, arm=True))
+    assert len(motor.joints) == 1
+    assert s.status()["arm"] == "tracking"
+
+
+def test_replacement_socket_stops_the_arm_and_needs_each_hand_open(rig, clock):
+    s, motor = rig
+    s.on_teleop(teleop(0, arm=True))
+    clock.t += 0.3
+    s.tick()
+    s.on_connect()
+    assert link(s) == {"base": "idle", "arm": "holding", "fault": None}
+    assert s.status()["echoSeq"] is None
+
+    sent = len(motor.joints)
+    s.on_teleop(teleop(0, arm=True))
+    s.on_teleop(teleop(1, arm=True, position=[0.01, 0.0, 0.0]))
+    assert len(motor.joints) == sent
+    assert s.status()["arm"] == "holding"
+    s.on_teleop(teleop(2))
+    s.on_teleop(teleop(3, arm=True))
+    assert len(motor.joints) == sent + 1
+
+
+def test_replacement_socket_restarts_the_timer(rig, clock):
+    s, _ = rig
+    clock.t += 0.15
+    s.on_connect()
+    clock.t += 0.15
+    s.tick()
+    assert s.status()["fault"] is None
+    clock.t += 0.1
+    s.tick()
+    assert link(s) == TIMED_OUT

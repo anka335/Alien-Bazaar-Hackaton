@@ -106,11 +106,13 @@ ros2 run cloth_task leader_teleop --flip wrist_roll   # if one joint moves the w
 
 ## Teleop with Spectacles (in progress, [#27](https://github.com/anka335/Alien-Bazaar-Hackaton/issues/27))
 
-The robot-side peer of the lens (teleop v1). Done so far: the ROS-free session, `cloth_task/spectacles_session.py` ([D-015](../docs/decisions.md)). The robot bridge node, the WebSocket on `127.0.0.1:9100` (reached through ngrok), the watchdog and the launch switch are not built yet, so nothing runs on the arm.
+The robot-side peer of the lens (teleop v1). Done so far: the ROS-free session, `cloth_task/spectacles_session.py` ([D-015](../docs/decisions.md)). The robot bridge node, the WebSocket on `127.0.0.1:9100` (reached through ngrok) and the launch switch are not built yet, so nothing runs on the arm.
 
 - The right clutch's rising edge latches the measured `gripper_end` pose in `base_link`. Each engaged sample targets `p_ee + position` and `orientation ⊗ q_ee`, solved for the full pose from the measured joints (damped least squares, soft joint limits, no restarts). The result goes out as joint targets plus the gripper opening, clamped to 0 (closed) through 1 (open), for `/arm_bridge/teleop_command`.
 - A solve that misses 1 mm / 3° publishes nothing and `arm` stays `tracking`. Releasing the clutch stops publishing (`holding`), so `arm_bridge` holds its last setpoint.
-- The left clutch is never accepted, because there is no mobile base: `base` is always `idle`.
+- The left clutch is never accepted, because there is no mobile base: `base` is `idle` unless the link faults.
+- Link watchdog: once a socket is accepted, 200 ms without a valid teleop on the bridge's receive clock stops publishing and reports `arm` and `base` as `fault`, `fault: "timeout"`. Malformed teleops don't refresh the timer or `echoSeq`; the lens timestamp and skipped seqs don't matter. The next valid teleop clears the fault.
+- After a timeout, or when a new socket replaces the old one (arm stopped, `fault` null), both hands must be seen open before either can command; a clutch held while blocked, including on the clearing frame, doesn't count. The first socket accepts the first right clutch straight away.
 
 ```bash
 PYTHONPATH=ros2_ws/src/cloth_task python -m pytest ros2_ws/src/cloth_task/test/test_spectacles_session.py

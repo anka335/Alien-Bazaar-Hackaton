@@ -10,12 +10,20 @@ joints (damped least squares, no restarts). A solve that misses 1 mm / 3° publi
 the arm report stays tracking. Releasing the clutch stops publishing: `arm_bridge` holds the
 setpoint it already committed. The left clutch is never accepted: there is no mobile base.
 
+Link: once a socket is accepted, TIMEOUT_S without a valid teleop on the bridge's receive clock
+(not the lens timestamp) stops publishing and reports both arm and base as fault, fault timeout.
+The next valid teleop clears it. A replacement socket stops the arm and starts with fault null.
+After a timeout or a replacement, each hand must be seen open (a clutch held while blocked
+consumes that hand's release) before either can command again. The first socket of a session
+accepts the first right clutch straight away.
+
 Kept free of rclpy so it can be unit-tested with plain pytest.
 """
 
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -26,6 +34,8 @@ PROTOCOL_VERSION = 1
 TOL_POS_M = 1e-3
 TOL_ANG_DEG = 3.0
 MIN_QUAT_NORM = 1e-6
+TIMEOUT_S = 0.2
+HANDS = frozenset({"arm", "base"})
 
 
 @dataclass(frozen=True)
@@ -151,7 +161,9 @@ def solve_pose(
 
 class Session:
     """One lens session. `send_joints(q)` gets joint1..6 targets (rad), `send_gripper(opening)`
-    the gripper opening 0..1; both are only called while the right clutch is accepted."""
+    the gripper opening 0..1; both are only called while the right clutch is accepted.
+    `clock()` is the bridge's receive clock, s. Call `on_connect()` when a socket is accepted
+    and `tick()` periodically (well under TIMEOUT_S) so a silent link times out."""
 
     def __init__(
         self,
@@ -159,26 +171,66 @@ class Session:
         limits: np.ndarray,
         send_joints: Callable[[np.ndarray], None],
         send_gripper: Callable[[float], None],
+        clock: Callable[[], float] = time.monotonic,
     ):
         self._K = kinematics
         self._limits = np.asarray(limits, dtype=float)
         self._send_joints = send_joints
         self._send_gripper = send_gripper
+        self._clock = clock
         self._q_meas: np.ndarray | None = None
         self._latch: tuple[np.ndarray, np.ndarray] | None = None  # (p_ee, R_ee)
         self._echo_seq: int | None = None
+        self._connected = False
+        self._last_valid = 0.0
+        self._fault: str | None = None
+        self._blocked = False
+        self._released: set[str] = set()
 
     def on_joint_state(self, q: Any) -> None:
         """A joint1..6 measurement, rad."""
         self._q_meas = np.asarray(q, dtype=float).copy()
 
-    def on_teleop(self, msg: Any) -> None:
-        """A decoded teleop v1 message. Malformed ones change nothing."""
-        t = parse_teleop(msg)
-        if t is None:
+    def on_connect(self) -> None:
+        """A lens socket was accepted. Any socket after the first replaces the previous one."""
+        if self._connected:
+            self._block()
+        self._connected = True
+        self._fault = None
+        self._echo_seq = None
+        self._last_valid = self._clock()
+
+    def tick(self) -> None:
+        """Times the link out after TIMEOUT_S without a valid teleop."""
+        if not self._connected or self._fault is not None:
             return
+        if self._clock() - self._last_valid >= TIMEOUT_S:
+            self._fault = "timeout"
+            self._block()
+
+    def _block(self) -> None:
+        self._latch = None
+        self._blocked = True
+        self._released = set()
+
+    def on_teleop(self, msg: Any) -> None:
+        """A decoded teleop v1 message from the accepted socket. Malformed ones change nothing
+        and do not refresh the link timer."""
+        self.tick()
+        t = parse_teleop(msg)
+        if t is None or not self._connected:
+            return
+        self._last_valid = self._clock()
         self._echo_seq = t.seq
-        if not t.arm_engaged or self._q_meas is None:
+        self._fault = None
+        if self._blocked:
+            for hand, engaged in (("arm", t.arm_engaged), ("base", t.base_engaged)):
+                if engaged:
+                    self._released.discard(hand)
+                else:
+                    self._released.add(hand)
+            self._blocked = self._released != HANDS
+        if self._blocked or not t.arm_engaged or self._q_meas is None:
             self._latch = None
             return
         if self._latch is None:
@@ -198,11 +250,16 @@ class Session:
 
     def status(self) -> dict[str, Any]:
         """The status v1 message to send now."""
+        self.tick()
+        if self._fault is not None:
+            base, arm = "fault", "fault"
+        else:
+            base, arm = "idle", "tracking" if self._latch is not None else "holding"
         return {
             "v": PROTOCOL_VERSION,
             "type": "status",
             "echoSeq": self._echo_seq,
-            "base": "idle",
-            "arm": "tracking" if self._latch is not None else "holding",
-            "fault": None,
+            "base": base,
+            "arm": arm,
+            "fault": self._fault,
         }
