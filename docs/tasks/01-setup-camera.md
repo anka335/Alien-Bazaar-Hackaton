@@ -55,3 +55,4 @@ _None yet._
 
 - 2026-09-25: camera moved from an overhead stand to the wrist (D-006); zones fixed (D-007); ROI and record tools added to scope.
 - 2026-09-25 (block 0): skeleton ready. Config model of this block in `src/sorter/camera/config.py` (placeholder). The real backend still needs to be implemented at `sorter/camera/backend.py` with `create(cfg) -> Camera`. See architecture.md → Wiring.
+- 2026-09-26: added a separate guarded ROS RGB-D clothing-follow integration test; it consumes the documented color/aligned-depth topics but does not implement the block-1 `Camera` backend (D-015).

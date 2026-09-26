@@ -46,14 +46,13 @@ jest odrzucany, to zwykle słusznie.
 
 ## Instalacja
 
-Środowisko `rebot` ma już `motorbridge`, `numpy`, `mcp<2`, `pytest`. Środowisko
-przeciekało pakietami z `~/.local`, więc **zawsze uruchamiaj z `PYTHONNOUSERSITE=1`**:
+Utwórz lokalne środowisko Python 3.11 przez `uv`. **Zawsze uruchamiaj z
+`PYTHONNOUSERSITE=1`**, aby pakiety z `~/.local` nie przeciekały do środowiska:
 
 ```bash
-conda activate rebot   # or any Python 3.10+ environment with the requirements installed
-export PYTHONNOUSERSITE=1
 cd rebot_b601   # from the repository root
-python -m pytest tests -q          # 29 testów, ~35 s, bez sprzętu
+uv sync --python 3.11 --all-groups
+PYTHONNOUSERSITE=1 .venv/bin/python -m pytest tests -q  # 29 testów, ~35 s, bez sprzętu
 ```
 
 ## Przed pierwszym uruchomieniem na sprzęcie
@@ -86,6 +85,11 @@ Domyślnie po ruchu `xyz`/`joints` stoją 3 s w celu, potem wracają do domu i w
 (`--after leave` zostawia silniki włączone, ale wtedy nikt ich już nie steruje, a zachowanie
 firmware RS bez ramek CAN nie jest zweryfikowane). Do serii ruchów używaj `repl`.
 `Ctrl+C` w trakcie ruchu zatrzymuje go i trzyma pozycję.
+
+Ręczny, wolny test przesunięcia TCP w prawo i lewo znajduje się w
+`manual_tests/slow_left_right.py`. Domyślnie używa symulatora; uruchomienie na ramieniu
+wymaga jawnej flagi `--hardware` i potwierdzenia. Flaga `--viewer [PORT]` pokazuje ten
+sam test w wirtualnym klonie. Szczegóły: `manual_tests/README.md`.
 
 Polecenia `repl`: `xyz X Y Z [down|forward|up|free] [linear]`, `rel DX DY DZ`, `plan X Y Z [approach]`,
 `joints a1..a6`, `home`, `grip 0..1`, `state`, `stop`, `off` (awaryjne wyłączenie momentu: ramię opadnie), `quit`.
