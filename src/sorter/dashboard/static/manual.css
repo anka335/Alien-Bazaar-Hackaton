@@ -1,0 +1,125 @@
+/* Manual control page (setup): on top of style.css, same machine front. */
+
+body.manual { grid-template-rows: auto minmax(0, 1fr); }
+
+.manual .panel { grid-template-columns: minmax(0, 1fr) auto auto; }
+.manual .phase { font-size: clamp(1.9rem, 3.4vw, 3.4rem); margin-bottom: 0.2rem; }
+.manual .hold { --size: clamp(5.5rem, 7.5vw, 7.5rem); }
+.manual .readouts dd { font-size: clamp(1.2rem, 1.7vw, 1.8rem); }
+
+.manual-stage { grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); }
+
+.views {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--gap);
+}
+.manual .screen { aspect-ratio: auto; max-width: none; height: 100%; }
+.screen.cam img { object-fit: contain; }
+.tag {
+  position: absolute;
+  top: 22px;
+  left: 22px;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.2em 0.8em;
+  border-radius: 999px;
+  background: rgb(15 24 35 / 0.72);
+  color: var(--lcd);
+  font-weight: 600;
+}
+
+.deck {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: calc(var(--gap) * 0.8);
+  padding: 2px 4px 2px 2px;
+}
+.card {
+  padding: 0.75rem 0.9rem 0.85rem;
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--enamel-hi), #f5f7f9);
+  box-shadow: 0 1px 0 var(--enamel-hi) inset, 0 0 0 1px var(--line), 0 10px 22px -18px rgb(15 24 35 / 0.5);
+}
+.card h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 0.55rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.hint { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--muted); overflow-wrap: anywhere; }
+.hint code { font-size: 0.8rem; }
+
+.row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+
+.deck button, .deck select {
+  padding: 0.45rem 0.9rem;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--enamel-hi), #f1f4f7);
+  box-shadow: 0 0 0 1px var(--line), 0 2px 0 var(--line);
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+}
+.deck select { flex: 1; min-width: 0; cursor: pointer; }
+.deck button:hover:not(:disabled) { color: #0f94ad; }
+.deck button:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 0 0 1px var(--line); }
+.deck button:disabled { opacity: 0.35; cursor: default; box-shadow: 0 0 0 1px var(--line); }
+.deck button.primary { background: var(--glass); color: var(--lcd); box-shadow: 0 2px 0 #000; }
+.deck button.primary:hover:not(:disabled) { color: var(--water); }
+.deck button[data-at] { box-shadow: 0 0 0 2px var(--water), 0 2px 0 var(--line); }
+
+.tour {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.9rem;
+  margin: 0 0 0.65rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+.tour li { display: flex; align-items: center; gap: 0.35rem; }
+.tour i { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--line); }
+.tour li[data-state="done"] i { background: rgb(60 200 226 / 0.5); }
+.tour li[data-state="next"] { color: var(--ink); font-weight: 700; }
+.tour li[data-state="next"] i { background: var(--water); box-shadow: 0 0 0 3px rgb(60 200 226 / 0.25); }
+
+.poses { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.45rem; }
+
+.steps { display: flex; gap: 0.2rem; font-size: 0.9rem; }
+.steps label {
+  padding: 0.1em 0.6em;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.steps input { position: absolute; opacity: 0; pointer-events: none; }
+.steps label:has(input:checked) { background: var(--glass); color: var(--lcd); }
+.steps label:has(input:focus-visible) { outline: 3px solid var(--water); }
+
+.jog { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 0.35rem 0.5rem; }
+.jog .name { font-weight: 700; }
+.jog .val {
+  text-align: center;
+  font-family: "Barlow Condensed", "Barlow", sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.jog button { padding: 0.3rem 0.85rem; font-size: 1.1rem; line-height: 1; }
+
+@media (max-width: 900px) {
+  .manual-stage { grid-template-columns: minmax(0, 1fr); }
+  .views { grid-template-rows: auto 50vh; }
+  .manual .screen.cam { height: auto; }
+  .screen.cam img { height: auto; }
+  .deck { overflow: visible; }
+}

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manual control</title>
+  <link rel="preload" href="/static/fonts/barlow-condensed-700.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/manual.css">
+</head>
+<body class="manual">
+  <header class="panel" aria-label="Arm status">
+    <div class="display">
+      <div class="display-top">
+        <span class="mode" id="mode" data-mode="idle">Manual</span>
+        <span class="next" id="where"></span>
+      </div>
+      <h1 class="phase" id="phase" aria-live="polite">Connecting…</h1>
+    </div>
+
+    <dl class="readouts">
+      <div><dt>TCP x · y · z, mm</dt><dd id="tcp">–</dd></div>
+      <div><dt>Gripper</dt><dd id="grip">–</dd></div>
+    </dl>
+
+    <button class="hold" id="hold" type="button" title="Freeze the arm where it is (Space or Esc)">
+      <span class="hold-face">
+        <span class="hold-word">Hold</span>
+        <span class="hold-key">Space</span>
+      </span>
+    </button>
+  </header>
+
+  <main class="stage manual-stage">
+    <div class="views">
+      <figure class="screen cam">
+        <img id="live" src="/stream/live.mjpg" alt="Live view from the camera on the robot's wrist">
+        <figcaption class="tag"><span class="live-dot"></span>Wrist camera</figcaption>
+        <div class="alerts">
+          <p class="alert alert-conn" id="conn" hidden>No connection to the sorter. Hold may not reach the arm. Retrying…</p>
+          <p class="alert alert-error" id="error" hidden></p>
+        </div>
+      </figure>
+      <figure class="screen twin">
+        <iframe id="twin" src="/twin?embed" title="3D view of the arm and the table"></iframe>
+      </figure>
+    </div>
+
+    <aside class="deck" aria-label="Manual controls">
+      <section class="card">
+        <h2>Tour</h2>
+        <ol class="tour" id="tour"></ol>
+        <div class="row">
+          <button type="button" class="primary" id="tour-next" data-busy>Next pose</button>
+          <button type="button" id="tour-reset" title="Start the tour over from the box">Restart</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Go to pose</h2>
+        <div class="poses" id="poses"></div>
+        <p class="hint">Bins go via home, like a real drop.</p>
+      </section>
+
+      <section class="card">
+        <h2>Gripper</h2>
+        <div class="row">
+          <button type="button" id="grip-open" data-busy>Open</button>
+          <button type="button" id="grip-close" data-busy>Close</button>
+          <button type="button" id="release" title="Leave hold without moving">Release hold</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Jog joints
+          <span class="steps" role="radiogroup" aria-label="Step">
+            <label><input type="radio" name="step" value="1">1°</label>
+            <label><input type="radio" name="step" value="5" checked>5°</label>
+            <label><input type="radio" name="step" value="15">15°</label>
+          </span>
+        </h2>
+        <div class="jog" id="jog"></div>
+      </section>
+
+      <section class="card">
+        <h2>Save pose</h2>
+        <div class="row">
+          <select id="save-name" aria-label="Pose to overwrite"></select>
+          <button type="button" id="save" data-busy>Save current</button>
+        </div>
+        <p class="hint" id="save-out">Writes the current joints to <code id="rig">rig.yaml</code>.</p>
+      </section>
+    </aside>
+  </main>
+
+  <script src="/static/manual.js"></script>
+</body>
+</html>

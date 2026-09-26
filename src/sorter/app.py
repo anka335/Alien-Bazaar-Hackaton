@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import logging
 import threading
+from pathlib import Path
 
 from sorter.core.config import Backend, Config
 from sorter.core.errors import SorterError
@@ -118,6 +119,37 @@ def _physics_classifier(cfg: Config, parts: dict):
 _PHYSICS_RIG = {"calibration": _physics_calibration, "color_classifier": _physics_classifier}
 
 
+def _serve(system: System, manual=None):
+    """Start the dashboard's web server in a thread; returns the uvicorn server."""
+    import uvicorn
+
+    from sorter.dashboard.server import create_app
+
+    d = system.cfg.dashboard
+    server = uvicorn.Server(
+        uvicorn.Config(
+            create_app(system.hub, d, views=system.cfg.views, manual=manual),
+            host=d.host,
+            port=d.port,
+            log_level="warning",
+        )
+    )
+    server.thread = threading.Thread(target=server.run, name="dashboard", daemon=True)
+    server.thread.start()
+    print(f"Dashboard: http://{d.host}:{d.port}{'/manual' if manual else ''}", flush=True)
+    return server
+
+
+def _close(system: System) -> None:
+    try:
+        system.arm.shutdown()
+    except SorterError:
+        log.exception("arm shutdown failed")
+    system.camera.close()
+    if system.world is not None and hasattr(system.world, "stop"):
+        system.world.stop()
+
+
 def run(cfg: Config, *, sim: bool = False, dashboard: bool = True, autostart: bool = False) -> None:
     from sorter.orchestrator.state_machine import StateMachine
 
@@ -132,23 +164,7 @@ def run(cfg: Config, *, sim: bool = False, dashboard: bool = True, autostart: bo
     sm_thread = threading.Thread(target=sm.run, args=(stop,), name="state-machine", daemon=True)
     sm_thread.start()
 
-    server = None
-    if dashboard:
-        import uvicorn
-
-        from sorter.dashboard.server import create_app
-
-        d = system.cfg.dashboard
-        server = uvicorn.Server(
-            uvicorn.Config(
-                create_app(system.hub, d, views=system.cfg.views),
-                host=d.host,
-                port=d.port,
-                log_level="warning",
-            )
-        )
-        threading.Thread(target=server.run, name="dashboard", daemon=True).start()
-        print(f"Dashboard: http://{d.host}:{d.port}", flush=True)
+    server = _serve(system) if dashboard else None
 
     if autostart:
         system.hub.send(Command.START)
@@ -164,10 +180,28 @@ def run(cfg: Config, *, sim: bool = False, dashboard: bool = True, autostart: bo
         sm_thread.join(timeout=5)
         if server is not None:
             server.should_exit = True
-        try:
-            system.arm.shutdown()
-        except SorterError:
-            log.exception("arm shutdown failed")
-        system.camera.close()
-        if system.world is not None and hasattr(system.world, "stop"):
-            system.world.stop()
+        _close(system)
+
+
+def run_manual(cfg: Config, *, sim: bool = False, rig_file: Path) -> None:
+    """Setup mode: the camera, the arm and the manual control page, no state machine. The arm
+    only moves on a button press. Ctrl+C → hold → rest pose → motors off."""
+    from sorter.dashboard.manual import ManualControl
+
+    system = build_system(cfg, sim=sim)
+    logging.getLogger("sorter").addHandler(HubLogHandler(system.hub))
+    log.info("manual control, backends: %s", system.cfg.backends.model_dump(mode="json"))
+    system.camera.start()
+    system.arm.start()
+    manual = ManualControl(system.arm, rig_file, system.cfg.arm.gripper.open)
+    server = _serve(system, manual)
+    try:
+        while server.thread.is_alive():  # it exits if it can't bind the port
+            server.thread.join(0.5)
+        log.error("dashboard server exited (port %s in use?)", system.cfg.dashboard.port)
+    except KeyboardInterrupt:
+        log.warning("Ctrl+C: hold, then shut down")
+        system.arm.hold()
+    finally:
+        server.should_exit = True
+        _close(system)

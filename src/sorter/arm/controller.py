@@ -175,6 +175,46 @@ class Controller:
         """Not in the ArmController protocol: for the dashboard's 3D view."""
         return self.driver.gripper()
 
+    # --- manual control (the dashboard's setup page), not in the ArmController protocol ---
+
+    @property
+    def held(self) -> bool:
+        return self._held.is_set()
+
+    @property
+    def at(self) -> str | None:
+        """The named pose the arm is at, if any."""
+        return self._at
+
+    def go_to(self, name: str) -> None:
+        """Straight joint move to a named pose. ArmError if the path hits the table or base."""
+        if name not in self.poses:
+            raise ValueError(f"unknown pose {name!r}")
+        self._go(name)
+
+    def move_joints(self, q: Sequence[float]) -> None:
+        """Straight joint move to `q` (rad). ArmError outside the joint limits or the table."""
+        self._check_held()
+        self._run(kin.plan_joints(self.driver.joints(), q, z_min_mm=self.cfg.z_min_mm))
+
+    def set_gripper(self, opening: float) -> float:
+        return self._gripper(opening)
+
+    def release(self) -> None:
+        """Leave hold without moving (recover() without its lift / open / home)."""
+        self._held.clear()
+        self.driver.resume()
+        self._at = None
+        log.info("arm hold released")
+
+    def set_pose(self, name: str, q: Sequence[float]) -> None:
+        """Replace a named pose for this process (a re-taught pose)."""
+        if name not in self.poses:
+            raise ValueError(f"unknown pose {name!r}")
+        self.poses[name] = np.asarray(q, dtype=float)
+        if self._at == name:
+            self._at = None
+
     def hold(self) -> None:
         self._held.set()
         self.driver.stop()

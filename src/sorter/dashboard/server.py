@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 import dataclasses
 import json
+import math
 import threading
 import time
 from collections.abc import AsyncIterator, Callable, Mapping
@@ -17,7 +18,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from rebot_b601.assets import ASSETS_DIR as TWIN_ASSETS_DIR
@@ -26,6 +27,7 @@ from sorter.camera.config import ViewConfig
 from sorter.core.hub import Hub
 from sorter.core.types import Command, Decision, Status, Zone
 from sorter.dashboard.config import DashboardConfig
+from sorter.dashboard.manual import Busy, ManualControl
 from sorter.dashboard.render import PHASE_LABELS, encode_jpeg, placeholder, render_decision
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -34,6 +36,14 @@ BOUNDARY = "frame"
 
 class CommandRequest(BaseModel):
     cmd: str
+
+
+class ManualRequest(BaseModel):
+    action: str  # go | tour_next | tour_reset | jog | gripper | release | save
+    pose: str | None = None
+    joint: int | None = None  # 0..5
+    delta_deg: float = 0.0
+    open: bool = True
 
 
 def status_json(s: Status) -> dict[str, Any]:
@@ -85,9 +95,13 @@ async def mjpeg(
 
 
 def create_app(
-    hub: Hub, cfg: DashboardConfig, views: Mapping[Zone, ViewConfig] | None = None
+    hub: Hub,
+    cfg: DashboardConfig,
+    views: Mapping[Zone, ViewConfig] | None = None,
+    manual: ManualControl | None = None,
 ) -> FastAPI:
-    """`views` gives the zone ROIs drawn on the decision frame (`cfg.views`)."""
+    """`views` gives the zone ROIs drawn on the decision frame (`cfg.views`). `manual`: the
+    setup mode (`python -m sorter manual`), where `/` opens the manual control page."""
     app = FastAPI(title="Sorter")
     rois = {z: list(v.roi) for z, v in (views or {}).items()}
     frames = Frames(hub, cfg, rois)
@@ -100,8 +114,48 @@ def create_app(
     app.mount("/twin-assets", StaticFiles(directory=TWIN_ASSETS_DIR), name="twin-assets")
 
     @app.get("/", response_class=HTMLResponse)
-    def index() -> str:
-        return page
+    def index():
+        return RedirectResponse("/manual") if manual else page
+
+    @app.get("/manual", response_class=HTMLResponse)
+    def manual_page() -> str:
+        return (STATIC_DIR / "manual.html").read_text()
+
+    def manual_source() -> ManualControl:
+        if manual is None:
+            raise HTTPException(404, "manual control is off; start with `python -m sorter manual`")
+        return manual
+
+    @app.get("/api/manual")
+    def manual_state() -> dict:
+        return manual_source().state()
+
+    @app.post("/api/manual")
+    def manual_action(req: ManualRequest) -> dict:
+        m = manual_source()
+        try:
+            match req.action:
+                case "go":
+                    m.go(req.pose or "")
+                case "tour_next":
+                    m.tour_next()
+                case "tour_reset":
+                    m.tour_reset()
+                case "jog":
+                    m.jog(-1 if req.joint is None else req.joint, math.radians(req.delta_deg))
+                case "gripper":
+                    m.gripper(req.open)
+                case "release":
+                    m.release()
+                case "save":
+                    return {"ok": True, "line": m.save_pose(req.pose or "")}
+                case _:
+                    raise HTTPException(400, f"unknown action {req.action!r}")
+        except Busy as e:
+            raise HTTPException(409, str(e)) from None
+        except (ValueError, OSError) as e:
+            raise HTTPException(400, str(e)) from None
+        return {"ok": True}
 
     @app.get("/twin", response_class=HTMLResponse)
     def twin_page() -> str:

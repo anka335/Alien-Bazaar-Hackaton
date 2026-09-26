@@ -114,3 +114,9 @@ Template:
 **Context:** The arm is clamped to the back edge of the table, so there is no room behind it or beside its base; the D-015 layout had the box beside the base and a bin behind it. Top-down picks reach a TCP 160–360 mm from the base; drops over the bins (TCP ~245 mm up, tilted outwards) reach up to ~590 mm.
 **Decision:** `sim.layout.edge_x_mm` (−70, the back of the base) is the table's back edge; the physics table starts there and `python -m sorter.sim.layout` reports anything behind it. The box stands straight ahead (center 255, 0), the mat front-left (180, 210), the bins farther out where only the tilted drop reaches: light (150, −330), dark (380, −250), colored (430, 220).
 **Consequences:** Gaps are tight: 20 mm between the box and the mat, 30–60 mm around the bins. The real rig copies the layout and re-teaches the poses.
+
+## D-018: A setup mode moves the arm by hand from the dashboard (2026-09-26)
+
+**Context:** The poses in `rig.yaml` are computed for the sim layout; on the real rig each has to be checked through the wrist camera and re-taught, before the state machine may drive the arm.
+**Decision:** `python -m sorter manual [--sim]` starts the camera, the arm and the dashboard without the state machine; `/manual` is a remote on top of the same `Controller` (named poses, a tour through them, joint jog, gripper, hold / release) with the same path checks as the loop, one motion at a time. A move to or from a bin goes via `home`. **Save current** rewrites that pose's line in `config/rig.yaml` in place, so the re-taught poses are committed like the computed ones (D-007). No Cartesian jog and no teach-by-hand (motors off): the arm falls without torque.
+**Consequences:** Re-teaching needs no code or YAML editing. Running `python -m sorter.sim.layout --write` afterwards overwrites taught poses. A pose in `config/local.yaml` shadows the saved one.

@@ -1,4 +1,4 @@
-"""CLI: `python -m sorter run [--sim]`."""
+"""CLI: `python -m sorter run [--sim]`, `python -m sorter manual [--sim]`."""
 
 from __future__ import annotations
 
@@ -17,6 +17,10 @@ def main(argv: list[str] | None = None) -> None:
     run_p.add_argument("--no-dashboard", action="store_true", help="don't start the web server")
     run_p.add_argument("--autostart", action="store_true", help="send START right away")
     run_p.add_argument("-v", "--verbose", action="store_true", help="debug logging")
+    man_p = sub.add_parser("manual", help="set up the rig: move the arm by hand from the dashboard")
+    man_p.add_argument("--sim", action="store_true", help="simulate the camera and the arm")
+    man_p.add_argument("--config-dir", default=DEFAULT_CONFIG_DIR, help="directory with *.yaml")
+    man_p.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -33,6 +37,13 @@ def main(argv: list[str] | None = None) -> None:
             dashboard=not args.no_dashboard,
             autostart=args.autostart,
         )
+    elif args.command == "manual":
+        from pathlib import Path
+
+        from sorter.app import run_manual
+
+        cfg = load_config(args.config_dir)
+        run_manual(cfg, sim=args.sim, rig_file=Path(args.config_dir) / "rig.yaml")
 
 
 if __name__ == "__main__":
