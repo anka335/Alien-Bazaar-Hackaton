@@ -23,6 +23,11 @@ class ArmDriver(Protocol):
         """Disable the motors. The controller calls it only at the rest pose."""
         ...
 
+    @property
+    def connected(self) -> bool:
+        """Motors enabled: `joints()` and motions work."""
+        ...
+
     def joints(self) -> np.ndarray:
         """Measured joint angles, rad."""
         ...
@@ -90,6 +95,10 @@ class RebotDriver:
     def disconnect(self) -> None:
         if self.arm.connected:
             self._call(self.arm.disconnect, go_home=False)
+
+    @property
+    def connected(self) -> bool:
+        return bool(self.arm.connected)
 
     def joints(self) -> np.ndarray:
         return self.arm.joints()

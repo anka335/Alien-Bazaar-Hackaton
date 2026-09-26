@@ -28,6 +28,10 @@ class SimDriver:
     def disconnect(self) -> None:
         pass
 
+    @property
+    def connected(self) -> bool:
+        return True  # the sim arm is always there
+
     def joints(self) -> np.ndarray:
         return self.world.joints()
 

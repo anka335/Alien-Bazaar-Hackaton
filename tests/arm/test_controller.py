@@ -214,3 +214,9 @@ def test_real_driver_clears_a_fault_with_the_torque_on():
         d.execute(np.array([d.joints(), q1]), 0.5)
     finally:
         d.disconnect()
+
+
+def test_shutdown_after_a_failed_start_does_nothing(cfg):
+    arm = Controller(FakeDriver(np.zeros(6)), cfg.arm, cfg.poses, cfg.zones)
+    arm.shutdown()  # never connected: no motion, no error
+    assert arm.driver.paths == [] and not arm.driver.connected

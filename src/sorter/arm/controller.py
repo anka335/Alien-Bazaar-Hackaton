@@ -107,7 +107,11 @@ class Controller:
 
     def shutdown(self) -> None:
         """Rest pose, then disable. A pending hold is released first: the arm must be at rest
-        before the motors go off, or it falls."""
+        before the motors go off, or it falls. Nothing to do if the arm never connected (a failed
+        start): reading its joints would raise and hide the start's error."""
+        if not self.driver.connected:
+            log.info("arm not connected: nothing to shut down")
+            return
         self._held.clear()
         self.driver.resume()
         self._lift()
