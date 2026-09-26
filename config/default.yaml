@@ -26,11 +26,11 @@ sim:
   height: 480
   focal_px: 615                   # D435i color at 640x480
   camera_mount_mm: [-140, 0, 55]  # wrist camera in the TCP frame (x = approach), looks along x
-  item_radius_mm: 30
+  item_radius_mm: 22             # items fit the 150 x 120 mat (the rig camera sees no bigger)
   layout:            # the table, arm base at the origin, +x forward, +y left, mm
     edge_x_mm: -70     # the table's back edge: the arm is clamped here, everything lies in front
-    box: {center_mm: [255, 0], size_mm: [240, 180], floor_z_mm: 5, wall_mm: 60}  # inside
-    background: {center_mm: [180, 210], size_mm: [240, 180]}                       # the gray mat
+    box: {center_mm: [300, 0], size_mm: [140, 200], floor_z_mm: 5, wall_mm: 60}  # inside
+    background: {center_mm: [180, 210], size_mm: [150, 120]}                       # the gray mat
     bins:
       centers_mm: {light: [150, -330], dark: [380, -250], colored: [430, 220]}
       size_mm: 180

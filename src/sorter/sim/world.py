@@ -83,9 +83,10 @@ def _camera_on_tcp(cfg: SimConfig) -> Pose:
     T = np.eye(4)
     T[:3, :3] = [
         [0, 0, 1],
-        [0, -1, 0],
         [1, 0, 0],
-    ]  # columns: x_cam = z_tcp, y_cam = -y_tcp, z_cam = x_tcp: the image's long side radial
+        [0, 1, 0],
+    ]  # columns: x_cam = y_tcp, y_cam = z_tcp, z_cam = x_tcp: the image's long side across the
+    # arm, as on the rig (~110° from radial there); the box's long side runs along y to match
     T[:3, 3] = cfg.camera_mount_mm
     return T
 

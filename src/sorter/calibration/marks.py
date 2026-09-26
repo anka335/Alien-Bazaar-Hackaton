@@ -27,14 +27,14 @@ DEPTH_WINDOW_PX = 4  # the median depth of (2w+1)² pixels around the click
 SNAP_RADIUS_PX = 35  # a click snaps to the center of a tape square this close
 TAPE_MM = 10.0  # the side of a tape mark
 # around the mat center, arm frame (+x away from the arm, +y left); not symmetric, so a view
-# of a few of them is never ambiguous
+# of a few of them is never ambiguous; within the 150 x 120 mat's workspace (20 mm margin)
 MARK_OFFSETS_MM = {
     "M1": (0.0, 0.0),
-    "M2": (70.0, 50.0),
-    "M3": (70.0, -50.0),
-    "M4": (-70.0, -50.0),
-    "M5": (-70.0, 50.0),
-    "M6": (35.0, 0.0),
+    "M2": (50.0, 35.0),
+    "M3": (50.0, -35.0),
+    "M4": (-50.0, -35.0),
+    "M5": (-50.0, 35.0),
+    "M6": (30.0, 0.0),
 }
 
 
