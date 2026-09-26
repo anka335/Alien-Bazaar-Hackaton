@@ -491,6 +491,10 @@ Each sim component is selected independently through `backends`, so a real compo
 - **Names:** the arm owns the plain names (`base_link`, `/joint_states`, `/robot_description`). The rover runs with LeoOS's `ROBOT_NAMESPACE=leo`: frames `leo/…`, topics `/leo/…` (`rover_nav/scripts/setup_rover.sh`). TF tree: `map` → `leo/odom` → `leo/base_footprint` → `leo/base_link` → `base_link` (arm) → … → camera.
 - With `nav_camera:=wrist`, the arm stays in `drive` while the rover moves: moving it breaks mapping and localization. With `oak` the arm is free.
 
+## Room search (block 10, ROS 2 track, proposed)
+
+[D-021](decisions.md), plan and interfaces in [tasks/10-room-search.md](tasks/10-room-search.md). A `room_search` node in `rover_nav` drives Nav2 through viewpoints generated from the saved map and keepout mask, finds clothes with a second `cloth_detector` instance on the OAK-D (outputs under `/search/…`), parks with the cloth 0.32 m ahead of the arm's base, and calls the arm stack: `/arm/pick_from_floor`, `/arm/place_in_machine`, `/arm/stow` (`std_srvs/Trigger`, proposed). The machine pose is recorded in `~/rover_nav_maps/places.yaml`. The rover and the arm never move at the same time.
+
 ## Repo layout
 
 | Path | Owner |

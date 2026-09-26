@@ -16,7 +16,8 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | 6 | [State machine](tasks/06-state-machine.md) | review | Softjey + Claude | `block/06-state-machine` | — |
 | 7 | [Dashboard](tasks/07-dashboard.md) | review | Softjey + Claude | `block/07-dashboard` | — |
 | 8 | [Demo preparation](tasks/08-demo.md) | todo | — | — | — |
-| 9 | [Rover navigation](tasks/09-rover-navigation.md) | in progress | Slava + Claude | `block/09-rover-navigation` | first real run (packages to install, mounts to measure) |
+| 9 | [Rover navigation](tasks/09-rover-navigation.md) | in progress | Slava + Claude | `block/09-rover-navigation` | map + keepout done; first navigation run pending (rover motor controller reset, charging) |
+| 10 | [Room search](tasks/10-room-search.md) | todo | Slava + Claude | `block/10-room-search` | planned (D-021); needs block 9, arm floor pick / machine place |
 
 ## Dependencies
 
@@ -40,6 +41,9 @@ graph LR
   B7 --> INT
   INT --> B8[8 Demo]
   B5 -. drive pose, wrist camera only .-> B9[9 Rover navigation]
+  B9 --> B10[10 Room search]
+  B5 -. floor pick, machine place .-> B10
+  B4 -. SAM3 detector .-> B10
 ```
 
 - **Block 0 comes first and is short.** It fixes the stack, the repo layout, the interfaces, and the stubs. After it, blocks 3–7 run fully in parallel.
@@ -48,6 +52,7 @@ graph LR
 - **Blocks 3 and 4** start on photos or recorded frames and switch to look-pose recordings and live frames once blocks 1 and 5 are ready.
 - **Block 6** is developed against the simulator. Real integration needs 2–5.
 - **Block 9** (ROS 2 track, D-019) moves the arm around one room on a Leo Rover. With the OAK-D on the rover (default, D-020) it depends on no other block; with the wrist camera it needs a `drive` pose from the arm and the RealSense ROS driver.
+- **Block 10** (room search, D-021) runs on block 9's navigation: viewpoints on the saved map, SAM3 on the OAK-D to find clothes, the arm picks from the floor and drops into the washing machine. It can be tested with a fake arm before the arm's floor pick exists.
 - **Block 8** starts early for one thing: choose the demo clothes on day 1, since thresholds and grasp depth are tuned on them.
 
 ## Suggested order

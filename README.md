@@ -36,7 +36,7 @@ Every cycle starts by looking at the background, so missed grasps, double grasps
 
 ## Project plan
 
-The work is split into blocks 0–9 that can be developed in parallel by different people or agents:
+The work is split into blocks 0–10 that can be developed in parallel by different people or agents:
 
 | # | Block | Task file |
 | --- | --- | --- |
@@ -50,6 +50,7 @@ The work is split into blocks 0–9 that can be developed in parallel by differe
 | 7 | Dashboard | [docs/tasks/07-dashboard.md](docs/tasks/07-dashboard.md) |
 | 8 | Demo preparation | [docs/tasks/08-demo.md](docs/tasks/08-demo.md) |
 | 9 | Rover navigation (ROS 2) | [docs/tasks/09-rover-navigation.md](docs/tasks/09-rover-navigation.md) |
+| 10 | Room search (ROS 2) | [docs/tasks/10-room-search.md](docs/tasks/10-room-search.md) |
 
 The dependency graph and the live status board are in [docs/plan.md](docs/plan.md).
 
