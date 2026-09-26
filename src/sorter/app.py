@@ -183,11 +183,27 @@ def run(cfg: Config, *, sim: bool = False, dashboard: bool = True, autostart: bo
         _close(system)
 
 
+def _nominal_hand_eye(cfg: Config) -> Config:
+    """Setup mode comes before the hand-eye calibration: without `config/hand_eye.yaml` the 3D
+    view uses the nominal camera mount (`sim.camera_mount_mm`). Nothing in it targets by pixels."""
+    from sorter.arm import kinematics as kin
+    from sorter.calibration.config import HandEyeResult
+    from sorter.sim.world import camera_mount
+
+    log.warning("no config/hand_eye.yaml: manual control uses the nominal camera mount")
+    T = kin.T_FLANGE_TCP @ camera_mount(cfg.sim)
+    he = HandEyeResult(T_flange_cam=T.tolist(), method="nominal")
+    calibration = cfg.calibration.model_copy(update={"hand_eye": he})
+    return cfg.model_copy(update={"calibration": calibration})
+
+
 def run_manual(cfg: Config, *, sim: bool = False, rig_file: Path) -> None:
     """Setup mode: the camera, the arm and the manual control page, no state machine. The arm
     only moves on a button press. Ctrl+C → hold → rest pose → motors off."""
     from sorter.dashboard.manual import ManualControl
 
+    if not sim and cfg.calibration.hand_eye is None:
+        cfg = _nominal_hand_eye(cfg)
     system = build_system(cfg, sim=sim)
     logging.getLogger("sorter").addHandler(HubLogHandler(system.hub))
     log.info("manual control, backends: %s", system.cfg.backends.model_dump(mode="json"))
