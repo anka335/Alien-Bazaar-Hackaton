@@ -17,6 +17,9 @@ With `rover` true (the mobile base, left clutch):
   /leo/cmd_vel                  out: geometry_msgs/Twist, linear.x = vx, angular.z = wz
   /leo/merged_odom              in: nav_msgs/Odometry, only its arrival (rover presence) is used
 
+Each change of rover presence is logged, "rover present: ..." or "rover absent: ..." (the
+pre-flight waits for the first one before it pinches).
+
 Every stop (release, link timeout, replacement lens, driver fault, stale measurement) is the
 session ceasing to publish: arm_bridge then holds its last setpoint. Until teleop mode is on and
 a joint state has arrived, every lens is refused. The base is commanded on each tick while
@@ -49,7 +52,7 @@ from std_srvs.srv import SetBool
 from cloth_task.core import ARM_JOINTS
 from cloth_task.motion import Waiter
 from cloth_task.spectacles_link import LensLink
-from cloth_task.spectacles_session import Session, check_base_limits
+from cloth_task.spectacles_session import ROVER_ABSENT_S, Session, check_base_limits
 
 TELEOP_SERVICE = "/arm_bridge/teleop"
 DRIVER_FAULT_TOPIC = "/arm_bridge/driver_fault"
@@ -81,6 +84,8 @@ class SpectaclesBridge(Node):
         limits = [float(p(n)) for n in ("base_max_vx", "base_max_reverse", "base_max_wz")]
         check_base_limits(*limits)  # before anything is created
         rover = bool(p("rover"))
+        self._rover, self._rover_seen = rover, False
+        self._odom_topic = str(p("odom_topic"))
         C, K = _import_rebot(p("rebot_dir"))
         self.lock = threading.Lock()
         self._pending_q: np.ndarray | None = None
@@ -176,6 +181,16 @@ class SpectaclesBridge(Node):
     def _tick(self) -> None:
         with self.lock:
             self.session.tick()
+            present = self.session.rover_present
+        if self._rover and present != self._rover_seen:
+            self._rover_seen = present
+            if present:
+                self.get_logger().info(f"rover present: odometry on {self._odom_topic}")
+            else:
+                self.get_logger().warn(
+                    f"rover absent: no odometry on {self._odom_topic} for "
+                    f"{ROVER_ABSENT_S} s, the left clutch is ignored"
+                )
 
     # --- start-up ---
 

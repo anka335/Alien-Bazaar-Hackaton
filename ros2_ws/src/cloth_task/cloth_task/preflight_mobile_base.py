@@ -76,6 +76,9 @@ LAUNCH = [
 ]
 TELEOP_ON = "teleop mode on"
 TELEOP_FAILED = ("teleop mode not enabled", "cannot start")
+# The bridge's log lines on a change of rover presence
+ROVER_PRESENT, ROVER_ABSENT = "rover present:", "rover absent:"
+ROVER_GATE_S = 60.0
 LIMIT_REFUSED = "base limits out of range"
 
 
@@ -105,7 +108,8 @@ SCENARIO: list[dict[str, Any]] = [
     {"name": "c7-open", "duration": 1.0},
     {"name": "c7-drive", "duration": 1.0, "base": _base(vx=0.35)},
     {"name": "c7-kill", "duration": 2.0, "base": _base(vx=0.35)},  # rover stand-in killed
-    {"name": "c7-restart", "duration": 8.0, "base": _base(vx=0.35)},  # started again: ~1-3 s
+    # started again; the bridge saw its odometry 1 to 4 s later in the runs so far
+    {"name": "c7-restart", "duration": 12.0, "base": _base(vx=0.35)},
     {"name": "c7-open-one", "duration": 0.03},  # one frame at 30 Hz
     {"name": "c7-pinch", "duration": 1.0, "base": _base(vx=0.35)},
     {"name": "c8-open", "duration": 0.5},
@@ -412,6 +416,13 @@ def check_7(run: Run) -> tuple[bool, str]:
     ok_idle, idle = _all(held, lambda s: s.base == "idle")
     back = next((t for t in run.odom if t > t_r), None)
     _need(back is not None and back < t_open, "the rover stand-in's odometry did not return")
+    # the open frame only counts once the bridge itself sees the rover again
+    seen = run.events.get("bridge_rover_back")
+    _need(
+        seen is not None and seen < t_open,
+        "the bridge did not log the rover present again before the open frame",
+    )
+    back = max(back, seen)
     ok_held, held_back = _all(run.echoes(RESTART_PHASE, after=back), lambda s: s.base == "idle")
     one = run.frames_of("c7-open-one")
     ok_one = len(one) == 1 and not one[0].base_engaged
@@ -430,7 +441,8 @@ def check_7(run: Run) -> tuple[bool, str]:
     )
     return ok, (
         f"zero {_ms(dt)} after the kill, {len(moved)} non-zero while absent, {idle} idle; "
-        f"odometry back {back - t_r:.2f} s after the restart, held pinch {held_back} idle; "
+        f"rover present at the bridge {back - t_r:.2f} s after the restart, held pinch "
+        f"{held_back} idle; "
         f"{len(one)} open frame, then {len(drove)} non-zero Twists and {drive} driving"
     )
 
@@ -596,11 +608,36 @@ def _limit_refusal(procs: Procs, run_dir: Path) -> Result:
     )
 
 
-def _play(procs: Procs, run_dir: Path, files: dict[str, Path], rover_cmd: list[str]) -> int:
-    """Runs the lens stand-in, cycling the rover stand-in on the kill and restart phases."""
+class _Tail:
+    """The new whole lines of a growing text file, on each call of lines()."""
+
+    def __init__(self, path: Path):
+        self.path, self.pos = path, 0
+
+    def lines(self) -> list[str]:
+        try:
+            with open(self.path, "rb") as f:
+                f.seek(self.pos)
+                chunk = f.read()
+        except FileNotFoundError:
+            return []
+        end = chunk.rfind(b"\n") + 1
+        self.pos += end
+        return chunk[:end].decode(errors="replace").splitlines()
+
+
+def _play(
+    procs: Procs,
+    run_dir: Path,
+    files: dict[str, Path],
+    rover_cmd: list[str],
+    bridge: _Tail,
+    events: dict[str, float],
+) -> int:
+    """Runs the lens stand-in, cycling the rover stand-in on the kill and restart phases, and
+    records when the bridge logs the rover absent and present again (`bridge`: launch.log)."""
     scenario = run_dir / "scenario.json"
     scenario.write_text(json.dumps(scenario_phases(), indent=1))
-    events: dict[str, float] = {}
     lens = procs.start(
         "lens",
         [
@@ -617,20 +654,17 @@ def _play(procs: Procs, run_dir: Path, files: dict[str, Path], rover_cmd: list[s
         run_dir / "lens.out",
     )
     deadline = time.monotonic() + sum(p["duration"] for p in SCENARIO) + 60.0
-    pos = 0
+    lens_log = _Tail(files["lens_log"])
     try:
         while True:
             done = lens.poll() is not None
-            try:
-                with open(files["lens_log"]) as f:
-                    f.seek(pos)
-                    chunk = f.read()
-            except FileNotFoundError:
-                chunk = ""
-            # only whole lines
-            chunk = chunk[: chunk.rfind("\n") + 1]
-            pos += len(chunk.encode())
-            for line in chunk.splitlines():
+            for line in bridge.lines():
+                now = time.monotonic()
+                if ROVER_ABSENT in line and "rover_kill" in events:
+                    events.setdefault("bridge_rover_absent", now)
+                elif ROVER_PRESENT in line and "rover_restart" in events:
+                    events.setdefault("bridge_rover_back", now)
+            for line in lens_log.lines():
                 e = json.loads(line)
                 if e.get("event") != "phase":
                     continue
@@ -695,15 +729,32 @@ def run_preflight(repo: Path, run_dir: Path, pgid_file: Path) -> list[Result]:
             ],
             run_dir / "monitor.log",
         )
+        bridge = _Tail(launch_log)
+        events: dict[str, float] = {}
+        events["rover_start"] = time.monotonic()
         procs.start("rover", rover_cmd, run_dir / "rover.log")
 
         def monitor_sees(kind: str) -> Callable[[], bool]:
             return lambda: re.search(rf"^{kind},", _text(files["monitor_csv"]), re.M) is not None
 
+        def bridge_sees_rover() -> bool:
+            if any(ROVER_PRESENT in line for line in bridge.lines()):
+                events["bridge_rover_first"] = time.monotonic()
+                return True
+            return False
+
         _wait_for(monitor_sees("joint_states"), 30.0, "/joint_states at the monitor")
-        _wait_for(monitor_sees("odom"), 30.0, "the rover stand-in's odometry")
-        time.sleep(1.0)  # the bridge sees the rover present
-        rc = _play(procs, run_dir, files, rover_cmd)
+        _wait_for(monitor_sees("odom"), 30.0, "the rover stand-in's odometry at the monitor")
+        # The gate: the bridge itself must see the rover before the lens connects. A lens that
+        # connects while the rover is absent needs a left release (ADR 0014), and discovery
+        # between the stand-in and the bridge took over 2 s on a first run.
+        _wait_for(
+            bridge_sees_rover,
+            ROVER_GATE_S,
+            f"the bridge to log '{ROVER_PRESENT}' (odometry from the rover stand-in)",
+        )
+        time.sleep(0.5)
+        rc = _play(procs, run_dir, files, rover_cmd, bridge, events)
         if rc != 0:
             errors.append(f"the lens stand-in exited {rc} (see {run_dir / 'lens.out'})")
         time.sleep(0.5)

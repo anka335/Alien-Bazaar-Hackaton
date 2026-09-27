@@ -318,6 +318,11 @@ class Session:
     def _rover_present(self) -> bool:
         return self._t_odom is not None and self._clock() - self._t_odom < ROVER_ABSENT_S
 
+    @property
+    def rover_present(self) -> bool:
+        """Rover odometry arrived within ROVER_ABSENT_S (ADR 0014)."""
+        return self._rover_present()
+
     def tick(self) -> None:
         """Stops the arm on a driver fault or a stale measurement, times the link out after
         TIMEOUT_S without a valid teleop, stops the base on base stale or an absent rover, and

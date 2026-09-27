@@ -56,12 +56,14 @@ def simulate(
     max_wz=0.6,
     js_gap_at=None,
     stall_in_hold_s=0.0,
+    rover_start_s=ROVER_START_S,
 ):
     """Plays SCENARIO against a Session; writes the run's files into `out`, returns the paths.
 
     drop_zeros: the bridge never publishes a zero Twist. js_gap_at: (t after the start of
     c9-hold, gap s) with no /joint_states. stall_in_hold_s: the lens goes silent for that long
-    in the middle of c9-hold (a link stall)."""
+    in the middle of c9-hold (a link stall). rover_start_s: the restarted rover stand-in's
+    odometry reaches the bridge after that long."""
     clock = Clock()
     lens, rover_rows, mon_rows, events = [], [], [], {}
     state = {"rover": True, "rover_back": None, "sock": -1, "seq": 0, "open": False}
@@ -130,6 +132,7 @@ def simulate(
         clock.t = T0 + m / 1000.0
         if state["rover_back"] is not None and clock.t >= state["rover_back"]:
             state["rover"], state["rover_back"] = True, None
+            events["bridge_rover_back"] = clock.t  # the session gets odometry this ms
         if state["rover"] and m % 10 == 0:
             s.on_odometry()
             mon_rows.append(("odom", clock.t))
@@ -144,7 +147,7 @@ def simulate(
                     state["rover"] = False
                 if p.name == "c7-restart":
                     events["rover_restart"] = clock.t
-                    state["rover_back"] = clock.t + ROVER_START_S
+                    state["rover_back"] = clock.t + rover_start_s
                 if p.kind == "disconnect" and state["open"]:
                     log("close", code=1000, reason="disconnect phase", by="client")
                     s.on_disconnect()
@@ -336,3 +339,26 @@ def test_two_open_frames_after_the_rover_returns_fail_the_rover_check(tmp_path):
     paths["lens_log"].write_text("".join(json.dumps(e) + "\n" for e in events))
     r = results(paths)
     assert not r["7"].ok
+
+
+def test_a_rover_the_bridge_sees_again_only_after_the_restart_phase_fails_check_7(tmp_path):
+    r = results(simulate(tmp_path, rover_start_s=12.5))
+    assert not r["7"].ok
+    assert "did not return" in r["7"].value or "did not log the rover present" in r["7"].value
+
+
+def test_a_bridge_that_never_logs_the_rover_present_again_fails_check_7(tmp_path):
+    """The monitor sees the odometry, the bridge does not (the race of the first final run)."""
+    paths = simulate(tmp_path)
+    events = json.loads(paths["events"].read_text())
+    del events["bridge_rover_back"]
+    paths["events"].write_text(json.dumps(events))
+    r = results(paths)
+    assert not r["7"].ok
+    assert "did not log the rover present again" in r["7"].value
+
+
+def test_check_7_reports_when_the_bridge_saw_the_rover_again(tmp_path):
+    r = results(simulate(tmp_path, rover_start_s=3.0))
+    assert r["7"].ok, r["7"].value
+    assert "rover present at the bridge 3.0" in r["7"].value

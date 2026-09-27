@@ -848,3 +848,14 @@ def test_base_limits_up_to_protocol_v1_are_accepted(limits):
 def test_base_limits_not_positive_or_above_protocol_v1_are_refused(limits, name):
     with pytest.raises(ValueError, match=name):
         check_base_limits(*limits)
+
+
+def test_rover_present_follows_odometry_within_the_absent_limit(clock):
+    s, _, _ = rover_session(clock, odometry=False)
+    assert s.rover_present is False
+    s.on_odometry()
+    assert s.rover_present is True
+    clock.t += ROVER_ABSENT_S - 0.01
+    assert s.rover_present is True
+    clock.t += 0.02
+    assert s.rover_present is False
