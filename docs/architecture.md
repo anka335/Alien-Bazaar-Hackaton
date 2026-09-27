@@ -335,7 +335,7 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 | `/camera/camera/color/image_raw`, `/camera/camera/aligned_depth_to_color/image_raw`, `.../color/camera_info` | in | `nav_camera:=wrist`: the RealSense driver as started by `cloth_task` (640×480, 15 fps, TF off); reused, never started twice |
 | TF `leo/base_link` → arm `base_link` → … → `camera_color_optical_frame` | in | Rover → arm base: static, measured mount, published by `rover_nav` (always). Arm → camera: the arm stack's `robot_state_publisher` with the arm in the `drive` pose, or a static transform in the drive pose while the arm stack isn't available |
 | `/leo/merged_odom` (`nav_msgs/Odometry`, 100 Hz) + `leo/odom` → `leo/base_footprint` TF | in | The rover's `odom_filter` (LeoOS, wheel odometry + IMU), over the rover's Wi-Fi |
-| `/leo/cmd_vel` (`geometry_msgs/Twist`) | out | To the rover firmware. Nav2, or `teleop_twist_keyboard` while mapping |
+| `/leo/cmd_vel` (`geometry_msgs/Twist`) | out | To the rover firmware. Nav2, or `teleop_twist_keyboard` while mapping, or `spectacles_bridge` (`cloth_task`, `rover:=true`) for Spectacles teleop, which also reads `/leo/merged_odom` for rover presence. Exactly one of them may publish |
 | `/map` + `map` → `leo/odom` TF | internal | RTAB-Map |
 | Keepout mask (`.pgm` + `.yaml`) | internal | Generated from the saved 2D map and a dividing line by `rover_nav`'s mask tool |
 

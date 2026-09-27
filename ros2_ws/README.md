@@ -7,7 +7,7 @@ ROS 2 Jazzy + MoveIt 2 version of a single-cloth pick-and-place task ([D-014](..
 | Package | What |
 | --- | --- |
 | `rebot_b601_moveit_config` | MoveIt 2 + ros2_control for the reBot B601-RS. The robot description is built at launch from `rebot_b601/…/reBot_Lite_RS_with_gripper.urdf` (symlinked): the driver's soft joint limits, box collision shapes (real meshes for the fingers), a table, the wrist camera from `config/camera_mount.yaml`, a `<ros2_control>` block (mock hardware) |
-| `cloth_task` | `task_supervisor` (state machine), `arm_bridge` (real arm), `cloth_detector` (real camera + SAM3), `sim_cloth_detector` / `sim_gripper` (simulation), `record_pose` / `go_to_pose`, `leader_teleop`, `spectacles_bridge` (Spectacles teleop), `task.launch.py`, `config/task.yaml`, `config/poses.yaml` |
+| `cloth_task` | `task_supervisor` (state machine), `arm_bridge` (real arm), `cloth_detector` (real camera + SAM3), `sim_cloth_detector` / `sim_gripper` (simulation), `record_pose` / `go_to_pose`, `leader_teleop`, `spectacles_bridge` (Spectacles teleop), `rover_standin` (a Leo Rover stand-in for tests), `task.launch.py`, `config/task.yaml`, `config/poses.yaml` |
 
 ## Status
 
@@ -89,7 +89,10 @@ Without a region the detector warns at startup and uses the whole image. Cloth p
 | `web` / `web_port` | `true` / `8080` | Status page at http://localhost:8080 (`status_web`): phase pipeline, counters, cloth, arm, live and detection images, log |
 | `run_task` | `true` | `false`: arm, camera and MoveIt only, nothing moves by itself (record poses, `go_to_pose`) |
 | `run_stack` | `true` | `false`: only the task supervisor, on a stack already started with `run_task:=false` (position the arm with the leader first, then start the task) |
-| `spectacles` | `false` | `true`: Spectacles teleop, `spectacles_bridge` on 127.0.0.1:9100. Needs `hardware:=real` and `run_task:=false` |
+| `spectacles` | `false` | `true`: Spectacles teleop, `spectacles_bridge` on 127.0.0.1:`spectacles_port`. Needs `hardware:=real` and `run_task:=false` |
+| `spectacles_port` | `9100` | Port of `spectacles_bridge`'s WebSocket |
+| `rover` | `false` | `true`: the lens's left clutch drives the Leo Rover on `/leo/cmd_vel`. Needs `spectacles:=true` |
+| `base_max_vx` / `base_max_reverse` / `base_max_wz` | `0.20` / `0.10` / `0.6` | Rover limits: m/s forward, m/s back, rad/s. Each must be > 0 and at most protocol v1's 0.35 / 0.15 / 0.8, or the launch (and the node) refuses to start |
 
 ## Teleop with the leader arm (StarArm102 / reBot Arm 102, "Spark")
 
@@ -133,7 +136,7 @@ ros2 launch cloth_task task.launch.py hardware:=real driver_sim:=true enable_mot
 
 - The right clutch's rising edge latches the measured `gripper_end` pose in `base_link`. Each engaged sample targets `p_ee + position` and `orientation ⊗ q_ee`, solved for the full pose from the measured joints (damped least squares, soft joint limits, no restarts). The result goes out as joint targets plus the gripper opening, clamped to 0 (closed) through 1 (open), for `/arm_bridge/teleop_command`.
 - A solve that misses 1 mm / 3° publishes nothing and `arm` stays `tracking`. Releasing the clutch stops publishing (`holding`), so `arm_bridge` holds its last setpoint.
-- The node does not wire the mobile base yet, so the left clutch is never accepted: `base` is `idle` unless the link faults. The session already has the base rules (D-041): with the rover enabled, the left clutch is accepted while rover odometry arrived within 0.5 s, the socket is open, the hands are not blocked, and the left hand was seen open since the rover was last absent. It then drives (`base: driving`) while the latest valid teleop, under 0.3 s old, has it engaged: every tick sends that `vx`, `wz` clamped to the limits (default 0.20 m/s forward, 0.10 m/s back, 0.6 rad/s), and the call where driving ends (release, 0.3 s without a valid teleop, socket closed, replacement, timeout, rover absent) sends one zero. After a 0.3 s pause the next engaged teleop drives again with no release. Shutdown sends one zero.
+- Mobile base, only with `rover:=true` (D-041): the bridge publishes `geometry_msgs/Twist` on `/leo/cmd_vel` (`linear.x` = `vx`, `angular.z` = `wz`, everything else 0) and takes rover presence from the arrival of `nav_msgs/Odometry` on `/leo/merged_odom` (parameters `cmd_vel_topic`, `odom_topic`). With `rover:=false` (the default) it creates neither, the left clutch is never accepted, and `base` is `idle` unless the link faults. The left clutch is accepted while rover odometry arrived within 0.5 s, the socket is open, the hands are not blocked, and the left hand was seen open since the rover was last absent. It then drives (`base: driving`) while the latest valid teleop, under 0.3 s old, has it engaged: every tick sends that `vx`, `wz` clamped to the limits (default 0.20 m/s forward, 0.10 m/s back, 0.6 rad/s), and the call where driving ends (release, 0.3 s without a valid teleop, socket closed, replacement, timeout, rover absent) sends one zero. After a 0.3 s pause the next engaged teleop drives again with no release. The tick runs at 50 Hz, so a driving base gets 50 Twists a second. Stopping the bridge (Ctrl+C or SIGTERM) publishes one more zero before the node is destroyed: the bridge turns rclpy's signal handlers off so the context is still up for it.
 - Link watchdog: once a socket is accepted, 2 s without a valid teleop on the bridge's receive clock stops publishing and reports `arm` and `base` as `fault`, `fault: "timeout"`. Malformed teleops don't refresh the timer or `echoSeq`; the lens timestamp and skipped seqs don't matter. The next valid teleop clears the fault. 2 s because ngrok round trips stall for 300 ms to 1.2 s (D-040).
 - After a timeout, or when a new socket replaces the old one (arm stopped, `fault` null), both hands must be seen open before either can command; a clutch held while blocked, including on the clearing frame, doesn't count. The first socket accepts the first right clutch straight away.
 - Driver health: while the driver-fault flag is true, or when no joint measurement has arrived for 500 ms, publishing stops and the arm reports `holding` with `fault` null, so the lens raises a disagreement. Tracking resumes only on a right clutch pressed after the arm is healthy again.
@@ -143,6 +146,19 @@ ros2 launch cloth_task task.launch.py hardware:=real driver_sim:=true enable_mot
 # no ROS needed; the link tests need websockets (skipped without it)
 PYTHONPATH=ros2_ws/src/cloth_task python -m pytest ros2_ws/src/cloth_task/test/test_spectacles_session.py ros2_ws/src/cloth_task/test/test_spectacles_link.py
 ```
+
+### Rover stand-in
+
+`rover_standin` plays the Leo Rover for tests of the base, with no hardware. No launch file starts it. Run it only on a private ROS domain, because it publishes on `/leo/*`:
+
+```bash
+ROS_DOMAIN_ID=77 ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST \
+  ros2 run cloth_task rover_standin --ros-args -p csv_path:=/tmp/rover_standin.csv
+```
+
+- It takes `geometry_msgs/Twist` on `/leo/cmd_vel` and publishes `nav_msgs/Odometry` on `/leo/merged_odom` at 100 Hz (`leo/odom` → `leo/base_footprint`), integrating a differential-drive model. It stops 0.5 s after the last Twist, like the firmware.
+- It appends every received Twist to the CSV at `csv_path` (default `rover_standin.csv` in the working directory), one row per Twist and no header: receive time from `time.monotonic()` (system-wide on Linux, so comparable across processes), `linear.x`, `angular.z`.
+- Kill it to make the rover absent.
 
 ## Named poses
 

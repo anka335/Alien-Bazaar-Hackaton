@@ -11,6 +11,7 @@ from cloth_task.spectacles_session import (
     ROVER_ABSENT_S,
     TIMEOUT_S,
     Session,
+    check_base_limits,
     quat_to_R,
     rotvec,
 )
@@ -822,3 +823,28 @@ def test_disconnect_keeps_the_arm_and_the_link_timeout_as_before(rover, clock):
     s.on_connect()  # a replacement: the right hand must be seen open again
     s.on_teleop(drive(0, arm=True, engaged=False))
     assert len(motor.joints) == 1
+
+
+# --- base limits (the bridge's launch settings) ---
+
+
+@pytest.mark.parametrize("limits", [(0.20, 0.10, 0.6), (0.35, 0.15, 0.8), (0.01, 0.01, 0.01)])
+def test_base_limits_up_to_protocol_v1_are_accepted(limits):
+    check_base_limits(*limits)
+
+
+@pytest.mark.parametrize(
+    ("limits", "name"),
+    [
+        ((0.36, 0.10, 0.6), "base_max_vx"),
+        ((0.20, 0.16, 0.6), "base_max_reverse"),
+        ((0.20, 0.10, 0.81), "base_max_wz"),
+        ((0.0, 0.10, 0.6), "base_max_vx"),
+        ((0.20, -0.10, 0.6), "base_max_reverse"),
+        ((0.20, 0.10, math.nan), "base_max_wz"),
+        ((0.20, 0.10, math.inf), "base_max_wz"),
+    ],
+)
+def test_base_limits_not_positive_or_above_protocol_v1_are_refused(limits, name):
+    with pytest.raises(ValueError, match=name):
+        check_base_limits(*limits)

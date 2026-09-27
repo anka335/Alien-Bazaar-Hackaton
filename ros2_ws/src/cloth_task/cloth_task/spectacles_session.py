@@ -56,7 +56,22 @@ MEAS_TIMEOUT_S = 0.5
 BASE_STALE_S = 0.3
 # ADR 0014: /leo/merged_odom arrives at 100 Hz
 ROVER_ABSENT_S = 0.5
+# Protocol v1's joystick range: the bridge's base limits may lower it, never raise it
+BASE_LIMITS_MAX = {"base_max_vx": 0.35, "base_max_reverse": 0.15, "base_max_wz": 0.8}
 HANDS = frozenset({"arm", "base"})
+
+
+def check_base_limits(max_vx: float, max_reverse: float, max_wz: float) -> None:
+    """Raises ValueError, naming the bridge parameter, unless every base limit (m/s forward,
+    m/s back as a positive number, rad/s) is positive and within protocol v1's range."""
+    values = dict(zip(BASE_LIMITS_MAX, (max_vx, max_reverse, max_wz), strict=True))
+    bad = [
+        f"{name} must be > 0 and <= {BASE_LIMITS_MAX[name]} (got {v})"
+        for name, v in values.items()
+        if not 0.0 < v <= BASE_LIMITS_MAX[name]
+    ]
+    if bad:
+        raise ValueError("; ".join(bad))
 
 
 @dataclass(frozen=True)

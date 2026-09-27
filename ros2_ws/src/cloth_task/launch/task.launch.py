@@ -8,11 +8,15 @@
     ros2 launch cloth_task task.launch.py hardware:=real camera:=real enable_motors:=true
     ros2 launch cloth_task task.launch.py hardware:=real enable_motors:=true run_task:=false \
         spectacles:=true                                             # lens on 127.0.0.1:9100
+    ros2 launch cloth_task task.launch.py hardware:=real enable_motors:=true run_task:=false \
+        spectacles:=true rover:=true                   # + the left clutch drives /leo/cmd_vel
 
 hardware:=real replaces ros2_control with arm_bridge (the rebot_b601 driver over CAN).
 camera:=real starts realsense2_camera and cloth_detector_node (SAM3; key in config/local.yaml).
 spectacles:=true starts spectacles_bridge, which turns arm_bridge's teleop mode on and leaves it
 on (MoveIt goals are then refused). ngrok is started by hand; the launch never holds its token.
+rover:=true (needs spectacles:=true) lets the bridge drive the Leo Rover within base_max_vx,
+base_max_reverse and base_max_wz, which must be positive and within protocol v1's range.
 """
 
 import os
@@ -24,6 +28,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+
+from cloth_task.spectacles_session import check_base_limits
 
 
 def _share(pkg: str) -> str:
@@ -52,6 +58,23 @@ def _setup(context):
         )
     if spectacles and hardware != "real":
         raise RuntimeError("spectacles:=true needs hardware:=real (arm_bridge takes the commands)")
+    rover = arg("rover") == "true"
+    if rover and not spectacles:
+        raise RuntimeError(
+            "rover:=true drives the mobile base from the lens's left clutch: add spectacles:=true"
+        )
+    try:
+        base_limits = [float(arg(n)) for n in ("base_max_vx", "base_max_reverse", "base_max_wz")]
+        spectacles_port = int(arg("spectacles_port"))
+    except ValueError as e:
+        raise RuntimeError(
+            f"base_max_* must be numbers and spectacles_port an integer: {e}"
+        ) from None
+    if spectacles:
+        try:
+            check_base_limits(*base_limits)
+        except ValueError as e:
+            raise RuntimeError(f"base limits out of range: {e}") from None
     if (
         hardware == "real"
         and camera == "sim"
@@ -193,7 +216,11 @@ def _setup(context):
                     {
                         "rebot_dir": os.path.join(repo, "rebot_b601"),
                         "host": "127.0.0.1",
-                        "port": 9100,
+                        "port": spectacles_port,
+                        "rover": rover,
+                        "base_max_vx": base_limits[0],
+                        "base_max_reverse": base_limits[1],
+                        "base_max_wz": base_limits[2],
                     }
                 ],
                 output="screen",
@@ -281,8 +308,18 @@ def generate_launch_description():
         (
             "spectacles",
             "false",
-            "true: Spectacles teleop on 127.0.0.1:9100 (hardware:=real, run_task:=false)",
+            "true: Spectacles teleop on 127.0.0.1:<spectacles_port> (hardware:=real, "
+            "run_task:=false)",
         ),
+        ("spectacles_port", "9100", "Port of spectacles_bridge's WebSocket on 127.0.0.1"),
+        (
+            "rover",
+            "false",
+            "true: the lens's left clutch drives the Leo Rover on /leo/cmd_vel (spectacles:=true)",
+        ),
+        ("base_max_vx", "0.20", "Rover forward limit, m/s: > 0 and <= 0.35 (protocol v1)"),
+        ("base_max_reverse", "0.10", "Rover reverse limit, m/s: > 0 and <= 0.15 (protocol v1)"),
+        ("base_max_wz", "0.6", "Rover turn-rate limit, rad/s: > 0 and <= 0.8 (protocol v1)"),
     ]
     return LaunchDescription(
         [DeclareLaunchArgument(n, default_value=d, description=h) for n, d, h in args]
