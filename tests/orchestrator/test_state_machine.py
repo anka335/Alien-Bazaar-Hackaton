@@ -129,3 +129,25 @@ def test_stop_holds_the_arm_at_once_during_a_run(rig):
     assert arm.held  # the phase under way aborts with EStopped
     sm._apply(hub.next_command(0))
     assert sm.phase is Phase.IDLE and not arm.held
+
+
+@pytest.mark.parametrize("still_there", [False, True])
+def test_an_empty_gripper_reading_is_checked_with_the_camera(rig, monkeypatch, still_there):
+    """On the rig a sock squeezed flat reads 0 like an empty gripper: the camera decides."""
+    from sorter.core.types import ArmPoint, ColorClass, Overlay, PickResult
+    from sorter.orchestrator.load import Target
+
+    sm, arm, driver, hub = rig
+    loop = sm.loops[OperatorMode.LOAD]
+    sm.loop = loop
+    loop.reset()
+    t = Target(ArmPoint(300, 0, -185), None, ColorClass.DARK, 1.0, False, 0.0, np.zeros((0, 2)))
+    loop.r.target = t
+    obs = SimpleNamespace(frame=None)
+    monkeypatch.setattr(arm, "pick", lambda *a, **k: PickResult(0.0, likely_empty=True))
+    sm.s.observer = SimpleNamespace(observe_point=lambda *a, **k: obs)
+    sm.s.floor_detector = SimpleNamespace(detect=lambda f: SimpleNamespace(overlay=Overlay()))
+    monkeypatch.setattr(loop, "_targets", lambda o, f: [t] if still_there else [])
+    monkeypatch.setattr(sm, "decide", lambda *a, **k: a[3])
+    nxt = loop._pick_from_floor()
+    assert nxt is (Phase.SCAN if still_there else Phase.DROP_TO_CARGO)

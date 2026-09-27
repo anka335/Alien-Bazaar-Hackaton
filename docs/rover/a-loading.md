@@ -21,7 +21,7 @@ The rover has stopped next to socks on the floor. The arm finds them, classifies
 ### Known issues
 
 - **A sock sometimes falls on the way to the box** (1 of ~14 picks): it lands beside the box or on the rover. On the floor the loop finds it and picks it again; on the rover it is lost. Not seen why yet (the overview camera doesn't show the box behind the arm).
-- **Gripper reading**: in the sim a pinched sock keeps the fingers `PINCHED_SOCK_M` (2.5 mm) apart, so it reads 0.028 against `empty_below` 0.02 (the rig: closed on nothing ≤ 0.012). Measure what a real sock reads; `pick` reads it after the lift.
+- **Gripper reading**: on the rig a sock squeezed at 4.5 Nm reads 0.000–0.012, like a gripper closed on nothing (one read 0.025): the reading can't tell them apart. A `likely_empty` pick is checked with a look at the spot: the sock still there is a miss, gone means held and it goes to the box (`CHECK_LOAD` then confirms). In the sim a pinched sock keeps the fingers `PINCHED_SOCK_M` (2.5 mm) apart and reads 0.028 against `empty_below` 0.02.
 - **`look_cargo`** sees the box from ~220 mm above its floor, the highest the arm gets: the frame just covers the box's inside; a sock draped over a wall is cut off.
 - **Drops**: the arm comes in high, lets go under the rim and backs out (`arm.cargo_drop_*`), tilted by the first tilt × azimuth that plans. The box (182 mm) is shorter than a sock (200 mm): a full box can still shed one over the rim.
 - **Speed**: `watch` runs the arm at `--arm-speed 1.4` (the motors' max, as the tests and the bench do); ~40 s of sim time per sock; 3 scenes take ~4–5 min wall on 3 workers. A pile in the box costs ~5x per step with `sim.cloth_collisions`.
@@ -119,4 +119,6 @@ A0–A7 done on the sim.
 
 - 2026-09-27: shared code touched by stage N ([D-046](../decisions.md)): the root config has a `nav` section, `create_app(..., nav=)` mounts `/api/nav/*` and the `/rover` page, the front end has a Rover tab (`TopBar.tsx`, `main.tsx`), `pyproject.toml` an optional `nav-hw` extra (depthai). Nothing else in the shared code changed.
 - 2026-09-27 (shared, [D-050](../decisions.md)): the cargo box is at (−185, −225) (the wrist camera saw its corner); the Leo's raised top cover is a keep-out block (`sim.layout.equipment.leo_top`); `kinematics.camera_look` refuses a view with a keep-out box in its line of sight, and `look_cargo` looks from straight above; `rig.yaml` recomputed.
+- 2026-09-27 (from the rig): an empty gripper reading after a pick is checked with the camera (`_still_on_floor`): a squeezed sock reads like nothing, and the loop went on scanning with the sock in the gripper.
+
 

@@ -187,11 +187,30 @@ class LoadLoop(Loop):
         if result is None:
             log.warning("pick at (%.0f, %.0f) rejected: %s", t.point.x, t.point.y, err)
             return self._failed(t, "rejected")
-        if result.likely_empty:
-            log.warning("gripper empty after the pick at (%.0f, %.0f)", t.point.x, t.point.y)
+        if result.likely_empty and self._still_on_floor(t):
+            log.warning("missed the sock at (%.0f, %.0f)", t.point.x, t.point.y)
             self.s.arm.home()
             return self._failed(t, "missed")
+        if result.likely_empty:  # the gripper is only a hint: a sock squeezed flat reads 0
+            log.info(
+                "gripper reads %.3f but the sock left the floor: it's held, to the box",
+                result.gripper_opening,
+            )
         return Phase.DROP_TO_CARGO
+
+    def _still_on_floor(self, t: Target) -> bool:
+        """Whether the camera still sees the sock `t` where it was picked (a look at the spot;
+        no view there counts as still there)."""
+        sm = self.sm
+        obs = self.s.observer.observe_point(Zone.FLOOR, t.point, self.cfg.aim_heights_mm)
+        if obs is None:
+            return True
+        sm.obs = obs
+        floor = self.s.floor_detector.detect(obs.frame)
+        there = self._same_sock(t, self._targets(obs, floor)) is not None
+        summary = "missed: still on the floor" if there else "gripper reads empty, but it's held"
+        sm.decide(floor, floor.overlay, summary, Phase.SCAN if there else Phase.DROP_TO_CARGO)
+        return there
 
     @staticmethod
     def _yaws(yaw: float | None) -> list[float | None]:
