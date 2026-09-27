@@ -33,3 +33,4 @@ To be fixed when the stage starts: likely `src/sorter/rover/` (new), a room scen
 
 - 2026-09-27: stage defined ([D-035](../decisions.md)).
 - 2026-09-27: far detection moved to its own stage F ([D-036](../decisions.md)); N2 is now driving to F's target.
+- 2026-09-27: the ROS 2 track has a MuJoCo Leo Rover (official `leo_description` model, firmware-like `cmd_vel`, wheel + gyro odometry, cameras) in `ros2_ws/src/rover_nav/sim` ([D-039](../decisions.md), [brief](ros2-navigation.md)); N1 can reuse its model and meshes.

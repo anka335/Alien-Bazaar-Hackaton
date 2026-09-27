@@ -1,0 +1,23 @@
+# Where the arm and the navigation cameras sit on the rover.
+# Metres / radians. x forward, y left, z up (REP-103). Positive pitch tilts x down.
+#
+# leo/base_link is 0.198 m above the floor, halfway between the front and rear axles (0.30 m
+# apart), on the centre line (leo_description). 1 cm off here is 1 cm off in the map.
+
+oak_mount:              # OAK-D (nav_camera:=oak): its `oak` frame (the middle, color lens; x out
+                        # of the lenses, z up) in the rover's leo/base_link
+  xyz: [0.13, 0.0, -0.035]   # measured 2026-09-26: 2 cm behind the front axle, lens 16.3 cm above
+                             # the floor, centred
+  rpy: [0.0, 0.175, 0.0]     # ~10° down, estimated by eye: check the floor is flat in RViz
+
+# PLACEHOLDERS below: measure on the real rover.
+
+arm_mount:              # the arm's base_link in the rover's leo/base_link
+  xyz: [0.0575, 0.0, 0.07]   # LeoOS's mounting point for its stock arm (top plate, front centre)
+  rpy: [0.0, 0.0, 0.0]
+
+camera_in_drive_pose:   # nav_camera:=wrist: camera_link in the arm's base_link, arm at `drive`.
+                        # Used only with camera_tf:=static (arm stack not running). With the arm
+                        # stack, its robot_state_publisher computes this from the joint angles.
+  xyz: [0.15, 0.0, 0.35]
+  rpy: [0.0, 0.35, 0.0]      # ~20° down: floor visible from ~0.3 m ahead

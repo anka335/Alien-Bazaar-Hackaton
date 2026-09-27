@@ -1,6 +1,6 @@
 # Same rules as the root pyproject.toml; the ROS packages are their own first-party roots.
 extend = "../pyproject.toml"
-src = ["src/cloth_task", "src/rebot_b601_moveit_config"]
+src = ["src/cloth_task", "src/rebot_b601_moveit_config", "src/rover_nav"]
 
 [lint.isort]
 # The packages' launch/ folders would otherwise make ROS's `launch` look first-party.
