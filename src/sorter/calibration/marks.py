@@ -1,6 +1,6 @@
-"""Hand-eye calibration from tape marks on the mat, no printed board (the /calibrate page, D-026).
+"""Hand-eye calibration from tape marks on the floor, no printed board (the /calibrate page, D-026).
 
-The arm points its tip at a spot on the mat and a tape mark goes under it: the mark's arm-frame
+The arm points its tip at a spot on the floor and a tape mark goes under it: the mark's arm-frame
 position is known from FK. From any pose, the mark clicked in the image plus its depth gives its
 camera-frame position. Each click i gives p_base_i = F_i · X · p_cam_i (F_i = T_base_link5 at
 that pose, X = T_link5_cam; the camera is fixed to link5, D-027), so F_i⁻¹ · p_base_i = X · p_cam_i:
@@ -26,8 +26,8 @@ MIN_MARKS = 3
 DEPTH_WINDOW_PX = 4  # the median depth of (2w+1)² pixels around the click
 SNAP_RADIUS_PX = 35  # a click snaps to the center of a tape square this close
 TAPE_MM = 10.0  # the side of a tape mark
-# around the mat center, arm frame (+x away from the arm, +y left); not symmetric, so a view
-# of a few of them is never ambiguous; within the 150 x 120 mat's workspace (20 mm margin)
+# around the floor view's center, arm frame (+x away from the arm, +y left); not symmetric, so a
+# view of a few of them is never ambiguous; within the floor workspace
 MARK_OFFSETS_MM = {
     "M1": (0.0, 0.0),
     "M2": (50.0, 35.0),
@@ -48,7 +48,7 @@ PLAUSIBLE_MM = 200.0  # or its camera this far from the nominal position
 @dataclass(frozen=True)
 class Mark:
     name: str
-    xyz: tuple[float, float, float]  # mm, arm frame, on the mat
+    xyz: tuple[float, float, float]  # mm, arm frame, on the floor
 
 
 def marks(center_xy: Sequence[float], z_mm: float) -> list[Mark]:

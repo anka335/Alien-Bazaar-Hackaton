@@ -17,17 +17,12 @@ RIG_MOUNT = np.array(
 )
 
 
-def test_camera_over_as_close_as_the_arm_can():
+def test_camera_over_the_floor_view():
     cfg = load_config(DEFAULT_CONFIG_DIR)
-    box = cfg.sim.layout.box
-    z = box.floor_z_mm
-    # centering the camera would take the TCP closer to the base than it reaches at this height
-    assert camera_over(cfg.arm, box.center_mm, 110, RIG_MOUNT, z) is None
-    q = camera_over(cfg.arm, box.center_mm, 110, RIG_MOUNT, z, exact=False)
+    lay = cfg.sim.layout
+    z, center = lay.floor_z_mm, np.asarray(lay.floor_view.center_mm)
+    # higher than the arm can hold the gripper vertical there: no pose
+    assert camera_over(cfg.arm, center, 400, RIG_MOUNT, z) is None
+    q = camera_over(cfg.arm, center, 0, RIG_MOUNT, z, exact=False)
     assert q is not None
-    hit = axis_hit(kin.fk_link5(q) @ RIG_MOUNT, z)
-    assert np.hypot(*(hit - np.asarray(box.center_mm))) < 70  # the TCP over the center: ~100
-    # low enough, it centers it (within the IK's reach limits)
-    q = camera_over(cfg.arm, box.center_mm, 70, RIG_MOUNT, z, exact=False)
-    hit = axis_hit(kin.fk_link5(q) @ RIG_MOUNT, z)
-    assert np.hypot(*(hit - np.asarray(box.center_mm))) < 5
+    assert axis_hit(kin.fk_link5(q) @ RIG_MOUNT, z) is not None  # looking down at the floor

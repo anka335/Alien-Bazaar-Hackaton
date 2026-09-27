@@ -1,11 +1,12 @@
-"""Poses and zones for the table layout (`sim.layout`), computed with the arm's IK.
+"""Poses, zones, views and the arm's keep-out for the rover layout (`sim.layout`), with the IK.
 
-    uv run python -m sorter.sim.layout            # print them and check every pick
-    uv run python -m sorter.sim.layout --write    # also write config/rig.yaml (poses, zones)
+    uv run python -m sorter.sim.layout            # print them and check every pick and move
+    uv run python -m sorter.sim.layout --write    # also write config/rig.yaml
 
 The look poses point the wrist camera straight down over the zone center, as high as the arm
-can hold the gripper vertical. The check plans a full pick (above, down, up) on a grid over each
-zone workspace and every move between the named poses.
+can hold the gripper vertical. The drop poses hold the TCP `arm.drop_height_mm` over the rim of
+a cargo compartment / laundry bin. The check plans a full pick (above, down, up) on a grid over
+each zone workspace and every move between the named poses, against the floor and the keep-out.
 """
 
 from __future__ import annotations
@@ -21,16 +22,19 @@ import numpy as np
 import yaml
 
 from sorter.arm import kinematics as kin
-from sorter.arm.config import POSE_NAMES, ArmConfig, ZoneConfig
+from sorter.arm.config import LOOK_POSES, POSE_NAMES, ArmConfig, ZoneConfig
 from sorter.core.config import DEFAULT_CONFIG_DIR, Config, load_config
 from sorter.core.errors import SorterError
-from sorter.core.types import ArmPoint, Zone
+from sorter.core.types import ArmPoint, ColorClass, Zone
 from sorter.sim.config import RectConfig, SimConfig
-from sorter.sim.world import camera_mount, camera_pose
+from sorter.sim.rig import camera_mount, camera_pose
 
-LOOK_TCP_Z_MM = (120, 60)  # the highest TCP height tried for a look pose, then lower in 5 mm steps
-BOX_MARGIN_MM = 25.0  # the grasp stays this far from the box walls (fingers + wrist camera)
-BG_MARGIN_MM = 20.0
+LOOK_TCP_Z_MM = (100, -120)  # the highest TCP height tried for a look pose, then lower by 5 mm
+FLOOR_MARGIN_MM = 20.0
+# the grasp stays this far from a compartment's walls: across the fingers, and along them (the
+# open gripper is ~60 mm wide, + the keep-out margin)
+CARGO_MARGIN_MM = (30.0, 45.0)
+FLOOR_CLEARANCE_MM = 3.0  # arm.z_min_mm: this far above the floor
 HOME_TCP_MM = (220.0, 0.0, 200.0)
 HOME_APPROACH = (1.0, 0.0, -1.0)  # 45° down, forward
 _SEED = (0.0, 1.2, 1.5, 0.0, 0.0, 0.0)  # elbow up
@@ -42,14 +46,12 @@ def _seed(x: float, y: float) -> np.ndarray:
     return s
 
 
-def _rect_polygon(r: RectConfig, margin: float) -> list[tuple[float, float]]:
-    (cx, cy), (w, h) = r.center_mm, r.size_mm
-    x0, x1, y0, y1 = (
-        cx - w / 2 + margin,
-        cx + w / 2 - margin,
-        cy - h / 2 + margin,
-        cy + h / 2 - margin,
-    )
+def rect_polygon(
+    r: RectConfig, margin: float, margin_y: float | None = None
+) -> list[tuple[float, float]]:
+    """The corners of `r` shrunk by `margin` (along y by `margin_y`, if given)."""
+    x0, x1, _, _ = r.bounds(-margin)
+    _, _, y0, y1 = r.bounds(-(margin if margin_y is None else margin_y))
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
 
 
@@ -102,41 +104,50 @@ def camera_over(
     return None if exact or best is None else best[1]
 
 
-def look_pose(sim: SimConfig, arm: ArmConfig, center: tuple[float, float]) -> np.ndarray:
-    """Joints that put the camera straight down over `center`, as high as possible."""
+def look_pose(
+    sim: SimConfig, arm: ArmConfig, center: tuple[float, float], surface_z: float
+) -> np.ndarray:
+    """Joints that put the camera straight down over `center`, as high as possible; if no height
+    centers it exactly, the highest pose that comes closest."""
     T_link5_cam = camera_mount(sim)
-    for tcp_z in range(LOOK_TCP_Z_MM[0], LOOK_TCP_Z_MM[1] - 1, -5):
-        q = camera_over(arm, center, tcp_z, T_link5_cam)
-        if q is not None:
-            return q
-    raise SystemExit(f"no look pose puts the camera straight down over {center}")
+    heights = range(LOOK_TCP_Z_MM[0], LOOK_TCP_Z_MM[1] - 1, -5)
+    for exact in (True, False):
+        for tcp_z in heights:
+            q = camera_over(arm, center, tcp_z, T_link5_cam, surface_z, exact=exact)
+            if q is not None:
+                return q
+    raise SystemExit(f"no look pose puts the camera down over {center}")
+
+
+def zone_surfaces(sim: SimConfig) -> dict[Zone, tuple[RectConfig, float]]:
+    """Each look zone's rectangle and its surface height (mm)."""
+    lay = sim.layout
+    return {
+        Zone.FLOOR: (lay.floor_view, lay.floor_z_mm),
+        Zone.CARGO: (lay.cargo, lay.cargo.floor_z_mm),
+    }
 
 
 def zone_rois(cfg: Config, poses: dict[str, list[float]]) -> dict[str, dict]:
-    """`views.<zone>.roi`: the box inside and the mat, projected into the image from the look
-    poses, minus the rows the gripper hides at the top of the frame."""
+    """`views.<zone>.roi`: the zone's rectangle projected into the image from its look pose,
+    clipped to the image, minus the rows the gripper hides at the top of the frame."""
     from sorter.sim.physics.camera import PhysicsCamera
     from sorter.sim.physics.world import PhysicsWorld
 
-    sim = cfg.sim.model_copy(update={"items": [], "realtime": 0})
+    sim = cfg.sim.model_copy(update={"scenes": [], "realtime": 0})
     world = PhysicsWorld(sim, poses)
     camera = PhysicsCamera(world)
-    lay = cfg.sim.layout
-    zones = {
-        "box": (lay.box, lay.box.floor_z_mm, 0.0, "look_box"),
-        "background": (lay.background, 0.0, 5.0, "look_bg"),
-    }
     out = {}
     try:
-        for zone, (rect, z, margin, pose) in zones.items():
-            q = np.asarray(poses[pose], dtype=float)
+        for zone, (rect, z) in zone_surfaces(cfg.sim).items():
+            q = np.asarray(poses[LOOK_POSES[zone]], dtype=float)
             world.teleport_arm(q, finger_m=0.0)
             frame = camera.fresh(5.0)
             no_depth = (frame.depth_mm == 0).mean(axis=1) > 0.3
             top = int(np.argmin(no_depth)) + 10 if no_depth[0] else 0  # rows hidden by the gripper
             T = np.linalg.inv(camera_pose(cfg.sim, q))
             pts = []
-            for x, y in _rect_polygon(rect, margin):
+            for x, y in rect_polygon(rect, 0.0):
                 c = T @ np.array([x, y, z, 1.0])
                 u = sim.focal_px * c[0] / c[2] + sim.width / 2
                 v = sim.focal_px * c[1] / c[2] + sim.height / 2
@@ -146,10 +157,54 @@ def zone_rois(cfg: Config, poses: dict[str, list[float]]) -> dict[str, dict]:
                         int(np.clip(round(v), top, sim.height - 1)),
                     )
                 )
-            out[zone] = {"roi": [list(p) for p in pts]}
+            out[zone.value] = {"roi": [list(p) for p in pts]}
     finally:
         camera.close()
     return out
+
+
+def keep_out(sim: SimConfig, margin_mm: float) -> list[list[float]]:
+    """`arm.keep_out_mm`: the rover body up to the deck top (the margin grows it to z = 0, so a
+    grasp may reach the cargo floor), and the cargo box's walls and dividers."""
+    lay = sim.layout
+    x0, x1, y0, y1 = lay.body.bounds()
+    boxes = [[x0, x1, y0, y1, lay.floor_z_mm - 100.0, -margin_mm]]
+    cargo = lay.cargo
+    t = cargo.wall_t_mm
+    cx0, cx1, cy0, cy1 = cargo.bounds()
+    rim = cargo.rim_z_mm
+    boxes += [
+        [cx0 - t, cx0, cy0 - t, cy1 + t, 0.0, rim],
+        [cx1, cx1 + t, cy0 - t, cy1 + t, 0.0, rim],
+        [cx0, cx1, cy0 - t, cy0, 0.0, rim],
+        [cx0, cx1, cy1, cy1 + t, 0.0, rim],
+    ]
+    rects = [cargo.compartment(c) for c in cargo.compartments]
+    for a, b in zip(rects, rects[1:], strict=False):
+        boxes.append([a.bounds()[1], b.bounds()[0], cy0, cy1, 0.0, rim])
+    return [[round(v, 1) for v in b] for b in boxes]
+
+
+def arm_for(sim: SimConfig, arm: ArmConfig) -> ArmConfig:
+    """`arm` with the floor clearance and keep-out of the layout."""
+    return arm.model_copy(
+        update={
+            "z_min_mm": sim.layout.floor_z_mm + FLOOR_CLEARANCE_MM,
+            "keep_out_mm": [tuple(b) for b in keep_out(sim, arm.keep_out_margin_mm)],
+        }
+    )
+
+
+def _drop_pose(arm: ArmConfig, xyz: tuple[float, float, float], name: str) -> np.ndarray:
+    """Joints with the TCP at `xyz`: the gripper down if it can, else tilted outwards, else any
+    way it reaches."""
+    x, y, _ = xyz
+    r = math.hypot(x, y)
+    for approach in ("down", (x / r, y / r, -1.0), None):
+        q = kin.solve(xyz, approach, _seed(x, y), arm.z_min_mm)
+        if q is not None and kin.keep_out_hit(q, arm.keep_out_mm, arm.keep_out_margin_mm) is None:
+            return q
+    raise SystemExit(f"{name} ({x:.0f}, {y:.0f}, {xyz[2]:.0f}) is not reachable")
 
 
 def compute_poses(sim: SimConfig, arm: ArmConfig) -> dict[str, list[float]]:
@@ -159,93 +214,101 @@ def compute_poses(sim: SimConfig, arm: ArmConfig) -> dict[str, list[float]]:
     if home is None:
         raise SystemExit(f"home {HOME_TCP_MM} is not reachable")
     poses["home"] = home
-    poses["look_box"] = look_pose(sim, arm, lay.box.center_mm)
-    poses["look_bg"] = look_pose(sim, arm, lay.background.center_mm)
-    bx, by = lay.background.center_mm
-    place = (bx, by, arm.place_release_height_mm)
-    q = kin.solve(place, "down", _seed(bx, by), arm.z_min_mm)
-    if q is None:
-        raise SystemExit(f"place_bg {place} is not reachable with the gripper down")
-    poses["place_bg"] = q
-    z = lay.bins.floor_z_mm + lay.bins.wall_mm + arm.bin_release_height_mm
-    for color, (x, y) in lay.bins.centers_mm.items():
-        r = math.hypot(x, y)
-        tilted = (x / r, y / r, -1.0)  # down and outwards
-        for approach in ("down", tilted, None):
-            q = kin.solve((x, y, z), approach, _seed(x, y), arm.z_min_mm)
-            if q is not None:
-                break
-        else:
-            raise SystemExit(f"bin_{color} ({x:.0f}, {y:.0f}, {z:.0f}) is not reachable")
-        poses[f"bin_{color}"] = q
+    for zone, (rect, z) in zone_surfaces(sim).items():
+        poses[LOOK_POSES[zone]] = look_pose(sim, arm, rect.center_mm, z)
+    cargo = lay.cargo
+    for color in ColorClass:
+        x, y = cargo.compartment(color).center_mm
+        z = cargo.rim_z_mm + arm.drop_height_mm
+        poses[f"cargo_{color.value}"] = _drop_pose(arm, (x, y, z), f"cargo_{color.value}")
+    bins = lay.laundry
+    for color in ColorClass:
+        x, y = bins.centers_mm[color]
+        z = lay.floor_z_mm + bins.height_mm + arm.drop_height_mm
+        poses[f"laundry_{color.value}"] = _drop_pose(arm, (x, y, z), f"laundry_{color.value}")
     return {name: [round(float(v), 4) for v in poses[name]] for name in POSE_NAMES}
 
 
 def compute_zones(sim: SimConfig, arm: ArmConfig) -> dict[Zone, ZoneConfig]:
     lay = sim.layout
+    cargo = lay.cargo
     return {
-        Zone.BOX: ZoneConfig(
-            workspace_mm=_rect_polygon(lay.box, BOX_MARGIN_MM),
-            z_floor_mm=lay.box.floor_z_mm + 5,
+        Zone.FLOOR: ZoneConfig(
+            workspace_mm=rect_polygon(lay.floor_view, FLOOR_MARGIN_MM),
+            z_floor_mm=lay.floor_z_mm + 8.0,  # the fingertips stop just above the floor
+            lift_z_mm=lay.floor_z_mm + 150.0,
         ),
-        Zone.BACKGROUND: ZoneConfig(
-            workspace_mm=_rect_polygon(lay.background, BG_MARGIN_MM),
-            z_floor_mm=max(arm.z_min_mm, 3.0),
-            lift_z_mm=70.0,  # no wall to clear; the far edge can't hold the gripper vertical higher
+        Zone.CARGO: ZoneConfig(
+            workspace_mm=rect_polygon(cargo, CARGO_MARGIN_MM[0]),
+            z_floor_mm=cargo.floor_z_mm + 5.0,
+            approach_mm=60.0,  # the move to above the grasp stays over the rim
+            lift_z_mm=cargo.rim_z_mm + 30.0,
         ),
     }
+
+
+class _PlanOnly:
+    """An ArmDriver stand-in for planning: the arm at rest, nothing moves."""
+
+    connected = True
+
+    def joints(self) -> np.ndarray:
+        return np.zeros(kin.N_JOINTS)
 
 
 def check(cfg: Config, step_mm: float = 20.0) -> list[str]:
-    """Problems with `cfg.poses` / `cfg.zones` on the layout; [] = every pick and move plans."""
+    """Problems with `cfg.poses` / `cfg.zones` / `cfg.arm.keep_out_mm` on the layout; [] = every
+    pick and move plans."""
     from sorter.arm.controller import Controller
-    from sorter.sim.driver import SimDriver
-    from sorter.sim.world import SimWorld
 
     problems = []
-    arm = Controller(SimDriver(SimWorld(cfg.sim, cfg.poses)), cfg.arm, cfg.poses, cfg.zones)
+    arm = Controller(_PlanOnly(), cfg.arm, cfg.poses, cfg.zones)  # type: ignore[arg-type]
     q = {n: np.asarray(v) for n, v in cfg.poses.items()}
-    moves = [
-        ("rest", "home"),
-        ("home", "look_bg"),
-        ("look_bg", "look_box"),
-        ("place_bg", "look_bg"),
-    ]
-    moves += [(b, "look_bg") for b in q if b.startswith("bin_")]
-    moves += [("place_bg", b) for b in q if b.startswith("bin_")]
+    moves = [("rest", "home"), *((p, "home") for p in POSE_NAMES if p not in ("rest", "home"))]
+    moves += [("look_floor", "look_cargo")]
     for a, b in moves:
         try:
-            kin.plan_joints(q[a], q[b], z_min_mm=cfg.arm.z_min_mm)
-            kin.plan_joints(q[b], q[a], z_min_mm=cfg.arm.z_min_mm)
+            arm._plan_joints(q[a], q[b])
+            arm._plan_joints(q[b], q[a])
         except SorterError as e:
             problems.append(f"move {a} ↔ {b}: {e}")
     lay = cfg.sim.layout
-    backs = {"box": lay.box.center_mm[0] - lay.box.size_mm[0] / 2 - 10}  # + the 10 mm wall
-    backs["background"] = lay.background.center_mm[0] - lay.background.size_mm[0] / 2
-    backs |= {f"bin_{c}": x - lay.bins.size_mm / 2 for c, (x, _) in lay.bins.centers_mm.items()}
-    for name, x in backs.items():
-        if x < lay.edge_x_mm:
-            problems.append(f"{name} hangs {lay.edge_x_mm - x:.0f} mm behind the table edge")
-    heights = {
-        Zone.BOX: [lay.box.floor_z_mm + h for h in (15, 35, 55)],
-        Zone.BACKGROUND: [25.0],
-    }
-    for zone, z in cfg.zones.items():
-        xs = [p[0] for p in z.workspace_mm]
-        ys = [p[1] for p in z.workspace_mm]
+    cargo = lay.cargo
+    # where picks must work: the floor zone with any yaw; each compartment (less the margin),
+    # the fingers opening along the compartment's long side
+    along_y = cargo.size_mm[1] >= cargo.compartment(cargo.compartments[0]).size_mm[0]
+    across, along = CARGO_MARGIN_MM
+    regions = [(Zone.FLOOR, cfg.zones[Zone.FLOOR].workspace_mm, [lay.floor_z_mm + 15.0], None)]
+    regions += [
+        (
+            Zone.CARGO,
+            rect_polygon(cargo.compartment(c), *((across, along) if along_y else (along, across))),
+            [cargo.floor_z_mm + h for h in (15, 35)],
+            math.pi / 2 if along_y else 0.0,
+        )
+        for c in cargo.compartments
+    ]
+    for zone, poly, heights, yaw in regions:
+        xs = [p[0] for p in poly]
+        ys = [p[1] for p in poly]
         gx = np.linspace(min(xs) + 1, max(xs) - 1, max(2, round((max(xs) - min(xs)) / step_mm) + 1))
         gy = np.linspace(min(ys) + 1, max(ys) - 1, max(2, round((max(ys) - min(ys)) / step_mm) + 1))
-        look = q["look_box" if zone is Zone.BOX else "look_bg"]
-        for x, y, h in itertools.product(gx, gy, heights[zone]):
+        look = q[LOOK_POSES[zone]]
+        for x, y, h in itertools.product(gx, gy, heights):
             try:
-                arm.plan_pick(ArmPoint(float(x), float(y), h), zone, q0=look)
+                _, _, up = arm.plan_pick(ArmPoint(float(x), float(y), h), zone, yaw, q0=look)
+                arm._plan_joints(up[-1], q["home"])  # and on to a drop, via home
             except SorterError as e:
                 problems.append(f"pick {zone} ({x:.0f}, {y:.0f}, {h:.0f}): {e}")
     return problems
 
 
-def _yaml(poses: dict[str, list[float]], zones: dict[Zone, ZoneConfig], views: dict) -> str:
+def _yaml(poses, zones: dict[Zone, ZoneConfig], views: dict, arm: ArmConfig) -> str:
     body = {
+        "arm": {
+            "z_min_mm": arm.z_min_mm,
+            "keep_out_mm": [list(b) for b in arm.keep_out_mm],
+        },
         "views": views,
         "poses": poses,
         "zones": {
@@ -260,9 +323,10 @@ def _yaml(poses: dict[str, list[float]], zones: dict[Zone, ZoneConfig], views: d
         },
     }
     head = (
-        "# Fixed rig, committed (D-007). Computed for the table layout in `sim.layout` by\n"
-        "# `python -m sorter.sim.layout --write`: poses (joint angles, rad) and zones (block 5),\n"
-        "# views (pixel ROIs from the look poses, block 1). Re-teach / redraw them on the rig.\n"
+        "# Fixed rig, committed (D-007). Computed for the rover layout in `sim.layout` by\n"
+        "# `python -m sorter.sim.layout --write`: the arm's floor clearance and keep-out, poses\n"
+        "# (joint angles, rad) and zones, views (pixel ROIs from the look poses).\n"
+        "# Re-teach / redraw them on the rig.\n"
     )
     return head + yaml.safe_dump(body, sort_keys=False, default_flow_style=None, width=100)
 
@@ -272,22 +336,29 @@ def main(argv: list[str] | None = None) -> None:
         prog="python -m sorter.sim.layout", description=__doc__.split("\n")[0]
     )
     p.add_argument("--config-dir", default=DEFAULT_CONFIG_DIR)
-    p.add_argument("--write", action="store_true", help="write poses and zones to rig.yaml")
+    p.add_argument("--write", action="store_true", help="write the results to rig.yaml")
     args = p.parse_args(argv)
 
     cfg = load_config(args.config_dir)
-    poses = compute_poses(cfg.sim, cfg.arm)
-    zones = compute_zones(cfg.sim, cfg.arm)
+    arm = arm_for(cfg.sim, cfg.arm)
+    poses = compute_poses(cfg.sim, arm)
+    zones = compute_zones(cfg.sim, arm)
     rig = Path(args.config_dir) / "rig.yaml"
     views = zone_rois(cfg, poses)
-    text = _yaml(poses, zones, views)
+    text = _yaml(poses, zones, views, arm)
     print(text)
-    cfg = cfg.model_copy(update={"poses": poses, "zones": zones})
-    for name in ("look_box", "look_bg"):
-        cam = (camera_pose(cfg.sim, poses[name]))[:3, 3]
-        w = cfg.sim.width * cam[2] / cfg.sim.focal_px
-        h = cfg.sim.height * cam[2] / cfg.sim.focal_px
-        print(f"# {name}: camera at z {cam[2]:.0f} mm sees {w:.0f} x {h:.0f} mm of the table")
+    cfg = cfg.model_copy(update={"poses": poses, "zones": zones, "arm": arm})
+    for zone, (_, z) in zone_surfaces(cfg.sim).items():
+        name = LOOK_POSES[zone]
+        cam = camera_pose(cfg.sim, poses[name])
+        h = cam[2, 3] - z
+        hit = axis_hit(cam, z)
+        at = f"({hit[0]:.0f}, {hit[1]:.0f})" if hit is not None else "?"
+        w, hh = (n * h / cfg.sim.focal_px for n in (cfg.sim.width, cfg.sim.height))
+        print(
+            f"# {name}: camera {h:.0f} mm above the {zone}, axis at {at}, "
+            f"sees {w:.0f} x {hh:.0f} mm"
+        )
     problems = check(cfg)
     for msg in problems:
         print("PROBLEM", msg, file=sys.stderr)

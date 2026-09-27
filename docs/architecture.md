@@ -1,97 +1,87 @@
 # Architecture
 
-Single source of truth for the contracts between blocks. Block 0 implements the shared types in `src/sorter/core/`; if code and this file diverge, fix both in the same PR (see `AGENTS.md`).
+Single source of truth for the contracts between the stages. The shared types are in `src/sorter/core/`; if code and this file diverge, fix both in the same PR (see `AGENTS.md`).
 
 ## Physical setup
 
-- **Arm:** Seeed reBot Arm B601-RS (RobStride motors: RS-06 on joints 1–3, RS-00 on joints 4–6 and the gripper; 6 DoF + parallel gripper; reach roughly 0.6–0.7 m from the shoulder axis, from the URDF; see [D-011](decisions.md)). USB→CAN (PEAK PCAN-USB, SocketCAN `can0` at 1 Mbit/s on Linux), driven through `rebot_b601/` (`motorbridge`, own IK/FK, metres + radians; [D-019](decisions.md)).
-- **Camera:** Intel RealSense D435i RGB-D, **mounted on the wrist** behind the gripper, looking along the gripper axis (eye-in-hand, [D-006](decisions.md)).
-- **Zones at fixed positions** ([D-007](decisions.md)): mixed box, background area (mid-gray), 3 bins (light / dark / colored). The clothes inside the box lie arbitrarily. The layout is `sim.layout` ([D-020](decisions.md)), sized for the arm's top-down reach and all in front of it (the arm is clamped to the table's back edge, [D-022](decisions.md)): a low tray straight ahead (+x), the mat front-left, the bins farther out on both sides.
-- The arm looks at a zone from a fixed **look pose** (`look_box`, `look_bg`): the camera straight down, ~260 mm above the table. Because look poses are repeatable, pixel ROIs of each zone are constants in config.
+- **Rover** ([D-032](decisions.md)): built and driven by others. The arm is bolted to its deck plate, **200 mm above the floor**. For our code the rover stands still: in load mode it has stopped next to socks, in unload mode it is parked at the station. There is no rover interface yet.
+- **Arm:** Seeed reBot Arm B601-RS (6 DoF + parallel gripper, [D-011](decisions.md)), driven through `rebot_b601/` ([D-019](decisions.md)). Joint 1 turns ±145°, so nothing right behind the arm is reachable; with the gripper pointing down the TCP reaches ~100 mm above the deck at most, and the floor from ~140 to ~450 mm out.
+- **Camera:** Intel RealSense D435i RGB-D on the wrist, fixed to link5, looking along the gripper ([D-006](decisions.md), [D-027](decisions.md)).
+- **Cargo box** on the deck, to the arm's left: 3 compartments in a row along x (light, dark, colored).
+- **Unload station:** 3 laundry bins on the floor to the rover's right, one per color.
+- The layout is `sim.layout` (arm base frame, mm), placeholders until the real rover is measured ([D-033](decisions.md)):
+
+| Part | Where |
+| --- | --- |
+| floor | z = −200 (`floor_z_mm`) |
+| rover body (chassis + wheels, from above) | x −400..100, y −160..320, below the deck (z < 0) |
+| cargo box, inside | x −260..60, y 130..310, floor z 5, walls 50 high, dividers 6 mm; compartments ~103 × 180 |
+| floor view (what `look_floor` frames; pick zone) | 280 × 240 centered at (300, 0) |
+| laundry bins | 220 mm square, 150 high, at (−140, −330) light, (100, −330) dark, (340, −300) colored |
 
 ## Components
 
-| Component | Block | Responsibility |
+| Component | Owner | Responsibility |
 | --- | --- | --- |
-| Camera | 1 | Background capture thread. `latest()` for the live feed, `fresh()` for decisions |
-| Calibration | 2 | Hand-eye transform. Pixel + depth + camera pose → arm point, and back. The only place where this conversion happens |
-| Box detector | 3 | Grasp point in the box (pixels), or "box empty" |
-| Color classifier | 4 | All items on the background: color, re-grasp point (pixels), area. Empty list = background empty. Masks from the remote SAM3 service ([D-013](decisions.md)) |
-| Arm controller | 5 | Named poses, `look` / `pick` / `place_on_background` / `drop_to_bin`, workspace checks, hold, recover. One `Controller` on an `ArmDriver`: the real arm or the simulator |
-| Observer | 0 | `observe(zone)`: move to look pose, take a fresh frame, attach camera pose |
-| Hub | 0 | Status, decision frames, and commands between the state machine and the dashboard |
-| State machine | 6 | Main loop, failure handling, counters, run logs |
-| Dashboard | 7 | Web UI: decision frame with overlays, live wrist feed, state, counters, controls |
-| Simulator | 0 | The hardware without hardware: a MuJoCo physics scene with the arm's motors and the wrist RGB-D camera, so the real code of every other block runs on it; a quick kinematic world for tests |
+| Camera | shared | Capture thread. `latest()` for the live feed, `fresh()` for decisions |
+| Calibration | shared | Hand-eye transform. Pixel + depth + camera pose → arm point, and back. The only place where this conversion happens ([D-002](decisions.md)) |
+| Arm controller | shared | Named poses, `look` / `pick` / `drop_to_cargo` / `drop_to_laundry`, floor limit and keep-out, hold, recover. One `Controller` on an `ArmDriver`: the real arm or the simulator |
+| Observer | shared | `observe(zone)`: move to the look pose, take a fresh frame, attach the camera pose |
+| Hub | shared | Status, decision frames, commands and the operator mode between the state machine and the dashboard |
+| State machine | shared | Commands, hold, errors, status, run log; runs the loop of the operator mode |
+| Load loop | A | `orchestrator/load.py`: socks from the floor into their compartments |
+| Unload loop | B | `orchestrator/unload.py`: every compartment into its laundry bin |
+| Floor detector | A | Socks on the floor: color, grasp point (pixels), grasp angle, mask |
+| Box detector | B | Grasp point in a cargo compartment (pixels), or "empty" |
+| Color classifier | A | Block 4's library: SAM3 masks ([D-013](decisions.md)) + color statistics. The floor detector's baseline uses it |
+| Dashboard | shared (panels: A, B) | Web UI: decision frame, live wrist feed, 3D view, state, counters, controls |
+| Simulator | base shared, scenes A / B | MuJoCo: the arm's motors, the wrist RGB-D camera, the rover, cloth socks |
 
 ## Coordinate frames and units
 
 | Frame | Units | Notes |
 | --- | --- | --- |
 | Pixel `(u, v)` | px, int | Color stream, origin top-left. Depth is aligned to color |
-| Camera | mm | Optical frame (x right, y down, z forward). **Depth values are Z along the optical axis**, not ray length |
-| Flange | mm | URDF `link6` (the wrist roll output) |
-| Camera link | mm | URDF `link5`, the link before the wrist roll: the camera is fixed to it, joint 6 turns the gripper but not the camera ([D-027](decisions.md)). `ee_pose()` returns `T_base_link5` from FK (`sorter.arm.kinematics.fk_link5`) |
-| TCP | mm | URDF `gripper_end`, the end of the gripper; +x is the approach axis (wrist → fingertips). `T_flange_tcp` is fixed by the URDF (`sorter.arm.kinematics.T_FLANGE_TCP`) |
-| Arm base | mm | What `pick()` targets are expressed in |
+| Camera | mm | Optical frame (x right, y down, z forward). **Depth values are Z along the optical axis** |
+| Camera link | mm | URDF `link5`: joint 6 turns the gripper, not the camera ([D-027](decisions.md)). `ee_pose()` returns `T_base_link5` |
+| TCP | mm | URDF `gripper_end`, the fingertips; +x is the approach axis, the fingers open along +y |
+| Arm base | mm | Origin at the arm's base on the deck (deck top z = 0), +x forward, +y left, z up. The floor is at `sim.layout.floor_z_mm` (−200) |
 
-- `Pose` = `np.ndarray` 4×4 float64, homogeneous transform, translation in **mm**.
-- Joint angles in **radians** (URDF joint angles = motor angles after the zero calibration). Durations in seconds. Time is `time.monotonic()`.
+- `Pose` = `np.ndarray` 4×4 float64, translation in **mm**. Joint angles in **rad**. Time is `time.monotonic()`.
 - Only `sorter.arm.kinematics` and the arm driver convert to `rebot_b601` units (m, rad).
-- `T_base_cam = T_base_link5(q at capture) · T_link5_cam`, where `T_link5_cam` is the hand-eye result (block 2).
-- **Rule ([D-002](decisions.md)):** vision outputs pixels + depth only. Calibration owns every pixel ↔ arm conversion.
+- `T_base_cam = T_base_link5(q at capture) · T_link5_cam` (the hand-eye result).
+- **Gripper yaw:** the direction the fingers open along, projected on the floor, as an angle from +x in the arm frame (rad, mod π: the gripper is symmetric). With the gripper pointing down, joint 6 sets it.
 
-## Main loop (state machine walkthrough)
+## The loops
 
-The loop is **observation-driven** ([D-008](decisions.md)). Every cycle starts by looking at the background, and the next action follows from what the camera sees, not from what was supposed to happen. The state machine's memory is only: `counters`, `avoid` (failed grasp pixels in the box view), `pending` (last action, to verify it), `failures` (consecutive), `empty_streak`.
+`sorter.orchestrator.state_machine.StateMachine` is the part both loops share: commands, hold, errors, status, run log. At `START` it takes the loop of the operator mode (`LOAD` → `LoadLoop`, `UNLOAD` → `UnloadLoop`). `STARTING` (arm on, home) and `DONE` (home, idle) are shared; every other phase is a method `_<phase>` of the loop that returns the next phase. A loop keeps its own memory (`reset()` at the start of a run) and uses the shared run state on `sm`: `counters`, `failures`, `obs`, `cycle`, `new_cycle()`, `decide(result, overlay, summary, next_phase)` (publishes the decision frame and writes the run log).
+
+**Load (stage A), baseline:** observation-driven ([D-008](decisions.md)): a sock is counted once the next look shows one fewer.
 
 ```text
-IDLE ─START─► STARTING ─► LOOK_BG ─► SENSE_BG ──items──► PICK_FROM_BG ─► DROP_TO_BIN ─┐
-                             ▲           │                                            │
-                             │           └─empty─► LOOK_BOX ─► SENSE_BOX ─grasp─► PICK_FROM_BOX ─► PLACE_ON_BG ─┐
-                             │                                    │  └─empty ×N─► DONE                          │
-                             └────────────────────────────────────┴─────────────────────────────────────────────┘
+STARTING → SCAN → SENSE_FLOOR ─sock─► PICK_FROM_FLOOR → DROP_TO_CARGO(color) → SCAN …
+                      └─no sock × empty_confirmations─► DONE
 ```
 
-| Phase | Calls | Outcomes |
-| --- | --- | --- |
-| `STARTING` | `arm.start()` (enable, hold), `arm.home()` | → `LOOK_BG`. Counters reset when a run starts from `IDLE`/`DONE` |
-| `LOOK_BG` | `obs = observer.observe(BACKGROUND)` | → `SENSE_BG` |
-| `SENSE_BG` | `bg = classifier.classify(obs.frame)`; resolve `pending` (below) | `bg.items` non-empty → `PICK_FROM_BG` with `items[0]`. Empty → `LOOK_BOX` |
-| `PICK_FROM_BG` | `p = calibration.to_arm(obs, item.grasp)`; `r = arm.pick(p, BACKGROUND)` | OK → `DROP_TO_BIN`. `r.likely_empty` → failure, → `LOOK_BG`. `TargetRejected` → `ERROR` |
-| `DROP_TO_BIN` | `arm.drop_to_bin(item.color)`; `pending = Dropped(color, n_before=len(bg.items))` | → `LOOK_BG` |
-| `LOOK_BOX` | `obs = observer.observe(BOX)` | → `SENSE_BOX` |
-| `SENSE_BOX` | `box = box_detector.detect(obs.frame, avoid)` | `GRASP` → `PICK_FROM_BOX`, `empty_streak = 0`. `EMPTY` → `empty_streak += 1`; `≥ N` → `DONE`, else → `LOOK_BOX`. `NO_GRASP` → if `avoid` non-empty: clear it and retry, else `ERROR` |
-| `PICK_FROM_BOX` | `p = calibration.to_arm(obs, box.grasp)`; `r = arm.pick(p, BOX)` | OK → `PLACE_ON_BG`. `TargetRejected` (no motion happened) → add to `avoid`, failure, → `SENSE_BOX` on the **same** `obs`. `r.likely_empty` → add to `avoid`, failure, → `LOOK_BOX` |
-| `PLACE_ON_BG` | `arm.place_on_background()`; `pending = PlacedFromBox(px)` | → `LOOK_BG` |
-| `DONE` | `arm.home()` | mode `idle` |
+**Unload (stage B), baseline:** the depth box detector on each compartment's image area (the compartment rectangle projected from `look_cargo`), the first grasp found; the sock goes to that compartment's bin, fingers along the compartment's long side (yaw π/2).
 
-**Resolving `pending` in `SENSE_BG`:**
+```text
+STARTING → LOOK_CARGO → SENSE_CARGO ─grasp in c─► PICK_FROM_CARGO → DROP_TO_LAUNDRY(c) → LOOK_CARGO …
+                             └─all empty × empty_confirmations─► DONE
+```
 
-- `PlacedFromBox(px)` and the background is empty → **missed grasp from box**: add `px` to `avoid`, failure. Items present → success: clear `avoid`, `failures = 0`.
-- `Dropped(color, n_before)` and `len(items) < n_before` → **verified drop**: `counters[color] += 1`, `failures = 0`. Otherwise the pick from the background failed: failure, the item is retried.
+The baselines are starting points, not the goal: stages A and B replace them.
 
-**Invariants and what they give us:**
+**Shared rules for both loops:**
 
-- We pick from the box only when the background is empty, so "empty background after place" always means a missed grasp.
-- **Double grasp needs no special code:** the classifier returns every blob, and they are sorted one per cycle.
-- **Counters go up only after a verified drop.**
-- After a hold, error, or restart, the loop resumes from `LOOK_BG` and re-derives the situation from the camera.
-- `avoid` is in pixels of the box view. That works because `look_box` is repeatable. It is cleared after every successful place.
-
-**Failures and control:**
-
-- `failures ≥ state_machine.max_consecutive_failures` → phase `ERROR`, mode `paused`, error shown on the dashboard. `RESUME` resets `failures` and continues from `LOOK_BG`.
-- `STOP` → finish the current phase, `arm.home()`, phase `IDLE`. Counters are kept until the next `START`.
-- Commands are applied **between phases**. Every phase is atomic, so pause and step never stop the arm mid-air. `STEP` runs exactly one phase, then pauses.
-- `HOLD` is not queued: the Hub calls `arm.hold()` directly from the web thread. The blocked arm call in the state machine raises `EStopped` → phase `HELD`. `RESET` → `arm.recover()` → `LOOK_BG`.
-- Any `ArmError` / `CameraError` / `CalibrationError`, or an unexpected exception from a module → phase `ERROR`, mode `paused`; the loop thread never dies. `RESET` → `arm.recover()` → `LOOK_BG`. `pending` survives a hold or error: it is set only after its action completed, so the next `SENSE_BG` still verifies it.
-- Low-confidence color (below `state_machine.low_confidence`): sort into the most likely class and log a warning.
-- Every decision is saved to the run log (see _Recording format_).
+- Commands are applied **between phases**; every phase is atomic. `STEP` runs one phase, then pauses. `STOP` → `arm.home()`, `IDLE`.
+- `HOLD` is not queued: the Hub calls `arm.hold()` from the web thread; the blocked arm call raises `EStopped` → phase `HELD`. `RESET` → `arm.recover()` → the loop's `first` phase.
+- `failures ≥ state_machine.max_consecutive_failures` → `ERROR`, paused. `RESUME` resets `failures`. Any `SorterError` or unexpected exception in a phase → `ERROR`, paused; the loop thread never dies.
+- **Counters go up only for what ended in the right place.** Load counts per compartment, unload per bin.
 
 ## Contracts
 
-All shared types live in `sorter.core.types`, errors in `sorter.core.errors`, the `Protocol`s (`Camera`, `BoxDetector`, `ColorClassifier`, `Calibration`, `ArmController`) in `sorter.core.protocols`. Data types are frozen dataclasses unless they carry mutable debug data. Array fields are read-only (`flags.writeable = False`); consumers never modify them.
+Shared types are in `sorter.core.types`, errors in `sorter.core.errors`, the `Protocol`s in `sorter.core.protocols`. Array fields are read-only; consumers never modify them.
 
 ### Errors
 
@@ -105,10 +95,12 @@ class CameraError(SorterError): ...  # no frame within timeout, device lost
 class CalibrationError(SorterError): ...  # no camera pose, invalid depth, file missing
 
 
-class ArmError(SorterError): ...  # SDK/bus fault, motion failed or timed out
+class ArmError(SorterError): ...  # bus fault, motion failed, path hits the floor / keep-out
 
 
-class TargetRejected(ArmError): ...  # outside the zone workspace or IK failed; NO motion happened
+class TargetRejected(
+    ArmError
+): ...  # outside the zone workspace, IK or path check failed; NO motion
 
 
 class EStopped(ArmError): ...  # arm is held; every motion raises this until recover()
@@ -117,174 +109,93 @@ class EStopped(ArmError): ...  # arm is held; every motion raises this until rec
 class WrongMode(SorterError): ...  # needs another operator mode, or the mode can't change now
 ```
 
-"Nothing found" is never an exception. Vision returns it as a result value.
+"Nothing found" is never an exception: vision returns it as a result value.
 
 ### Basic types
 
 ```python
-Pose = np.ndarray  # 4x4 float64, mm
-
-
 class Zone(StrEnum):
-    BOX = "box"
-    BACKGROUND = "background"
-
+    FLOOR = "floor"      # in front of the rover: socks to load
+    CARGO = "cargo"      # the cargo box, one compartment per ColorClass
+    LAUNDRY = "laundry"  # the station's bins, one per ColorClass (drops only, no look pose)
 
 class ColorClass(StrEnum):
-    LIGHT = "light"
-    DARK = "dark"
-    COLORED = "colored"
+    LIGHT, DARK, COLORED
 
-
-@dataclass(frozen=True)
-class PixelPoint:
-    u: int
-    v: int
-
-
-@dataclass(frozen=True)
-class ArmPoint:
-    x: float
-    y: float
-    z: float  # mm, arm base frame
+PixelPoint(u: int, v: int)
+ArmPoint(x: float, y: float, z: float)  # mm, arm base frame
 ```
 
-### Camera (block 1)
+### Camera
+
+`Intrinsics(fx, fy, cx, cy, width, height, coeffs=())`, `Frame(color: HxWx3 uint8 BGR, depth_mm: HxW uint16 Z in mm aligned to color (0 = no data), intrinsics, timestamp, seq)`.
 
 ```python
-@dataclass(frozen=True)
-class Intrinsics:
-    fx: float
-    fy: float
-    cx: float
-    cy: float
-    width: int
-    height: int
-    coeffs: tuple[float, ...] = ()  # distortion; empty = already rectified
-
-
-@dataclass(frozen=True)
-class Frame:
-    color: np.ndarray  # HxWx3 uint8, BGR
-    depth_mm: np.ndarray  # HxW uint16, Z in mm, aligned to color; 0 = no data
-    intrinsics: Intrinsics
-    timestamp: float  # monotonic, when the frame arrived
-    seq: int
-
-
 class Camera(Protocol):
     def start(self) -> None: ...
     def close(self) -> None: ...
-    def latest(self) -> Frame | None: ...  # non-blocking; for the live feed
-    def fresh(self, timeout_s: float = 2.0) -> Frame: ...
-
-    # Blocks until a frame whose exposure started AFTER the call. Raises CameraError on timeout.
+    def latest(self) -> Frame | None: ...  # non-blocking; the live feed
+    def fresh(self, timeout_s: float = 2.0) -> Frame: ...  # exposure started after the call
 ```
 
-- The camera runs its own capture thread and keeps only the newest frame.
-- Auto exposure and white balance are locked after warm-up if the SDK allows.
-- The camera module knows nothing about the arm.
-- The real backend is `RealSenseCamera` (`pyrealsense2`, the `camera` extra; Linux / Windows): depth aligned to color, rectified (`coeffs` empty).
+The real backend is `RealSenseCamera` (`pyrealsense2`, the `camera` extra). The camera knows nothing about the arm.
 
-### Observation and Observer (block 0)
+### Observation and Observer
 
 ```python
-@dataclass(frozen=True)
-class Observation:
-    frame: Frame
-    zone: Zone
-    T_base_cam: Pose | None           # None only in recordings made without the arm
-    joints: tuple[float, ...] | None  # arm joints at capture, rad
+Observation(frame, zone, T_base_cam: Pose | None, joints: tuple[float, ...] | None)
 
-class Observer:
-    def __init__(self, camera: Camera, arm: ArmController, calibration: Calibration): ...
-    def observe(self, zone: Zone) -> Observation:
-        # arm.look(zone)  → blocks until the arm is still
-        # frame = camera.fresh()
-        # T_base_cam = calibration.cam_pose(arm.ee_pose())
+Observer(camera, arm, calibration).observe(zone)  # arm.look(zone), camera.fresh(), cam pose
 ```
 
 ### Vision: shared types
 
-```python
-@dataclass(frozen=True)
-class GraspPoint:
-    px: PixelPoint
-    depth_mm: float  # robust (median over a small window) Z of the cloth SURFACE at px; never 0
+`GraspPoint(px, depth_mm)`: the cloth **surface** at `px` (robust Z, never 0); how deep the gripper goes below it is the arm's business. `Overlay(markers, polygons, mask, text)`, drawn by the dashboard on the frame it came from. Zone ROIs are `views.<zone>.roi` in config.
 
-
-@dataclass
-class Marker:
-    px: PixelPoint
-    label: str
-    kind: Literal["grasp", "candidate", "avoid", "info"]
-
-
-@dataclass
-class Overlay:  # drawn by the dashboard on top of the frame it came from
-    markers: list[Marker] = field(default_factory=list)
-    polygons: list[tuple[list[PixelPoint], str]] = field(default_factory=list)
-    mask: np.ndarray | None = None  # HxW bool
-    text: list[str] = field(default_factory=list)
-```
-
-- Vision returns the **surface** point. How deep the gripper goes below it is the arm's business (per-zone `grasp_depth_mm`).
-- Vision works on `Frame` only. The zone ROI comes from config (`views.<zone>.roi`).
-
-### Box detector (block 3)
+### Floor detector (stage A)
 
 ```python
-class BoxStatus(StrEnum):
-    GRASP = "grasp"
-    EMPTY = "empty"
-    NO_GRASP = "no_grasp"
+@dataclass
+class Sock:
+    color: ColorClass
+    confidence: float  # 0..1, of the color
+    grasp: GraspPoint
+    grasp_angle_rad: float | None  # gripper yaw across the sock, image frame; None = any
+    area_px: int
+    touches_roi_edge: bool  # partly outside the view
+    mask: np.ndarray | None  # HxW bool
+    stats: dict[str, float]
 
 
 @dataclass
-class BoxResult:
-    status: BoxStatus
-    grasp: GraspPoint | None  # set only when status == GRASP
-    coverage: float  # 0..1, share of the ROI covered by cloth
+class FloorResult:
+    socks: list[Sock]  # best target first; [] = no sock in view
     overlay: Overlay
 
+
+class FloorDetector(Protocol):
+    def detect(self, frame: Frame, avoid: Sequence[PixelPoint] = ()) -> FloorResult: ...
+```
+
+Stateless: failed grasps are passed as `avoid`. The baseline `ClassifierFloorDetector` wraps the color classifier over `views.floor.roi` (no grasp angle, no mask).
+
+### Box detector (stage B)
+
+```python
+class BoxStatus(StrEnum): GRASP, EMPTY, NO_GRASP
+BoxResult(status, grasp: GraspPoint | None, coverage: float, overlay)
 
 class BoxDetector(Protocol):
     def detect(self, frame: Frame, avoid: Sequence[PixelPoint] = ()) -> BoxResult: ...
 ```
 
-- **Stateless.** Failed grasps are passed as `avoid`. Candidates within `box_detector.avoid_radius_px` of any of them are skipped.
-- `NO_GRASP` = cloth is present, but no valid candidate is left.
-- The grasp point keeps `wall_margin_mm` from the ROI edge on the box floor (an open finger and its pad), converted to pixels with the floor depth.
-- `DepthBoxDetector` (the real backend): the floor is a high percentile of the ROI depth, cloth is what stands `cloth_height_mm` above it, the grasp is the top of the smoothed height map inside the cloth.
-- The ROI excludes the gripper fingers. They sit at fixed pixels in every frame.
+`DepthBoxDetector(cfg, roi)`: the floor is a high percentile of the ROI depth, cloth is what stands `cloth_height_mm` above it, the grasp is the top of the smoothed height map, `wall_margin_mm` inside the ROI. It sees walls and dividers as cloth, so its ROI must be one compartment.
 
-### Color classifier (block 4)
+### Color classifier (library, used by A)
 
-```python
-@dataclass
-class ItemResult:
-    color: ColorClass
-    confidence: float  # 0..1
-    grasp: GraspPoint  # re-grasp point
-    area_px: int
-    touches_roi_edge: bool  # item partly outside the background ROI
-    stats: dict[str, float]  # e.g. median L, a, b, chroma, for tuning and the dashboard
+`ColorClassifier.classify(frame) -> BackgroundResult(items: list[ItemResult], overlay)`; `ItemResult(color, confidence, grasp, area_px, touches_roi_edge, stats)`. `Sam3ColorClassifier(cfg.color_classifier, segment, roi)`: masks from `segment(bgr)` (the SAM3 service, [D-013](decisions.md), or the sim's render), color from Lab statistics of the eroded mask. A failing service raises `SegmentationError` (a `SorterError`).
 
-
-@dataclass
-class BackgroundResult:
-    items: list[ItemResult]  # one per blob, largest first; [] = background empty
-    overlay: Overlay
-
-
-class ColorClassifier(Protocol):
-    def classify(self, frame: Frame) -> BackgroundResult: ...
-```
-
-- The real backend sends the color image to the SAM3 service ([D-013](decisions.md)). If the service fails, `classify` raises `SegmentationError` (`sorter.color_classifier.segmenter`, a `SorterError`), so the state machine goes to `ERROR`.
-- `stats` holds `L` (0..100), `a`, `b`, `chroma` (median over the eroded mask), `px` (pixels used), `score` (SAM3 instance score).
-
-### Calibration (block 2)
+### Calibration
 
 ```python
 class Calibration(Protocol):
@@ -292,279 +203,144 @@ class Calibration(Protocol):
     def to_arm(self, obs: Observation, point: GraspPoint) -> ArmPoint: ...
     def to_pixel(
         self, obs: Observation, p: ArmPoint
-    ) -> PixelPoint | None: ...  # None if outside the image
+    ) -> PixelPoint | None: ...  # None outside the image
 ```
 
-- `to_arm`: deproject `(u, v, depth)` with `obs.frame.intrinsics`, then apply `obs.T_base_cam`. It raises `CalibrationError` if `T_base_cam` is `None` or depth is 0.
-- The hand-eye result `T_link5_cam` is stored in `config/hand_eye.yaml`: 4×4 in mm, `rmse_mm`, `method`, `camera_serial`, `created`. It is **committed** ([D-007](decisions.md)), because it depends only on the camera mount, which travels with the arm.
-- It must be computed against the same frame that `ee_pose()` returns: `link5`. A file with the old key `T_flange_cam` (link6) fails to load: recalibrate.
-- Two ways to compute it:
-  - the **calibration page** (`/calibrate`, setup mode, [D-026](decisions.md)), no printed board: the tip points at spots around the mat center (`sorter.calibration.marks`, `calibration.marks_z_mm` high) and tape marks go under it, where the tip really stopped (FK of the measured joints); marks clicked in the live image + depth give camera-frame points, and a rigid fit (Kabsch) of all clicks, from any poses, gives `T_link5_cam`;
-  - `python -m sorter.calibration.hand_eye` ([D-028](decisions.md)): a ChArUco board (7 × 5 squares of 45 mm, 32 mm 6×6 markers; `python -m sorter.calibration.board` prints it) flat under `look_bg`, its top `calibration.board_z_mm` above the table; `calibration.poses` views around `look_bg`, Park's method as the start, then a fit of every corner's reprojection over the mount and the board lying flat at that height.
-- The real backend (`HandEyeCalibration`) raises `CalibrationError` at start if there is no result. Setup mode starts without one, on the nominal mount (`sim.camera_mount_mm`).
+- The hand-eye result `T_link5_cam` is in `config/hand_eye.yaml` (committed, [D-007](decisions.md)).
+- Two ways to compute it: the **calibration page** (tape marks on the floor view, [D-026](decisions.md)), or `python -m sorter.calibration.hand_eye` (a ChArUco board on the floor under `look_floor`, its top at `calibration.board_z_mm` = −184, [D-028](decisions.md)).
 
-### Arm controller (block 5)
+### Arm controller
 
 ```python
-@dataclass(frozen=True)
-class PickResult:
-    gripper_opening: float  # 0 = fully closed .. 1 = fully open, after closing
-    likely_empty: bool  # gripper_opening < arm.gripper.empty_below; a hint, the camera is the truth
-
+PickResult(gripper_opening: float, likely_empty: bool)  # likely_empty is a hint; the camera is the truth
 
 class ArmController(Protocol):
-    def start(self) -> None: ...  # connect, enable motors, hold the current position
-    def shutdown(self) -> None: ...  # move to the `rest` pose, then disable motors
+    def start(self) -> None: ...      # connect, enable motors, hold the current position
+    def shutdown(self) -> None: ...   # rest pose, then disable motors
     def home(self) -> None: ...
-    def look(self, zone: Zone) -> None: ...  # go to look_box / look_bg; no-op if already there
-    def pick(self, target: ArmPoint, zone: Zone) -> PickResult: ...
-    def place_on_background(self) -> None: ...
-    def drop_to_bin(self, color: ColorClass) -> None: ...
-    def ee_pose(self) -> Pose: ...  # T_base_link5 (the camera link) from FK of the measured joints
+    def look(self, zone: Zone) -> None: ...  # look_floor / look_cargo; no-op if already there
+    def pick(self, target: ArmPoint, zone: Zone, yaw_rad: float | None = None) -> PickResult: ...
+    def drop_to_cargo(self, color: ColorClass) -> None: ...    # via home → cargo_<color>, open, home
+    def drop_to_laundry(self, color: ColorClass) -> None: ...  # via home → laundry_<color>, open, home
+    def ee_pose(self) -> Pose: ...    # T_base_link5
     def joints(self) -> tuple[float, ...]: ...
-    def hold(self) -> None: ...  # thread-safe; freeze in place; see below
-    def recover(
-        self,
-    ) -> None: ...  # leave hold: lift to safe Z, open gripper above the background, home
+    def hold(self) -> None: ...       # thread-safe; freeze; every motion raises EStopped until recover()
+    def recover(self) -> None: ...    # leave hold: lift, open over the floor view, home
 ```
 
-- **Blocking:** every motion method returns only once the arm is still. A fault during a motion raises `ArmError`.
-- **`pick(target, zone)`, with `target` = the cloth surface point where the TCP should go:**
-  1. Reject (`TargetRejected`, no motion) if `target` XY is outside `zones.<zone>.workspace_mm`, or if IK or a path check fails for any of the three moves below. The whole pick is planned before anything moves (`Controller.plan_pick`).
-  2. Go to `target.z + approach_mm` with the gripper pointing down (`arm.approach`), open the gripper.
-  3. Descend in a straight line to `max(target.z - grasp_depth_mm, z_floor_mm)`. Z is clamped, XY is never clamped: a clamped XY means grasping a box wall.
-  4. Close the gripper, lift in a straight line to `zones.<zone>.lift_z_mm`.
-- **`place_on_background` / `drop_to_bin`:** joint moves to the fixed poses (`place_bg`, `bin_<color>`), then open the gripper. `place_bg` holds the TCP `arm.place_release_height_mm` above the mat so the cloth lands crumpled, which makes the re-grasp easier.
-- **Hold vs disable:** disabling the motors makes **the arm fall**. The software stop (dashboard button, Ctrl+C) is `hold()`: abort the motion and hold the joints where they are. After `hold()`, every motion raises `EStopped` until `recover()`. Cutting power is the job of the hardware e-stop switch ([D-009](decisions.md)). `shutdown()` releases a hold, lifts, goes to `rest`, and only then disables.
-- **Driver faults:** `rebot_b601` latches a fault when a joint stays >12° from its setpoint for 0.4 s (blocked, collision, weak motor), on lost feedback or overheating: the motion aborts, the torque stays on holding the measured pose, and every motion raises `ArmError` until the fault is cleared. `driver.fault()` returns the message (with the commanded and measured angle), `clear_fault()` accepts it with the torque still on (`Arm.clear_fault`), or reconnects if the torque is already off ([D-025](decisions.md)).
-- **Inside block 5** ([D-019](decisions.md)): `sorter.arm.controller.Controller` implements the protocol on an `ArmDriver` (`sorter.arm.driver`: `connect`, `disconnect`, `joints`, `gripper`, `execute(waypoints, speed_scale)`, `set_gripper`, `stop`, `resume`, `fault`, `clear_fault`). `RebotDriver` wraps `rebot_b601.arm.Arm` (the CAN bus, or its simulated motors with `arm.dry_run`); the simulator has `SimDriver`. Planning (`sorter.arm.kinematics`: IK, straight-line and joint paths, joint limits, table clearance `arm.z_min_mm`) is shared. The controller also has `gripper_opening()` for the 3D view, and for the dashboard's setup mode `held`, `at`, `go_to(pose)`, `move_joints(q)`, `set_gripper(opening)`, `release()` (leave hold without moving), `fault`, `clear_fault()` and `set_pose(name, q)`, and for the dashboard's speed control (`Hub(speed=)`, D-030) `speed_scale`, `max_speed_scale`, `set_speed_scale(scale)`; none are in the protocol. Block 2 uses `sorter.arm.kinematics` for FK.
+- **Blocking:** every motion returns once the arm is still.
+- **`pick(target, zone, yaw_rad)`**, `target` = the cloth surface point: rejected with no motion (`TargetRejected`) if `target` XY is outside `zones.<zone>.workspace_mm` or any of the three moves fails to plan. Then: to `target.z + approach_mm` with the gripper down (turned to `yaw_rad` by joint 6 if given), open, straight down to `max(target.z − grasp_depth_mm, z_floor_mm)`, close, straight up to `lift_z_mm`.
+- **Every planned path** is checked against the floor (`arm.z_min_mm`, = floor + 3) and the **keep-out boxes** (`arm.keep_out_mm`: the rover body below the deck, the cargo box's walls and dividers, grown by `arm.keep_out_margin_mm`). Points are sampled along the links and on the gripper. A move to a named pose that would hit something goes via `home`.
+- **Hold vs disable:** disabling the motors makes the arm fall; the software stop is `hold()` ([D-009](decisions.md)).
+- **Driver faults** latch until `clear_fault()` ([D-025](decisions.md)).
+- Beyond the protocol, `Controller` has `plan_pick`, `gripper_opening()`, and for the dashboard's setup modes and speed control `held`, `at`, `go_to`, `move_joints`, `move_tcp`, `lift`, `set_gripper`, `release`, `fault`, `clear_fault`, `set_pose`, `speed_scale`, `max_speed_scale`, `set_speed_scale`.
 
-### Hub: state machine ↔ dashboard (block 0)
+### Hub: state machine ↔ dashboard
 
 ```python
 class Phase(StrEnum):
-    (
-        IDLE,
-        STARTING,
-        LOOK_BG,
-        SENSE_BG,
-        PICK_FROM_BG,
-        DROP_TO_BIN,
-    )
-    LOOK_BOX, SENSE_BOX, PICK_FROM_BOX, PLACE_ON_BG, DONE, HELD, ERROR
+    IDLE, STARTING,
+    SCAN, SENSE_FLOOR, PICK_FROM_FLOOR, DROP_TO_CARGO,              # load
+    LOOK_CARGO, SENSE_CARGO, PICK_FROM_CARGO, DROP_TO_LAUNDRY,      # unload
+    DONE, HELD, ERROR
 
+class Command(StrEnum): START, PAUSE, RESUME, STEP, STOP, HOLD, RESET
 
-class Command(StrEnum):
-    START, PAUSE, RESUME, STEP, STOP, HOLD, RESET
+class OperatorMode(StrEnum):
+    LOAD, UNLOAD      # RUN_MODES: the state machine runs that loop
+    MANUAL, CALIBRATE # the dashboard's setup modes
 
-
-class OperatorMode(StrEnum):  # who drives the arm (D-031)
-    AUTO = "auto"  # the state machine
-    MANUAL = "manual"  # the dashboard's manual control
-    CALIBRATE = "calibrate"  # the dashboard's camera calibration
-
-
-@dataclass(frozen=True)
-class Event:
-    t: float
-    level: Literal["info", "warning", "error"]
-    source: str
-    msg: str
-
-
-@dataclass(frozen=True)
-class Status:
-    phase: Phase
-    next_phase: Phase | None  # what STEP will run
-    mode: Literal["idle", "running", "paused"]
-    run_id: str | None
-    cycle: int
-    counters: dict[ColorClass, int]
-    failures: int  # consecutive
-    last_cycle_s: float | None
-    error: str | None
-    health: list[str]  # startup problems; empty = OK
-    events: list[Event]  # last ~50
-
-
-@dataclass(frozen=True)
-class Decision:  # what the state machine decided on, for the dashboard
-    phase: Phase
-    obs: Observation
-    overlay: Overlay
-    summary: str  # e.g. "grasp (412, 230) depth 540 mm" / "colored 0.93"
-
-
-class TwinSource(Protocol):  # the 3D view's data
-    def layout(self) -> dict[str, Any]: ...
-    def state(self) -> dict[str, Any]: ...
-
-
-class SpeedControl(Protocol):  # the arm's speed, set from the dashboard (block 5's Controller)
-    speed_scale: float  # read-only
-    max_speed_scale: float  # read-only
-    def set_speed_scale(self, scale: float) -> float: ...  # clamped; returns the speed set
-
-
-class Hub:
-    def __init__(
-        self,
-        camera: Camera,
-        on_hold: Callable[[], None],
-        twin: TwinSource | None = None,
-        speed: SpeedControl | None = None,
-        mode: OperatorMode = OperatorMode.AUTO,
-    ): ...
-    # state machine side
-    def publish_status(self, s: Status) -> None: ...
-    def publish_decision(self, d: Decision) -> None: ...
-    def next_command(self, timeout_s: float) -> Command | None: ...  # None outside AUTO
-    # dashboard side
-    def status(self) -> Status: ...
-    def decision(self) -> Decision | None: ...
-    def live_frame(self) -> Frame | None: ...  # proxy to camera.latest()
-    def twin(self) -> TwinSource | None: ...
-    def speed(self) -> SpeedControl | None: ...
-    def send(self, cmd: Command) -> None: ...  # HOLD → on_hold() immediately; others → queue, AUTO only (WrongMode)
-    # operator mode (D-031)
-    def mode(self) -> OperatorMode: ...  # AUTO | MANUAL | CALIBRATE
-    def set_mode(self, mode: OperatorMode) -> None: ...  # WrongMode when leaving AUTO during a run
+Status(phase, next_phase, mode: idle|running|paused, run_id, cycle, counters, failures,
+       last_cycle_s, error, health, events)
+Decision(phase, obs, overlay, summary)
 ```
 
-- Modules log with the standard `logging` module. `HubLogHandler` turns warnings and errors into `Event`s, so no module needs a Hub reference.
-- Blocks 6 and 7 depend only on the Hub, never on each other.
-- **Operator mode** ([D-031](decisions.md)): who drives the arm. In `AUTO` the state machine does; `MANUAL` and `CALIBRATE` are the dashboard's setup modes. Run commands (all but HOLD) are queued in `AUTO` only; HOLD works in every mode. `AUTO` is left only while no run is going: the state machine idle, no command queued, and none taken whose status isn't published yet (`next_command` marks it in flight, `publish_status` clears it; a command queued before a mode change is dropped).
-- `build_system` gives the Hub a `sorter.dashboard.twin.Twin`: the table layout (`sim.layout`, zone workspaces, camera intrinsics) and the live state (link poses from FK of `arm.joints()`, gripper opening, TCP, `T_base_cam` from `calibration.cam_pose(arm.ee_pose())`, and the sim items with their location when there is a sim world).
+- Run commands (all but HOLD) are queued in `LOAD` / `UNLOAD` only (`WrongMode` otherwise); HOLD works in every mode. A run mode is left only while no run is going. The default mode is `LOAD`.
+- Modules log with `logging`; `HubLogHandler` turns warnings and errors into `Event`s.
+- **3D view data** (`sorter.dashboard.twin.Twin`, `TwinSource`): `layout()` = `parts` (every box / cylinder / plane geom of the MuJoCo world body: floor, rover, cargo box, bins, whatever a scene adds; on the rig the same scene is built from the config), `floor_z_mm`, `zones` (`polygon`, `z_mm`), camera intrinsics, `cloth_n`; `state()` = link poses, gripper, TCP, camera pose, and on the sim every cloth item with its vertices, `location` and `in` (compartment / bin color).
 
-### Dashboard HTTP API (block 7)
+### Dashboard HTTP API
 
 | Endpoint | Content |
 | --- | --- |
-| `GET /`, `/auto`, `/manual`, `/calibrate`, `/3d` | The admin panel (React, `frontend/`, built into `src/sorter/dashboard/web/`); every tab is the same page, routed in the browser. Without a build, a page that says how to build it. `/` opens the tab of the current mode |
-| `GET /assets/...`, `GET /favicon.svg` | The panel's built files |
-| `GET /api/meta` | `{"phase_labels": {phase: label}, "modes": [...] (the operator modes this server has: `auto` only without the setup controls), "calibrate": bool}` |
-| `GET /api/mode` | `{"mode": "auto" \| "manual" \| "calibrate", "busy": bool}` (busy: a manual motion runs) |
-| `POST /api/mode` | `{"mode"}` → the same JSON. 409 if a run is going (leaving auto: Stop first) or a manual motion runs; 404 if the server has no setup controls; 500 if the motors can't be turned on. Entering manual / calibrate turns the motors on; the sim shows the calibration's tape marks in calibrate only |
-| `GET /api/status` | `Status` as JSON, plus `now` (`time.monotonic()`, the clock of `Event.t`) for event ages, `speed` (as `GET /api/speed`, null without a speed control) and `operator` (the operator mode) |
-| `WS /ws` | The same JSON, pushed on change (a speed or mode change too), at most `dashboard.status_hz` (5 Hz) |
-| `GET /api/speed` | `{"speed_scale", "max_speed_scale"}` of the arm ([D-030](decisions.md)); 404 without a speed control |
-| `POST /api/speed` | `{"speed_scale": float}` → the same JSON. Works in any mode; the next motion uses it (one under way keeps its speed); clamped to [0.05, `max_speed_scale`]; not saved (a restart goes back to `arm.speed_scale`) |
-| `GET /stream/decision.mjpg` | Last decision frame with the zone ROI (`views.<zone>.roi`), the overlay, and a caption strip (phase + `summary`) drawn server-side |
-| `GET /stream/live.mjpg` | Live wrist camera (`hub.live_frame()`), at `dashboard.stream_fps` |
-| `GET /snapshot/decision.jpg`, `GET /snapshot/live.jpg` | One JPEG of the same images |
-| `POST /api/command` | `{"cmd": "start" \| "pause" \| "resume" \| "step" \| "stop" \| "hold" \| "reset"}`. 409 for all but `hold` outside the auto mode |
-| `GET /api/twin/layout`, `GET /api/twin/state` | `TwinSource.layout()` / `.state()` as JSON; 404 without a source. Link and camera poses are 4×4 row-major in metres, the rest in mm |
-| `GET /twin-assets/...` | The CAD meshes vendored in `rebot_b601/rebot_b601/viewer_assets/` (the panel bundles three.js itself) |
-| `GET /api/manual` | `ManualControl.state()`: `busy`, `action`, `last`, `error`, `held`, `fault` (driver fault message or null), `at` (named pose or null), `joints` (rad), `gripper`, `tcp_mm`, `poses`, `tour`, `tour_next`, `rig_file`; 409 in the auto mode, 404 without the setup controls |
-| `GET /api/calibrate` | `CalibrateControl.state()`: `arm` (the `/api/manual` state), `image` (`width`, `height`), `overlay` (`marks`: name + pixel or null, `zones`: box / background outline pixels, from where the arm is, with the fitted mount if any else the one in use), `marks` (`name`, `xyz`, `placed`), `clicks` (`mark`, `px`, `here`, `pose` (the view it was clicked from, 0-based), `residual_mm`), `fit` (`rmse_mm`, `change_mm`, `change_deg` from the mount in use, `marks`; on the sim `true_error_mm`, `true_error_deg`) or null, `mount` (`method`, `saved`), `look` (per look pose: `tcp_z`, `camera_mm`, `sees_mm`, `coverage`, `depth_ok`, `fits`, `top`) or null, `look_saved`, `hand_eye_file`, `rig_file`, `views`, `hover_mm`, `detected` (`squares`, `marks` of the last detection) or null; 409 in the auto mode, 404 without the setup controls |
-| `POST /api/calibrate` | `{"action": "goto_mark", "mark"}` \| `{"action": "goto_view", "index"}` \| `{"action": "detect"}` → `{"ok", "marks"}` \| `{"action": "click", "mark", "u", "v"}` \| `{"action": "delete_click", "index"}` \| `{"action": "clear_clicks" \| "compute_look"}` \| `{"action": "goto_look", "pose"}` \| `{"action": "save_mount"}` → `{"ok", "file"}` \| `{"action": "save_look"}` → `{"ok", "lines"}` \| `{"action": "calibrate"}` (save_mount + compute_look + save_look) → `{"ok", "file", "lines"}`. Calibrate mode only (409 otherwise). 409 while a motion runs, 400 on a bad action or when it can't be done (no depth at the click, no fit yet, unreachable) |
-| `POST /api/manual` | `{"action": "go", "pose"}` \| `{"action": "tour_next" \| "tour_reset" \| "release" \| "clear_fault"}` \| `{"action": "jog", "joint": 0..5, "delta_deg"}` \| `{"action": "gripper", "open": bool}` \| `{"action": "save", "pose"}` → `{"ok", "line"}`. Manual or calibrate mode (409 otherwise). 409 while a motion runs, 400 on a bad action or pose |
+| `GET /`, `/load`, `/unload`, `/manual`, `/calibrate`, `/3d` | The admin panel (React, `frontend/`, built into `src/sorter/dashboard/web/`) |
+| `GET /api/meta` | `{"phase_labels", "modes", "calibrate"}` |
+| `GET` / `POST /api/mode` | `{"mode": "load" \| "unload" \| "manual" \| "calibrate", "busy"}`; 409 if a run is going or a manual motion runs |
+| `GET /api/status`, `WS /ws` | `Status` as JSON + `now`, `speed`, `operator` |
+| `GET` / `POST /api/speed` | the arm's `speed_scale` ([D-030](decisions.md)) |
+| `GET /stream/decision.mjpg`, `/stream/live.mjpg`, `/snapshot/*.jpg` | the decision frame (ROI, overlay, caption) and the live wrist feed |
+| `POST /api/command` | `{"cmd": "start" \| "pause" \| "resume" \| "step" \| "stop" \| "hold" \| "reset"}`; 409 for all but `hold` outside `load` / `unload` |
+| `GET /api/twin/layout`, `/api/twin/state` | `Twin.layout()` / `.state()` |
+| `GET` / `POST /api/manual` | manual control: named poses, a tour `look_floor → look_cargo → cargo_* → laundry_* → home`, jog, gripper, save a pose into `rig.yaml`, release, clear fault |
+| `GET` / `POST /api/calibrate` | the calibration page: marks on the floor view, clicks, the mount fit, look poses (`look_floor`, `look_cargo`) |
 
-**The admin panel** ([D-031](decisions.md)): one page with tabs on top (Auto, Manual, Calibrate, 3D view), switched without a reload. A mode's tab is also its switch: opening it sets the operator mode (`POST /api/mode`) and stays on the current tab if the mode can't change now (the reason shows as a message); 3D view changes no mode. The bar on every tab also has the arm's speed (`/api/speed`), the connection and Hold (Space / Esc anywhere). A tab opened by its URL in another mode shows a card to switch to it; the Auto tab stays visible in any mode, its run controls replaced by "Switch to Auto". The 3D view is a React component on three.js (npm, bundled), fed by `/api/twin/*` and the meshes in `/twin-assets`; the Auto tab switches its main screen between the decision frame and it. One status stream (`/ws`, polled from `/api/status` while the socket is down); the Manual and Calibrate tabs poll their state every 250 ms while shown.
-
-**Setup modes** (manual and calibrate; `create_app(..., manual=ManualControl, calibrate=CalibrateControl, modes=ModeSwitch)`): the state machine's thread keeps running but gets no commands; the operator moves the arm by hand while watching the wrist camera and the 3D view. `sorter.dashboard.modes.ModeSwitch` changes the mode (`hub.set_mode`, plus: no manual motion may be running, the motors go on when a setup mode starts, `on_change` shows the sim's tape marks in calibrate only) and `guard(*modes)` runs each manual / calibration request with the mode checked and held. `sorter.dashboard.manual.ManualControl` runs one motion at a time in its own thread: named poses (a move to or from a bin goes via `home`), a tour `look_box → look_bg → place_bg → bin_light → bin_dark → bin_colored → home` one pose per press, joint jog, the gripper, and `save` (the current joints become that pose in memory and in `config/rig.yaml`, the rest of the file kept). Hold is the usual `POST /api/command {"cmd": "hold"}`; `release` leaves it without moving. A driver fault shows as a banner with **Clear fault** (`clear_fault`, after a confirmation), which also leaves hold. The Manual tab's controls also work in the calibrate mode (opened by URL).
-
-**Calibrate tab** (calibrate mode, [D-026](decisions.md)): `sorter.dashboard.calibrate.CalibrateControl` runs its motions through the same `ManualControl` (one at a time, same busy / hold rules). The tab is a 4-step wizard (Marks → Click → Calibrate → Check); its **Calibrate** button is the `calibrate` action. (1) **Marks**: `goto_mark` lifts, closes the gripper, goes above the mark and straight down to `HOVER_MM` above it, gripper vertical; the tip's measured position becomes the mark's, kept in `data/calibration_marks.yaml` across restarts (not on the sim, whose marks are drawn at their nominal spots). (2) **Camera mount**: `goto_view` puts the camera over the marks, aimed with the saved mount (the nominal one before the first save), as close as the arm can (3 views, shifted; clicks within `SAME_POSE_RAD` = 0.01 rad of each other are one view, since the measured joints wander a few mrad at a pose) and then finds the marks by itself (`detect`, also an action): `find_squares` (dark, square blobs of the tape's size at their depth) and `identify` (which mark each is, from the 3D distances between them, the mirrored match rejected as it puts the camera under the table) make the clicks of that pose; each manual `click` snaps to the center of the dark tape square within 35 px (`snap`), then takes a fresh frame's depth around it (`deproject`) and the link5 pose; the fit updates with every click; the mark pattern is symmetric about the M1–M6 line, so each view is also tried with M2↔M3, M4↔M5 swapped and the fit that has the camera above the table and looking down from every view wins (a mirrored view flips it under the table; the view's labels are fixed); a fit whose camera is more than 200 mm from the nominal one or whose optical axis is more than 45° off is not saved (the turn about the optical axis is free: the real camera may be mounted any way round), and the views are always aimed with the nominal mount (a one-view fit can lose the marks); `save_mount` writes `hand_eye.yaml` (the sim: `data/hand_eye_sim.yaml`) and sets the live calibration's `T_link5_cam` (the 3D view and the overlay follow). (3) **Look poses**: `compute_look` finds, for the mount in use, the lowest TCP height (60–200 mm, 10 mm steps, stopping where the coverage starts to drop or the arm can't reach) with the camera's axis through the zone center or as close as the arm can put it, the gripper vertical (the image's turn is whatever the arm gives: joint 6 doesn't turn the camera), the whole zone in the image and the camera ≥ 200 mm above it (depth); `goto_look` previews one and measures the image rows the gripper hides (after a save it rewrites the ROI without them); `save_look` writes both poses (`write_pose`) and `views.<zone>.roi` (`write_views`) into `rig.yaml` and uses them at once.
-
-The decision frame is the main panel: the wrist feed moves with the arm, and overlays only match the frame they were computed on. The caption is part of the image for the same reason. Each decision is rendered and encoded once. An optional fixed scene webcam for the audience can be added by block 7 (`dashboard.scene_camera`, not implemented), with no effect on the loop.
+**The front end is not updated yet**: it still has an "Auto" tab and draws the table from the old layout JSON. Updating it (tabs Load / Unload, the 3D view from `parts`) is task A6; B adds its panel on top (B5).
 
 ## Threads and process
 
-One Python process ([D-005](decisions.md)):
+One Python process ([D-005](decisions.md)): camera capture thread (on the sim, its render thread); the arm's 50 Hz control loop inside `rebot_b601.arm.Arm` (on the sim, ticked by the physics thread on simulated time); the physics thread (sim only); the state machine thread; the web server (uvicorn).
 
-- camera capture thread (block 1; in the physics sim, its render thread);
-- arm control loop thread, 50 Hz, inside `rebot_b601.arm.Arm` (block 5). In the physics sim the loop is ticked by the physics thread every 20 ms of simulated time; the kinematic sim driver has none;
-- physics thread (physics sim only): steps MuJoCo at `sim.realtime`;
-- state machine thread (block 6);
-- web server, uvicorn (block 7).
+`python -m sorter run [--sim] [--mode load|unload|manual|calibrate]` wires everything (`sorter/app.py`), starting in `--mode` (default `load`). Ctrl+C → `arm.hold()`, stop the loop, `arm.shutdown()`.
 
-`python -m sorter run [--sim] [--mode auto|manual|calibrate]` wires everything (block 0, `sorter/app.py`) and serves all three operator modes, starting in `--mode`; `python -m sorter manual [--sim]` is `run --mode manual`. With the dashboard on, the real rig without `config/hand_eye.yaml` uses the nominal camera mount (a warning: calibrate before an auto run), and the sim has the tape marks (hidden outside calibrate). Ctrl+C → `arm.hold()`, stop the loop, `arm.shutdown()` (rest pose, then disable).
+## Wiring
 
-## Wiring (block 0)
+`sorter.app.build_system(cfg, sim=False) -> System` creates every component per `backends` (`camera`, `arm`, `calibration`, `box_detector`, `floor_detector`: `real` | `sim`). `sim=True` makes the camera and the arm sim (MuJoCo); the rest run their real code on the rendered frames, except that calibration uses the sim's exact camera mount and the floor detector the render's segmentation (unless `sim.use_sam3`). `System` holds `cfg`, `camera`, `arm`, `calibration`, `box_detector`, `floor_detector`, `observer`, `hub`, `world` (the `PhysicsWorld` or `None`).
 
-`sorter.app.build_system(cfg, sim=False) -> System` creates every component per `backends`. `--sim` (`sim=True`) makes the hardware sim: the camera and the arm. With `sim.engine: physics` (default) the other components keep their real backends and run on the rendered frames; only the calibration comes from the sim camera mount (exact) instead of `hand_eye.yaml`, and the classifier's SAM3 client is replaced by the render's segmentation unless `sim.use_sam3`. With `sim.engine: kinematic` (tests) every backend set to `sim` stays sim. `System` (`sorter.core.system`) holds `cfg`, `camera`, `arm`, `calibration`, `box_detector`, `color_classifier`, `observer`, `hub`, and `world` (the `SimWorld`, or `None` when nothing is simulated).
-
-Entry points each block provides:
-
-| Block | Entry point |
-| --- | --- |
-| 1, 2, 3, 4, 5 | `sorter.<package>.backend.create(cfg: Config) -> <Protocol>`: the real backend. Until the module exists, `backends.<name>: real` fails with a clear error |
-| 6 | `sorter.orchestrator.state_machine.StateMachine(system)` with `run(stop: threading.Event)`, the loop for the state machine thread |
-| 7 | `sorter.dashboard.server.create_app(hub, cfg.dashboard, views=cfg.views, manual=, calibrate=, modes=) -> FastAPI` (`views` gives the ROIs drawn on the decision frame; the rest are the setup modes' controls, left out: auto only) |
-
-Package `__init__.py` files stay empty: `sorter.core.config` imports every block's config model, so an import in an `__init__` can create a cycle. Import driver SDKs inside `backend.create`, so sim runs don't need them.
+Real backends: `sorter.<package>.backend.create(cfg)`. Package `__init__.py` files stay empty. Import driver SDKs inside `backend.create`.
 
 ## Config
 
-YAML, loaded and deep-merged in this order: `config/default.yaml` → `config/rig.yaml` → `config/hand_eye.yaml` → `config/local.yaml` (gitignored, machine overrides). Missing files are skipped, except `default.yaml`. Validated with pydantic by `sorter.core.config.load_config()`: unknown top-level sections are an error.
-
-Each block defines the model for its own section in `src/sorter/<package>/config.py` (e.g. `BoxDetectorConfig` in `sorter/box_detector/config.py`). Block 0 created them as placeholders that accept any key; the owner adds typed fields.
+YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_eye.yaml` → `config/local.yaml` (gitignored). Validated by `sorter.core.config.load_config()`; unknown keys are an error. Each package defines its section's model in `src/sorter/<package>/config.py`.
 
 | Key | Owner | Content |
 | --- | --- | --- |
-| `backends` | 0 | Per component `real` \| `sim`: `camera`, `arm`, `calibration`, `box_detector`, `color_classifier`. Swap stubs one at a time during integration |
-| `sim` | 0 | Simulator world: `engine` (`physics` \| `kinematic`), `realtime` (physics: simulated s per wall s, 0 = as fast as possible), `use_sam3`, `board` (a ChArUco board on the mat), `seed`, `items` (colors in the box), `miss_prob`, `double_prob`, `time_scale` (arm motion time × this; 0 = instant), `vision_s` (sim vision delay), image size, `focal_px`, `camera_mount_mm` (wrist camera in the TCP frame), `item_radius_mm`, `layout` (`edge_x_mm`: the table's back edge; `box`: `center_mm`, `size_mm`, `floor_z_mm`, `wall_mm`; `background`: `center_mm`, `size_mm`; `bins`: `centers_mm.<color>`, `size_mm`, `wall_mm`, `floor_z_mm`) |
-| `camera` | 1 | `serial` (empty = the first D435i), `width`, `height`, `fps`, `warmup_frames`, `lock_exposure`, `exposure_us`, `white_balance_k`, `timeout_s`, `start_attempts` |
-| `views.<zone>.roi` | 1 | Pixel polygon of the zone in its look pose, excluding the gripper fingers (`rig.yaml`) |
-| `calibration` | 2 | `hand_eye` (the transform, from `hand_eye.yaml`); hand-eye tool: `poses`, `tilt_deg`, `shift_mm`; calibration page: `marks_z_mm` (the mat top) |
-| `box_detector` | 3 | `avoid_radius_px`, `wall_margin_mm`, `floor_percentile` / `floor_depth_mm`, `cloth_height_mm`, `min_cloth_px`, `inset_px`, `smooth_px`, `depth_window_px` |
-| `color_classifier` | 4 | `sam` (SAM3 service: `url`, `api_key`, `prompts`, `threshold`, `mask_threshold`, `timeout_s`), class thresholds (`lightness_dark`, `chroma_colored`, `lightness_light`, `confidence_margin`), `erode_px`, `min_area_px`, `max_area_frac`, `overlap_max`, re-grasp (`grasp_inset_px`, `grasp_depth_tol_mm`, `depth_window_px`). The API key goes in `local.yaml` or env `SAM3_API_KEY`, never committed |
-| `arm` | 5 | `dry_run`, `speed_scale` (of `rebot_b601`'s joint speeds, capped at 0.6; the start value, `POST /api/speed` changes it at runtime), `approach`, `safe_z_mm` (recover / shutdown lift), `z_min_mm` (table clearance), `place_release_height_mm`, `bin_release_height_mm` (both used by the layout tool), gripper (`open`, `empty_below`) |
-| `poses` | 5 | Joint angles (rad): `rest`, `home`, `look_box`, `look_bg`, `place_bg`, `bin_light`, `bin_dark`, `bin_colored` (`rig.yaml`; computed for `sim.layout` by `python -m sorter.sim.layout --write`, re-taught on the rig) |
-| `zones.<zone>` | 5 | `workspace_mm` (XY polygon, arm frame), `z_floor_mm`, `grasp_depth_mm`, `approach_mm`, `lift_z_mm` (`rig.yaml`, same tool) |
-| `state_machine` | 6 | `empty_confirmations`, `max_consecutive_failures`, `low_confidence`, `save_runs`, `runs_dir` |
-| `dashboard` | 7 | `host`, `port`, `stream_fps`, `jpeg_quality`, `status_hz` |
+| `backends` | shared | `real` \| `sim` per component |
+| `sim` | shared; `load`: A, `unload`: B | `realtime` (0 = as fast as possible), `seed`, `scenes` (which scene files add to the base), `load` (`socks`, `margin_mm`), `unload` (`cargo`: socks per compartment), `miss_prob`, `use_sam3`, `board`, `marks`, image size, `focal_px`, `camera_mount_mm`, `layout` (`floor_z_mm`, `body`, `deck`, `cargo`, `floor_view`, `laundry`) |
+| `camera` | shared | the D435i's settings |
+| `views.<zone>.roi` | layout tool | pixel polygon of the zone from its look pose (`rig.yaml`) |
+| `calibration` | shared | `hand_eye`, the board tool's `poses`, `tilt_deg`, `shift_mm`, `board_z_mm`; `marks_z_mm` (the floor) |
+| `box_detector` | B | depth thresholds and margins |
+| `color_classifier` | A | the SAM3 service (`sam`, API key in `local.yaml` or `SAM3_API_KEY`) and the color thresholds |
+| `arm` | shared | `speed_scale`, `approach`, `safe_z_mm`, `z_min_mm`, `drop_height_mm`, `keep_out_mm`, `keep_out_margin_mm`, gripper |
+| `poses` | layout tool | `rest`, `home`, `look_floor`, `look_cargo`, `cargo_<color>`, `laundry_<color>` (`rig.yaml`) |
+| `zones.<zone>` | layout tool | `floor`, `cargo`: `workspace_mm`, `z_floor_mm`, `grasp_depth_mm`, `approach_mm`, `lift_z_mm` (`rig.yaml`) |
+| `state_machine` | shared | `empty_confirmations`, `max_consecutive_failures`, `low_confidence`, `save_runs`, `runs_dir` |
+| `dashboard` | shared | `host`, `port`, `stream_fps`, `jpeg_quality`, `status_hz` |
 
-## Recording format (block 0)
+`rig.yaml` is computed: `uv run python -m sorter.sim.layout --write` after any change to `sim.layout` or `arm.drop_height_mm` (it prints the poses and checks every pick and move; 0 problems or it exits 1). The rig's `arm.z_min_mm` and `arm.keep_out_mm` come from there too.
 
-`sorter.core.io.save_observation(path, obs)` / `load_observation(path)`: one `.npz` per observation (`color`, `depth_mm`, intrinsics, `timestamp`, `zone`, `T_base_cam`, `joints`), plus a `.png` of the color image for browsing.
+## Recording format
 
-- **Datasets** (block 1): `data/datasets/<name>/`. Record from the real look poses so the viewpoint matches runtime.
-- **Run logs** (block 6, `sorter.orchestrator.runlog`): one record per sense phase in `data/runs/<run_id>/`: `<cycle:04d>_<phase>.npz` (+ `.png`) and a `.json` with the vision result (without arrays), the resolved `pending`, `avoid`, counters, the summary, and `next_phase`. A phase repeated within a cycle gets a suffix (`0003_sense_box_2`); a re-sense of the same observation writes only a `.json` whose `observation` names the existing `.npz`. `run.json` holds the config at start and the counters and `end_reason` (`done` / `stopped`) at the end. Run logs double as test data for blocks 3 and 4.
-- `data/` is gitignored. A few small fixtures for tests live in `tests/fixtures/`.
+`sorter.core.io.save_observation` / `load_observation`: one `.npz` per observation (+ `.png`). Run logs (`sorter.orchestrator.runlog`): `data/runs/<run_id>/` (the run id ends with the mode), one record per `decide()`: the observation and a `.json` with the result, summary, counters and `next_phase`; `run.json` with the config and the end. `data/` is gitignored.
 
-## Simulator (block 0)
+## Simulator
 
-`--sim` simulates the **hardware only** (camera, arm), so everything above it runs its real code and moving to the rig is `run` without `--sim` ([D-021](decisions.md)). Two engines, `sim.engine`:
+`--sim` simulates the **hardware only** ([D-021](decisions.md)), in MuJoCo (`sorter.sim.physics`); there is no other engine.
 
-**`physics` (default), `sorter.sim.physics`:** a MuJoCo scene built from `sim.layout` and the arm's URDF.
-
-- `PhysicsWorld` steps the scene in its own thread in simulated time (`sim.realtime` × wall time; 0 = as fast as the CPU allows). Items are cloth (2D flex, crumpled rest shape) that fall into the box, fold, hang from the gripper and land where they are dropped. Cloth does not collide with other cloth (it costs ~10× the rest of the step), so a pile interpenetrates.
-- The arm: `rebot_b601.arm.Arm` runs unchanged with `MujocoBackend` in place of the CAN bus (joint setpoints for motors 1–6, torque for motor 7, feedback of position, speed, torque), and its 50 Hz loop runs on the simulated clock. The joints have position servos with gravity compensation (the RobStride position loop); the gripper is a force motor (`GRIPPER_N_PER_NM`, an assumption) with the damping rebot sets on motor 7. Tracking-error, limit and fault checks are the real ones.
-- Grip: when a close command has stalled the fingers on an item that touches both pads, its vertices between the pads are attached to the gripper until an open command (a stand-in for fabric friction, which soft contacts underestimate).
-- `PhysicsCamera` renders the wrist D435i: pinhole at `sim.focal_px` from the `wrist` camera on the `link5` body (`camera_mount()`: `sim.camera_mount_mm` off the TCP with joint 6 at 0, image long side radial), depth with noise growing with distance, no data under 175 mm (the fingers) and on random speckles, its own capture thread. `segment()` returns MuJoCo's segmentation as SAM3-style instances.
-- `sorter.sim.physics.backend.hand_eye(cfg)` is the true `T_link5_cam` of the sim mount; `python -m sorter.calibration.hand_eye --sim` must recover it from views of the rendered board, and the calibration page on `manual --sim` from the tape marks, which `sim.marks` (on in setup mode) draws on the mat.
-- `connect()` puts the items back in the box when none is left in the box or on the mat.
-
-**`kinematic`, `sorter.sim.world` (tests, the color-classifier stats tool):** no physics.
-
-- `SimWorld` holds items as points (position, color, height, location) and the arm's joints over time. The arm is the real `Controller` on `SimDriver`: planned paths play back with `rebot_b601`'s min-jerk timing × `sim.time_scale`. Closing the gripper grabs the highest cloth under the fingertips if the TCP got within 12 mm of its top (misses with `sim.miss_prob`; from the box it drags a second item with `sim.double_prob`); opening it drops what it holds onto whatever is below.
-- `SimCamera` renders sprites straight down from the camera pose (`sorter.sim.scene`). `SimCalibration` is a linear pixel ↔ XY mapping per zone; sim vision (`SimBoxDetector`, `SimColorClassifier`) reads the world directly, after `sim.vision_s`.
-
-Both: `world.looking_at` is the zone whose look pose the joints are at. `python -m sorter.sim.layout [--write]` computes `poses`, `zones` and `views.<zone>.roi` for the layout with the arm's IK and the physics camera, and checks every pick and pose-to-pose move and that nothing lies behind `layout.edge_x_mm` ([D-020](decisions.md), [D-022](decisions.md)).
+- **Scene** (`sorter.sim.physics.model.build(cfg.sim) -> Scene(xml, items)`): the **base** (floor plane, rover chassis and wheels, deck plate, cargo box with dividers, the arm from its URDF with the wrist camera; the calibration board and tape marks when asked), then each scene in `sim.scenes` in order: `sorter.sim.scenes.<name>.scene.add(world, asset, cfg, rng) -> list[ItemSpec]` may add geoms and assets and returns the cloth items to add. `load` (A) scatters `sim.load.socks` over the floor view; `unload` (B) adds the laundry bins and `sim.unload.cargo` socks per compartment. Helpers for scenes: `box`, `tray`, `palette_rgb`, `ItemSpec(color, rgb, pos, yaw, sheet_m, gather)`.
+- **Cloth:** 8 × 8 flex grids with a crumpled rest shape; they don't collide with each other (cost). Cloth is expensive: 3 socks run at ~2.6× real time, 6 at ~1.3×.
+- **Grip:** when a close stalls the fingers on cloth touching both pads, the vertices between them are attached to the gripper until an open (a stand-in for friction). `sim.miss_prob` makes a close catch nothing.
+- `PhysicsWorld`: `step`, `teleport_arm`, `joints`, `tcp`, `looking_at`, `vertices(item)`, `location(item)` → `gripper` / `cargo` + color / `laundry` + color / `floor` / `other`, `at(location, color=None)`.
+- The arm: `rebot_b601.arm.Arm` runs unchanged on `MujocoBackend`; `PhysicsCamera` renders the D435i (depth noise, no depth under 175 mm) and `segment()` gives MuJoCo's segmentation as SAM3-style instances.
+- `sorter.sim.layout` computes the rig (poses, zones, views, keep-out) with the arm's IK and checks it; `sorter.sim.rig` has the sim camera mount.
 
 ## Repo layout
 
 | Path | Owner |
 | --- | --- |
-| `pyproject.toml`, `uv.lock`, `.gitignore`, tooling config | 0 |
-| `src/sorter/core/` (types, protocols, errors, config loader, io, hub, observer, `HubLogHandler`, `System`) | 0 |
-| `src/sorter/app.py`, `src/sorter/__main__.py` (wiring, CLI) | 0 |
-| `src/sorter/sim/` | 0 |
-| `src/sorter/camera/` (drivers, record tool, ROI tool) | 1 |
-| `src/sorter/calibration/` (hand-eye: board tool, tape marks fit; verification tool) | 2 |
-| `src/sorter/box_detector/` | 3 |
-| `src/sorter/color_classifier/` (incl. stats tool) | 4 |
-| `src/sorter/arm/` (kinematics, driver, controller, pose teaching tool) | 5 |
-| `rebot_b601/` (standalone RS driver, IK, planner, MCP server, 3D assets; a path dependency) | 5 |
-| `src/sorter/orchestrator/` (state machine, run log) | 6 |
-| `src/sorter/dashboard/` (server, renderer, mode switch, manual and calibration controls; `web/` is the build, not in git) | 7 |
-| `frontend/` (the React admin panel: Vite + TypeScript) | 7 |
-| `src/sorter/<package>/config.py` | The block that owns the package |
-| `tests/<package>/` | Same as the package |
-| `tests/conftest.py` (shared fixtures) | 0 |
-| `config/default.yaml` | Each block its own section; structure by 0 |
-| `config/rig.yaml` | `views`: 1; `poses`, `zones`: 5 |
-| `config/hand_eye.yaml` | 2 |
-| `docs/demo.md` | 8 |
-| `ros2_ws/` (ROS 2 cloth pick-and-place track, [D-014](decisions.md); see `ros2_ws/README.md`) | ROS track |
+| `src/sorter/core/`, `app.py`, `__main__.py` | shared |
+| `src/sorter/arm/`, `rebot_b601/` | shared |
+| `src/sorter/camera/`, `src/sorter/calibration/` | shared |
+| `src/sorter/sim/config.py`, `rig.py`, `layout.py`, `physics/` (the base scene) | shared |
+| `src/sorter/sim/scenes/load/`, `config/default.yaml` → `sim.load`, `sim.layout.floor_view` | A |
+| `src/sorter/sim/scenes/unload/`, `config/default.yaml` → `sim.unload`, `sim.layout.laundry` | B |
+| `src/sorter/orchestrator/state_machine.py`, `runlog.py` | shared |
+| `src/sorter/orchestrator/load.py`, `src/sorter/floor_detector/`, `src/sorter/color_classifier/` | A |
+| `src/sorter/orchestrator/unload.py`, `src/sorter/box_detector/` | B |
+| `src/sorter/dashboard/`, `frontend/` (the shared parts: A6) | shared; the load panel A, the unload panel B |
+| `config/rig.yaml` | the layout tool (and the setup pages on the rig) |
+| `config/hand_eye.yaml` | calibration |
+| `tests/<package>/` | same as the package; `tests/conftest.py` shared |
+| `ros2_ws/` | the ROS 2 track ([D-014](decisions.md)), outside these stages |
+
+"Shared" means: change it only through the contract rules in [AGENTS.md](../AGENTS.md).

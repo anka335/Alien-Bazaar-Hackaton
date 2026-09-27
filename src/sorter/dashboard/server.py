@@ -36,7 +36,7 @@ from sorter.dashboard.render import PHASE_LABELS, encode_jpeg, placeholder, rend
 WEB_DIR = Path(__file__).parent / "web"  # `npm run build` in frontend/ (not in git)
 BOUNDARY = "frame"
 # the admin panel's tabs: each serves the single page, the front end routes it
-PAGES = ("/", "/auto", "/manual", "/calibrate", "/3d")
+PAGES = ("/", "/load", "/unload", "/manual", "/calibrate", "/3d")
 NOT_BUILT = """<!doctype html><meta charset="utf-8"><title>Sorter</title>
 <body style="font:16px system-ui;margin:3rem;max-width:40rem">
 <h1>The dashboard isn't built</h1>
@@ -79,13 +79,13 @@ def speed_json(speed: SpeedControl | None) -> dict[str, float] | None:
 
 
 class ModeRequest(BaseModel):
-    mode: str  # auto | manual | calibrate
+    mode: str  # load | unload | manual | calibrate
 
 
 def status_json(
     s: Status,
     speed: dict[str, float] | None = None,
-    operator: OperatorMode = OperatorMode.AUTO,
+    operator: OperatorMode = OperatorMode.LOAD,
 ) -> dict[str, Any]:
     """`Status` as JSON, plus `now` (monotonic, same clock as `Event.t`) for event ages,
     `speed` (`speed_json`, null without a speed control) and `operator` (the operator mode)."""
@@ -151,7 +151,7 @@ def create_app(
 ) -> FastAPI:
     """`views` gives the zone ROIs drawn on the decision frame (`cfg.views`). `manual` and
     `calibrate`: the controls of the manual and calibrate modes, switched by `modes` (made
-    from `manual` if not given); without them the dashboard has the auto mode only."""
+    from `manual` if not given); without them the dashboard has the run modes only."""
     app = FastAPI(title="Sorter")
     rois = {z: list(v.roi) for z, v in (views or {}).items()}
     frames = Frames(hub, cfg, rois)

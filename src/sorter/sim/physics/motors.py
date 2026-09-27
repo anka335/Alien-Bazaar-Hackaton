@@ -28,7 +28,6 @@ class MujocoBackend:
         self.world = world
 
     def connect(self, enable: bool) -> Measurement:
-        self.world.reset_if_sorted()
         return self.read()
 
     def enable(self, q_hold: np.ndarray) -> None:

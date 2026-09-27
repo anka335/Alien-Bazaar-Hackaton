@@ -14,19 +14,19 @@ def _obs(T, joints):
         timestamp=12.5,
         seq=7,
     )
-    return Observation(frame, Zone.BOX, T, joints)
+    return Observation(frame, Zone.CARGO, T, joints)
 
 
 def test_roundtrip(tmp_path):
     obs = _obs(np.eye(4) * 2.0, (0.1, 0.2, 0.3, 0.4, 0.5, 0.6))
-    path = save_observation(tmp_path / "sub" / "0001_look_box", obs)
+    path = save_observation(tmp_path / "sub" / "0001_look_cargo", obs)
     assert path.suffix == ".npz" and path.with_suffix(".png").is_file()
     back = load_observation(path)
     assert np.array_equal(back.frame.color, obs.frame.color)
     assert np.array_equal(back.frame.depth_mm, obs.frame.depth_mm)
     assert back.frame.depth_mm.dtype == np.uint16
     assert back.frame.intrinsics == obs.frame.intrinsics
-    assert (back.frame.timestamp, back.frame.seq, back.zone) == (12.5, 7, Zone.BOX)
+    assert (back.frame.timestamp, back.frame.seq, back.zone) == (12.5, 7, Zone.CARGO)
     assert np.array_equal(back.T_base_cam, obs.T_base_cam)
     assert back.joints == obs.joints
 

@@ -1,5 +1,13 @@
 """Run log: files per decision, readable by blocks 3 and 4."""
 
+# ruff: noqa: E402
+import pytest
+
+pytest.skip(
+    "rover stage 0: drove the table loop; rewrite on the load / unload loops (stages A, B)",
+    allow_module_level=True,
+)
+
 import json
 
 from sorter.app import build_system

@@ -1,4 +1,4 @@
-"""ArmController on top of an ArmDriver: named poses, pick / place / drop, hold, recover.
+"""ArmController on top of an ArmDriver: named poses, pick / drop, hold, recover.
 
 Contract: docs/architecture.md → Arm controller. The same controller runs the real arm and the
 simulator; only the driver differs.
@@ -15,16 +15,14 @@ import numpy as np
 from rebot_b601 import config as rc
 
 from sorter.arm import kinematics as kin
-from sorter.arm.config import POSE_NAMES, ArmConfig, ZoneConfig
+from sorter.arm.config import LOOK_POSES, POSE_NAMES, ArmConfig, ZoneConfig
 from sorter.arm.driver import ArmDriver
-from sorter.core.errors import EStopped, TargetRejected
+from sorter.core.errors import ArmError, EStopped, TargetRejected
 from sorter.core.types import ArmPoint, ColorClass, PickResult, Pose, Zone
 
 log = logging.getLogger(__name__)
 
 MIN_SPEED_SCALE = 0.05
-
-_LOOK = {Zone.BOX: "look_box", Zone.BACKGROUND: "look_bg"}
 
 
 def in_polygon(x: float, y: float, poly: Sequence[tuple[float, float]]) -> bool:
@@ -52,8 +50,9 @@ class Controller:
                 f"poses {missing} missing in config (rig.yaml → poses); "
                 "for the sim layout: python -m sorter.sim.layout"
             )
-        if set(zones) != set(Zone):
-            raise ValueError("rig.yaml → zones needs `box` and `background`")
+        if set(zones) != set(LOOK_POSES):
+            names = " and ".join(f"`{z.value}`" for z in LOOK_POSES)
+            raise ValueError(f"rig.yaml → zones needs {names}")
         self.driver = driver
         self.cfg = cfg
         self.poses = {name: np.asarray(poses[name], dtype=float) for name in POSE_NAMES}
@@ -74,9 +73,43 @@ class Controller:
         self.driver.execute(wps, self._speed)
         self._check_held()  # a hold that arrived as the motion ended
 
+    def _plan_joints(self, q0: Sequence[float], q1: Sequence[float]) -> np.ndarray:
+        c = self.cfg
+        return kin.plan_joints(
+            q0,
+            q1,
+            z_min_mm=c.z_min_mm,
+            keep_out=c.keep_out_mm,
+            keep_out_margin_mm=c.keep_out_margin_mm,
+        )
+
+    def _plan_to(
+        self, q0: Sequence[float], xyz_mm: Sequence[float], approach, linear: bool = False
+    ) -> np.ndarray:
+        c = self.cfg
+        return kin.plan_to(
+            q0,
+            xyz_mm,
+            approach,
+            linear=linear,
+            z_min_mm=c.z_min_mm,
+            keep_out=c.keep_out_mm,
+            keep_out_margin_mm=c.keep_out_margin_mm,
+        )
+
     def _go(self, name: str) -> None:
+        """Straight joint move to a named pose; via home if that one would hit something (from
+        rest, say, the gripper sweeps past the base)."""
         self._check_held()
-        wps = kin.plan_joints(self.driver.joints(), self.poses[name], z_min_mm=self.cfg.z_min_mm)
+        try:
+            wps = self._plan_joints(self.driver.joints(), self.poses[name])
+        except ArmError:
+            if "home" in (name, self._at):
+                raise
+            log.info("no straight move to %s: via home", name)
+            self._run(self._plan_joints(self.driver.joints(), self.poses["home"]))
+            self._at = "home"
+            wps = self._plan_joints(self.driver.joints(), self.poses[name])
         self._run(wps)
         self._at = name
 
@@ -91,13 +124,7 @@ class Controller:
         if T[2, 3] >= self.cfg.safe_z_mm - 1:
             return
         try:
-            wps = kin.plan_to(
-                q,
-                (T[0, 3], T[1, 3], self.cfg.safe_z_mm),
-                T[:3, 0],
-                linear=True,
-                z_min_mm=self.cfg.z_min_mm,
-            )
+            wps = self._plan_to(q, (T[0, 3], T[1, 3], self.cfg.safe_z_mm), T[:3, 0], linear=True)
         except TargetRejected as e:
             log.warning("no straight lift from the current pose (%s); moving on", e)
             return
@@ -129,14 +156,22 @@ class Controller:
 
     def look(self, zone: Zone) -> None:
         self._check_held()
-        if self._at != _LOOK[zone]:
-            self._go(_LOOK[zone])
+        if zone not in LOOK_POSES:
+            raise ValueError(f"no look pose for {zone}")
+        if self._at != LOOK_POSES[zone]:
+            self._go(LOOK_POSES[zone])
 
     def plan_pick(
-        self, target: ArmPoint, zone: Zone, q0: Sequence[float] | None = None
+        self,
+        target: ArmPoint,
+        zone: Zone,
+        yaw_rad: float | None = None,
+        q0: Sequence[float] | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Paths of a pick from `q0` (default: where the arm is): to above the target, down,
-        up. TargetRejected if the target is outside the zone workspace or anything fails."""
+        up. `yaw_rad`: the fingers open along this direction (angle from +x in the arm frame;
+        None = as the IK comes). TargetRejected if the target is outside the zone workspace or
+        anything fails."""
         z = self.zones[zone]
         if not in_polygon(target.x, target.y, z.workspace_mm):
             raise TargetRejected(
@@ -145,16 +180,25 @@ class Controller:
         above = (target.x, target.y, target.z + z.approach_mm)
         grasp = (target.x, target.y, max(target.z - z.grasp_depth_mm, z.z_floor_mm))
         lift = (target.x, target.y, max(z.lift_z_mm, above[2]))
-        a, zmin = self.cfg.approach, self.cfg.z_min_mm
+        a = self.cfg.approach
         q0 = self.driver.joints() if q0 is None else q0
-        to_above = kin.plan_to(q0, above, a, z_min_mm=zmin)
-        down = kin.plan_to(to_above[-1], grasp, a, linear=True, z_min_mm=zmin)
-        up = kin.plan_to(down[-1], lift, a, linear=True, z_min_mm=zmin)
+        to_above = self._plan_to(q0, above, a)
+        if yaw_rad is not None:
+            q_above = kin.with_yaw(to_above[-1], yaw_rad)
+            if q_above is None:
+                raise TargetRejected(f"joint 6 can't turn the gripper to {yaw_rad:.2f} rad")
+            try:
+                to_above = self._plan_joints(q0, q_above)
+            except ArmError as e:
+                raise TargetRejected(str(e)) from None
+        down = self._plan_to(to_above[-1], grasp, a, linear=True)
+        up = self._plan_to(down[-1], lift, a, linear=True)
         return to_above, down, up
 
-    def pick(self, target: ArmPoint, zone: Zone) -> PickResult:
+    def pick(self, target: ArmPoint, zone: Zone, yaw_rad: float | None = None) -> PickResult:
         self._check_held()
-        to_above, down, up = self.plan_pick(target, zone)  # a rejection happens with no motion
+        # a rejection happens with no motion
+        to_above, down, up = self.plan_pick(target, zone, yaw_rad)
         self._run(to_above)
         self._gripper(self.cfg.gripper.open)
         self._run(down)
@@ -163,16 +207,18 @@ class Controller:
         log.debug("pick at (%.0f, %.0f): gripper %.2f", target.x, target.y, opening)
         return PickResult(opening, likely_empty=opening < self.cfg.gripper.empty_below)
 
-    def place_on_background(self) -> None:
-        self._go("place_bg")
-        self._gripper(self.cfg.gripper.open)
-
-    def drop_to_bin(self, color: ColorClass) -> None:
-        # via home: a straight joint move from the mat would sweep the gripper through the bin walls
+    def _drop(self, pose: str) -> None:
+        # via home: a straight joint move from a pick would sweep the gripper through walls
         self._go("home")
-        self._go(f"bin_{color.value}")
+        self._go(pose)
         self._gripper(self.cfg.gripper.open)
         self._go("home")  # and back the same way, clear of the walls
+
+    def drop_to_cargo(self, color: ColorClass) -> None:
+        self._drop(f"cargo_{color.value}")
+
+    def drop_to_laundry(self, color: ColorClass) -> None:
+        self._drop(f"laundry_{color.value}")
 
     def ee_pose(self) -> Pose:
         """T_base_link5: the link the camera is fixed to (it doesn't turn with joint 6)."""
@@ -228,22 +274,23 @@ class Controller:
         return self.driver.fault()
 
     def go_to(self, name: str) -> None:
-        """Straight joint move to a named pose. ArmError if the path hits the table or base."""
+        """Straight joint move to a named pose. ArmError if the path hits the floor, the base or a
+        keep-out box."""
         if name not in self.poses:
             raise ValueError(f"unknown pose {name!r}")
         self._go(name)
 
     def move_joints(self, q: Sequence[float]) -> None:
-        """Straight joint move to `q` (rad). ArmError outside the joint limits or the table."""
+        """Straight joint move to `q` (rad). ArmError outside the joint limits, below the floor
+        or into a keep-out box."""
         self._check_held()
-        self._run(kin.plan_joints(self.driver.joints(), q, z_min_mm=self.cfg.z_min_mm))
+        self._run(self._plan_joints(self.driver.joints(), q))
 
     def move_tcp(self, xyz_mm: Sequence[float], *, linear: bool = False) -> None:
         """TCP to `xyz_mm` with the gripper pointing down (the calibration page).
         TargetRejected if IK or the path check fails; nothing moves then."""
         self._check_held()
-        q0 = self.driver.joints()
-        self._run(kin.plan_to(q0, xyz_mm, "down", linear=linear, z_min_mm=self.cfg.z_min_mm))
+        self._run(self._plan_to(self.driver.joints(), xyz_mm, "down", linear=linear))
 
     def lift(self) -> None:
         """Straight up to `safe_z_mm` if lower, keeping the tool orientation. Best effort."""
@@ -279,12 +326,13 @@ class Controller:
         log.warning("arm held")
 
     def recover(self) -> None:
-        """Leave hold: lift, open the gripper above the background, home."""
+        """Leave hold: lift, open the gripper over the floor view (what it holds drops there),
+        home."""
         self._held.clear()
         self.driver.resume()
         self._at = None
         self._lift()
-        self._go("place_bg")
+        self._go("look_floor")
         self._gripper(self.cfg.gripper.open)
         self.home()
         log.info("arm recovered")

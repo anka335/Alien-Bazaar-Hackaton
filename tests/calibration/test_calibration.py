@@ -26,7 +26,7 @@ X = pose(0.1, -0.05, 1.5, (-140, 5, 55))  # flange → camera
 def obs(ee: np.ndarray) -> Observation:
     k = Intrinsics(615, 615, 320, 240, 640, 480)
     f = Frame(np.zeros((480, 640, 3), np.uint8), np.zeros((480, 640), np.uint16), k, 0.0, 0)
-    return Observation(f, Zone.BOX, ee @ X, None)
+    return Observation(f, Zone.CARGO, ee @ X, None)
 
 
 def test_pixel_to_arm_and_back():

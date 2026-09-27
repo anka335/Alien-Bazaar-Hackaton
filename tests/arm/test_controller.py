@@ -1,16 +1,21 @@
-"""The arm controller (block 5) on a recording driver, the committed rig layout, the real
+"""The arm controller (block 5) on a recording driver, the committed rover rig, the real
 driver in dry-run mode."""
+
+import math
 
 import numpy as np
 import pytest
 
 from sorter.arm import kinematics as kin
+from sorter.arm.config import LOOK_POSES
 from sorter.arm.controller import MIN_SPEED_SCALE, Controller, in_polygon
 from sorter.core.config import load_config
-from sorter.core.errors import EStopped, TargetRejected
+from sorter.core.errors import ArmError, EStopped, TargetRejected
 from sorter.core.types import ArmPoint, ColorClass, Zone
-from sorter.sim.layout import check
-from sorter.sim.world import camera_pose
+from sorter.sim.layout import check, zone_surfaces
+from sorter.sim.rig import camera_pose
+
+FLOOR_TARGET = ArmPoint(300, 0, -185)  # a sock on the floor in front of the rover
 
 
 class FakeDriver:
@@ -70,53 +75,70 @@ def cfg():
 
 @pytest.fixture
 def arm(cfg):
-    return Controller(FakeDriver(cfg.poses["look_box"]), cfg.arm, cfg.poses, cfg.zones)
+    return Controller(FakeDriver(cfg.poses["look_floor"]), cfg.arm, cfg.poses, cfg.zones)
 
 
 def tcp_z(q) -> float:
     return float(kin.fk_tcp(q)[2, 3])
 
 
-def test_committed_poses_and_zones_fit_the_layout(cfg):
+def test_committed_rig_fits_the_layout(cfg):
     assert check(cfg) == []  # every pick on the zone grids and every move between poses plans
-    for zone, name in ((Zone.BOX, "look_box"), (Zone.BACKGROUND, "look_bg")):
-        T = camera_pose(cfg.sim, cfg.poses[name])
-        center = getattr(cfg.sim.layout, zone.value).center_mm
-        assert T[:2, 3] == pytest.approx(center, abs=2)  # the camera is over the zone center
+    for zone, (rect, _) in zone_surfaces(cfg.sim).items():
+        T = camera_pose(cfg.sim, cfg.poses[LOOK_POSES[zone]])
+        assert T[:2, 3] == pytest.approx(rect.center_mm, abs=40)  # the camera over the zone
         assert T[2, 2] == pytest.approx(-1, abs=1e-3)  # looking straight down
 
 
 def test_pick_goes_above_down_and_up(arm, cfg):
-    target = ArmPoint(255, 0, 50)
-    result = arm.pick(target, Zone.BOX)
+    result = arm.pick(FLOOR_TARGET, Zone.FLOOR)
     assert not result.likely_empty and result.gripper_opening == 0.3
     above, down, up = arm.driver.paths
-    zone = cfg.zones[Zone.BOX]
-    assert tcp_z(above[-1]) == pytest.approx(50 + zone.approach_mm, abs=1.5)
-    assert tcp_z(down[-1]) == pytest.approx(50 - zone.grasp_depth_mm, abs=1.5)
+    zone = cfg.zones[Zone.FLOOR]
+    z = FLOOR_TARGET.z
+    assert tcp_z(above[-1]) == pytest.approx(z + zone.approach_mm, abs=1.5)
+    assert tcp_z(down[-1]) == pytest.approx(max(z - zone.grasp_depth_mm, zone.z_floor_mm), abs=1.5)
     assert tcp_z(up[-1]) == pytest.approx(zone.lift_z_mm, abs=1.5)
     for q in np.vstack([down, up]):  # straight down and up, gripper vertical
         T = kin.fk_tcp(q)
-        assert T[:2, 3] == pytest.approx((255, 0), abs=2)
+        assert T[:2, 3] == pytest.approx((FLOOR_TARGET.x, FLOOR_TARGET.y), abs=2)
         assert T[2, 0] == pytest.approx(-1, abs=0.01)
     assert arm.driver.gripper_cmds == [cfg.arm.gripper.open, 0.0]
 
 
-def test_grasp_depth_is_clamped_to_the_zone_floor(arm, cfg):
-    arm.pick(ArmPoint(255, 0, 12), Zone.BOX)
-    assert tcp_z(arm.driver.paths[1][-1]) == pytest.approx(cfg.zones[Zone.BOX].z_floor_mm, abs=1.5)
+def test_grasp_stops_above_the_floor(arm, cfg):
+    arm.pick(ArmPoint(300, 0, -195), Zone.FLOOR)
+    z_floor = cfg.zones[Zone.FLOOR].z_floor_mm
+    assert z_floor > cfg.sim.layout.floor_z_mm
+    assert tcp_z(arm.driver.paths[1][-1]) == pytest.approx(z_floor, abs=1.5)
+
+
+@pytest.mark.parametrize("yaw", [0.0, math.pi / 4, math.pi / 2])
+def test_pick_turns_the_fingers_to_the_yaw(arm, yaw):
+    arm.pick(FLOOR_TARGET, Zone.FLOOR, yaw)
+    for q in np.vstack(arm.driver.paths[1:]):  # down and up keep the yaw
+        err = (kin.tool_yaw(q) - yaw + math.pi / 2) % math.pi - math.pi / 2
+        assert abs(err) < math.radians(3)
+
+
+def test_pick_from_a_cargo_compartment(cfg):
+    arm = Controller(FakeDriver(cfg.poses["look_cargo"]), cfg.arm, cfg.poses, cfg.zones)
+    x, y = cfg.sim.layout.cargo.compartment(ColorClass.DARK).center_mm
+    arm.pick(ArmPoint(x, y, cfg.sim.layout.cargo.floor_z_mm + 20), Zone.CARGO, math.pi / 2)
+    assert tcp_z(arm.driver.paths[1][-1]) == pytest.approx(cfg.zones[Zone.CARGO].z_floor_mm, abs=2)
 
 
 def test_empty_gripper_is_reported(cfg):
-    arm = Controller(FakeDriver(cfg.poses["look_bg"], 0.0), cfg.arm, cfg.poses, cfg.zones)
-    assert arm.pick(ArmPoint(180, 210, 25), Zone.BACKGROUND).likely_empty
+    arm = Controller(FakeDriver(cfg.poses["look_floor"], 0.0), cfg.arm, cfg.poses, cfg.zones)
+    assert arm.pick(FLOOR_TARGET, Zone.FLOOR).likely_empty
 
 
 @pytest.mark.parametrize(
     "target, zone",
     [
-        (ArmPoint(180, 210, 25), Zone.BOX),  # the background, but asked for the box
-        (ArmPoint(255, 0, 400), Zone.BOX),  # too high to reach with the gripper down
+        (FLOOR_TARGET, Zone.CARGO),  # the floor, but asked for the cargo box
+        (ArmPoint(300, 0, 400), Zone.FLOOR),  # too high to reach with the gripper down
+        (ArmPoint(40, 0, -185), Zone.FLOOR),  # under the rover
     ],
 )
 def test_rejected_pick_does_not_move(arm, target, zone):
@@ -125,19 +147,39 @@ def test_rejected_pick_does_not_move(arm, target, zone):
     assert arm.driver.paths == [] and arm.driver.gripper_cmds == []
 
 
-def test_place_and_drop_go_to_their_poses_and_open(arm, cfg):
-    arm.place_on_background()
-    assert np.allclose(arm.driver.q, cfg.poses["place_bg"])
-    arm.drop_to_bin(ColorClass.COLORED)
-    assert any(np.allclose(p[-1], cfg.poses["bin_colored"]) for p in arm.driver.paths)
-    assert np.allclose(arm.driver.q, cfg.poses["home"])  # back out of the bin
+def test_no_motion_into_the_rover_or_the_cargo_walls(arm, cfg):
+    lay = cfg.sim.layout
+    # the TCP right into the rover body, next to the arm's base
+    with pytest.raises(TargetRejected, match="keep-out"):
+        arm.move_tcp((60.0, -120.0, -60.0))
+    # down onto a cargo divider
+    rects = [lay.cargo.compartment(c) for c in lay.cargo.compartments]
+    x = (rects[0].bounds()[1] + rects[1].bounds()[0]) / 2
+    with pytest.raises(TargetRejected, match="keep-out"):
+        arm.move_tcp((x, lay.cargo.center_mm[1], 30.0))
+    assert arm.driver.paths == []
+    below = kin.solve((300, 0, lay.floor_z_mm - 30), "down", None, z_min_mm=-1000)
+    assert below is not None
+    with pytest.raises(ArmError, match="below"):  # the gripper through the floor
+        arm.move_joints(below)
+
+
+def test_drops_go_to_their_poses_via_home_and_open(arm, cfg):
+    arm.drop_to_cargo(ColorClass.COLORED)
+    assert any(np.allclose(p[-1], cfg.poses["cargo_colored"]) for p in arm.driver.paths)
+    assert np.allclose(arm.driver.q, cfg.poses["home"])  # back out, clear of the walls
+    arm.drop_to_laundry(ColorClass.LIGHT)
+    assert any(np.allclose(p[-1], cfg.poses["laundry_light"]) for p in arm.driver.paths)
+    assert np.allclose(arm.driver.q, cfg.poses["home"])
     assert arm.driver.gripper_cmds == [cfg.arm.gripper.open] * 2
 
 
 def test_look_is_a_no_op_when_already_there(arm):
-    arm.look(Zone.BACKGROUND)
-    arm.look(Zone.BACKGROUND)
+    arm.look(Zone.CARGO)
+    arm.look(Zone.CARGO)
     assert len(arm.driver.paths) == 1
+    with pytest.raises(ValueError):
+        arm.look(Zone.LAUNDRY)  # drops only, no look pose
 
 
 def test_hold_until_recover(arm, cfg):
@@ -145,8 +187,8 @@ def test_hold_until_recover(arm, cfg):
     with pytest.raises(EStopped):
         arm.home()
     with pytest.raises(EStopped):
-        arm.pick(ArmPoint(255, 0, 50), Zone.BOX)
-    arm.recover()  # lift, open above the background, home
+        arm.pick(FLOOR_TARGET, Zone.FLOOR)
+    arm.recover()  # lift, open over the floor, home
     assert np.allclose(arm.driver.q, cfg.poses["home"])
     assert arm.driver.gripper_cmds == [cfg.arm.gripper.open]
 
@@ -159,16 +201,16 @@ def test_shutdown_rests_before_disabling(arm, cfg):
 
 
 def test_ee_pose_is_link5_the_camera_does_not_turn_with_joint6(arm, cfg):
-    assert np.allclose(arm.ee_pose(), kin.fk_link5(cfg.poses["look_box"]))
-    q = np.array(cfg.poses["look_box"])
+    assert np.allclose(arm.ee_pose(), kin.fk_link5(cfg.poses["look_floor"]))
+    q = np.array(cfg.poses["look_floor"])
     turned = q + [0, 0, 0, 0, 0, 1.0]
     assert np.allclose(kin.fk_link5(turned), kin.fk_link5(q))
     assert np.allclose(kin.fk_link5(q) @ kin.T_LINK5_TCP0, kin.fk_tcp(q), atol=0.1)  # q6 ≈ 0
 
 
 def test_missing_pose_is_a_clear_error(cfg):
-    poses = {k: v for k, v in cfg.poses.items() if k != "place_bg"}
-    with pytest.raises(ValueError, match="place_bg"):
+    poses = {k: v for k, v in cfg.poses.items() if k != "cargo_dark"}
+    with pytest.raises(ValueError, match="cargo_dark"):
         Controller(FakeDriver(np.zeros(6)), cfg.arm, poses, cfg.zones)
 
 
@@ -228,7 +270,7 @@ def test_speed_changes_from_the_next_motion_clamped(arm, cfg):
     assert arm.speed_scale == cfg.arm.speed_scale
     arm.home()
     assert arm.set_speed_scale(0.3) == 0.3
-    arm.go_to("look_bg")
+    arm.go_to("look_cargo")
     assert arm.driver.speeds == [cfg.arm.speed_scale, 0.3]
     assert arm.set_speed_scale(5.0) == arm.max_speed_scale
     assert arm.set_speed_scale(0.0) == MIN_SPEED_SCALE

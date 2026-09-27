@@ -11,7 +11,7 @@ from sorter.calibration.calibration import HandEyeCalibration
 from sorter.sim.physics.camera import PhysicsCamera
 from sorter.sim.physics.motors import MujocoBackend
 from sorter.sim.physics.world import PhysicsWorld
-from sorter.sim.world import camera_mount
+from sorter.sim.rig import camera_mount
 
 if TYPE_CHECKING:
     from sorter.core.config import Config

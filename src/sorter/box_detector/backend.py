@@ -12,5 +12,5 @@ if TYPE_CHECKING:
 
 
 def create(cfg: Config) -> DepthBoxDetector:
-    view = cfg.views.get(Zone.BOX)
+    view = cfg.views.get(Zone.CARGO)
     return DepthBoxDetector(cfg.box_detector, view.roi if view else ())

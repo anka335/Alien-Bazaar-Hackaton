@@ -1,8 +1,9 @@
-"""DepthBoxDetector: grasp point in the box from the depth image (block 3, classic CV + depth).
+"""DepthBoxDetector: grasp point in a box from the depth image (classic CV + depth).
 
-From the fixed `look_box` pose the box floor is at a near-constant depth, so cloth is whatever
-stands higher than the floor. The grasp point is the top of the pile, inside a cloth region,
-at least `wall_margin_mm` inside the box ROI, and away from the failed grasps in `avoid`.
+From a fixed look pose the box floor is at a near-constant depth, so cloth is whatever stands
+higher than the floor (walls and dividers too: give it one compartment as the ROI). The grasp
+point is the top of the pile, inside a cloth region, at least `wall_margin_mm` inside the ROI,
+and away from the failed grasps in `avoid`.
 """
 
 from __future__ import annotations

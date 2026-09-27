@@ -1,5 +1,7 @@
-"""The 3D view's data (`TwinSource`): the table layout, the arm from FK, the sim items.
+"""The 3D view's data (`TwinSource`): the scene's static parts, the arm from FK, the sim items.
 
+The static parts (floor, rover, cargo box, bins, whatever a sim scene adds) are the world
+body's geoms of the MuJoCo model: the simulator's, or on the rig one built from the same config.
 Units in the JSON: link poses and the camera pose are 4x4 row-major in **metres** (three.js
 scene units); everything else is in mm, arm base frame.
 """
@@ -17,14 +19,9 @@ from sorter.core.types import Zone
 if TYPE_CHECKING:
     from sorter.core.config import Config
     from sorter.core.protocols import ArmController, Calibration
-    from sorter.sim.world import SimWorld
+    from sorter.sim.physics.world import PhysicsWorld
 
 log = logging.getLogger(__name__)
-
-
-def _hex(bgr: tuple[int, int, int]) -> str:
-    b, g, r = bgr
-    return f"#{r:02x}{g:02x}{b:02x}"
 
 
 def _flat(T: np.ndarray, scale: float = 1.0) -> list[float]:
@@ -40,28 +37,79 @@ def _cloth_n() -> int:
     return CLOTH_N
 
 
+def static_parts(model) -> list[dict[str, Any]]:
+    """The world body's box / cylinder / plane geoms of a MuJoCo model, for the 3D view."""
+    import mujoco
+
+    types = {
+        int(mujoco.mjtGeom.mjGEOM_BOX): "box",
+        int(mujoco.mjtGeom.mjGEOM_CYLINDER): "cylinder",
+        int(mujoco.mjtGeom.mjGEOM_PLANE): "plane",
+    }
+    out = []
+    for i in range(model.ngeom):
+        kind = types.get(int(model.geom_type[i]))
+        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, i) or ""
+        if model.geom_bodyid[i] != 0 or kind is None or name.startswith("mark_"):
+            continue
+        mat = model.geom_matid[i]
+        rgba = model.mat_rgba[mat] if mat >= 0 else model.geom_rgba[i]
+        if name == "floor":
+            rgba = np.array([0.69, 0.49, 0.30, 1.0])  # the texture's average
+        out.append(
+            {
+                "name": name,
+                "type": kind,
+                "size_mm": [round(float(v) * 1000, 1) for v in model.geom_size[i]],
+                "pos_mm": [round(float(v) * 1000, 1) for v in model.geom_pos[i]],
+                "quat": [round(float(v), 5) for v in model.geom_quat[i]],  # w, x, y, z
+                "color": "#" + "".join(f"{round(float(c) * 255):02x}" for c in rgba[:3]),
+                "opacity": round(float(rgba[3]), 2),
+            }
+        )
+    return out
+
+
 class Twin:
     def __init__(
         self,
         arm: ArmController,
         calibration: Calibration,
         cfg: Config,
-        world: SimWorld | None = None,
+        world: PhysicsWorld | None = None,
     ):
         self.arm, self.calibration, self.cfg, self.world = arm, calibration, cfg, world
+        self._parts: list[dict[str, Any]] | None = None
+
+    def _static(self) -> list[dict[str, Any]]:
+        if self._parts is None:
+            if self.world is not None:
+                model = self.world.model
+            else:  # the rig: the same scene, built from the config
+                import mujoco
+
+                from sorter.sim.physics.model import build
+
+                model = mujoco.MjModel.from_xml_string(build(self.cfg.sim).xml)
+            self._parts = static_parts(model)
+        return self._parts
 
     def layout(self) -> dict[str, Any]:
         sim = self.cfg.sim
         return {
             "simulated": self.world is not None,
-            "table": sim.layout.model_dump(mode="json"),
+            "parts": self._static(),
+            "floor_z_mm": sim.layout.floor_z_mm,
             "zones": {
-                z.value: [list(p) for p in zc.workspace_mm] for z, zc in self.cfg.zones.items()
+                z.value: {
+                    "polygon": [list(p) for p in zc.workspace_mm],
+                    "z_mm": zc.z_floor_mm,
+                }
+                for z, zc in self.cfg.zones.items()
             },
             "camera": {"width": sim.width, "height": sim.height, "focal_px": sim.focal_px},
-            "item_radius_mm": sim.item_radius_mm,
-            # physics: every item is a cloth grid of cloth_n x cloth_n vertices (sent in `state`)
-            "cloth_n": _cloth_n() if hasattr(self.world, "vertices") else None,
+            # every item is a cloth grid of cloth_n x cloth_n vertices (sent in `state`)
+            "cloth_n": _cloth_n(),
         }
 
     def state(self) -> dict[str, Any]:
@@ -85,36 +133,21 @@ class Twin:
             "items": [],
         }
         w = self.world
-        if w is not None and hasattr(w, "vertices"):  # physics: the cloth itself
+        if w is not None:  # the cloth itself
             looking = w.looking_at
             out["looking_at"] = looking.value if isinstance(looking, Zone) else None
             for it in w.items:
                 v = w.vertices(it.id)
-                loc = w.location(it.id)[0]
+                loc, color = w.location(it.id)
                 out["items"].append(
                     {
                         "id": it.id,
                         "color": "#" + "".join(f"{round(c * 255):02x}" for c in it.rgb),
                         "class": it.color.value,
                         "location": loc,
+                        "in": color.value if color else None,  # the compartment / bin
                         "xyz": [round(float(c), 1) for c in v.mean(axis=0)],
                         "vertices": [round(float(c), 1) for c in v.ravel()],
                     }
                 )
-        elif w is not None:
-            with w.lock:
-                looking = w.looking_at  # kinematic world
-                out["looking_at"] = looking.value if isinstance(looking, Zone) else None
-                for it in w.items:
-                    held = it.location == "gripper"
-                    x, y, z = (*tcp[:2], tcp[2]) if held else (it.x, it.y, w.top_z(it))
-                    out["items"].append(
-                        {
-                            "id": it.id,
-                            "color": _hex(it.bgr),
-                            "class": it.color.value,
-                            "location": it.location,
-                            "xyz": [round(float(x), 1), round(float(y), 1), round(float(z), 1)],
-                        }
-                    )
         return out
