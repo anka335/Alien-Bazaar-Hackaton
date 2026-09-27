@@ -6,6 +6,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 
 const MM = 0.001;
+// item moves smaller than this are not worth a redraw (the sim cloth jitters ~1.5 mm while it rests)
+const MOVE_EPS = 2 * MM;
 const BIN_COLORS: Record<string, number> = { light: 0xeceeee, dark: 0x3a3c3e, colored: 0x248caa };
 export const BIN_NAMES: Record<string, string> = { light: "Light", dark: "Dark", colored: "Colored" };
 
@@ -44,6 +46,7 @@ interface ItemEntry {
   mesh: THREE.Mesh;
   target: THREE.Vector3 | null;
   location: string | null;
+  drawn?: boolean; // cloth: vertices set at least once
 }
 
 const mat = (color: THREE.ColorRepresentation, extra: THREE.MeshStandardMaterialParameters = {}) =>
@@ -92,22 +95,30 @@ export class TwinScene {
   private resizeObserver: ResizeObserver;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private disposed = false;
-  private clock = new THREE.Clock();
+  private frameTimer = new THREE.Timer();
+  // Render on demand: ~730k CAD triangles, drawn twice with shadows, at 60 fps overloads an
+  // integrated GPU (and crashes VS Code's browser pane). A frame is drawn only when this is set.
+  private dirty = true;
+  private lastPose = "";
+  private invalidate = (): void => {
+    this.dirty = true;
+  };
 
   constructor(
     private container: HTMLElement,
     private onBadge: (b: Badge) => void,
   ) {
     const r = this.renderer;
-    r.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    r.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
     r.shadowMap.enabled = true;
-    r.shadowMap.type = THREE.PCFSoftShadowMap;
+    r.shadowMap.type = THREE.PCFShadowMap;
     container.prepend(r.domElement);
 
     this.scene.background = new THREE.Color(0x121a24);
     this.scene.fog = new THREE.Fog(0x121a24, 2.5, 6);
     this.controls = new OrbitControls(this.camera, r.domElement);
     this.controls.enableDamping = true;
+    this.controls.addEventListener("change", this.invalidate);
     this.resetView();
     r.domElement.addEventListener("dblclick", this.resetView);
 
@@ -147,11 +158,18 @@ export class TwinScene {
     this.resizeObserver.observe(container);
     this.resize();
 
-    // cloth that was dropped falls into place
-    r.setAnimationLoop(() => {
-      const k = 1 - Math.exp(-this.clock.getDelta() * 12);
-      for (const e of this.items.values()) if (e.target) e.mesh.position.lerp(e.target, k);
-      this.controls.update();
+    r.setAnimationLoop((t) => {
+      this.frameTimer.update(t);
+      // cloth that was dropped falls into place
+      const k = 1 - Math.exp(-this.frameTimer.getDelta() * 12);
+      for (const e of this.items.values()) {
+        if (!e.target || e.mesh.position.distanceToSquared(e.target) < 1e-10) continue;
+        e.mesh.position.lerp(e.target, k);
+        this.dirty = true;
+      }
+      this.controls.update(); // damping: fires "change" while the view still moves
+      if (!this.dirty) return;
+      this.dirty = false;
       r.render(this.scene, this.camera);
     });
     this.onBadge({ text: "loading", state: "" });
@@ -163,6 +181,7 @@ export class TwinScene {
     clearTimeout(this.timer);
     this.resizeObserver.disconnect();
     this.renderer.setAnimationLoop(null);
+    this.controls.removeEventListener("change", this.invalidate);
     this.controls.dispose();
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -174,6 +193,7 @@ export class TwinScene {
       }
     });
     this.renderer.dispose();
+    this.renderer.forceContextLoss(); // free the GPU now, not at GC: a context per tab visit piles up
     this.renderer.domElement.remove();
   }
 
@@ -190,6 +210,7 @@ export class TwinScene {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.dirty = true;
   }
 
   private badgeReady(): void {
@@ -207,6 +228,7 @@ export class TwinScene {
       this.itemRadius = L.item_radius_mm * MM;
       this.clothN = L.cloth_n;
       this.buildTable(L);
+      this.dirty = true;
     } catch {
       this.onBadge({ text: "no layout", state: "error" });
     }
@@ -352,6 +374,7 @@ export class TwinScene {
             m.rotation.set(p.rpy[0], p.rpy[1], p.rpy[2], "ZYX"); // URDF rpy = Rz·Ry·Rx
             m.castShadow = m.receiveShadow = true;
             g.add(m);
+            this.dirty = true;
             this.meshesLoaded++;
             this.badgeReady();
           },
@@ -395,10 +418,14 @@ export class TwinScene {
         this.items.set(it.id, e);
       }
       const pos = e.mesh.geometry.attributes.position as THREE.BufferAttribute;
-      for (let i = 0; i < verts.length; i++) (pos.array as Float32Array)[i] = verts[i] * MM;
+      const a = pos.array as Float32Array;
+      e.location = it.location;
+      if (e.drawn && verts.every((v, i) => Math.abs(v * MM - a[i]) < MOVE_EPS)) continue;
+      for (let i = 0; i < verts.length; i++) a[i] = verts[i] * MM;
       pos.needsUpdate = true;
       e.mesh.geometry.computeVertexNormals();
-      e.location = it.location;
+      e.drawn = true;
+      this.dirty = true;
     }
   }
 
@@ -419,18 +446,18 @@ export class TwinScene {
       const [x, y, z] = it.xyz.map((v) => v * MM);
       const held = it.location === "gripper";
       const r = this.itemRadius;
-      if (held) {
-        e.mesh.scale.set(r * 0.55, r * 0.55, r * 1.1); // hanging from the fingers
-        target.set(x, y, z - r * 0.6);
-      } else {
-        e.mesh.scale.set(r * 1.2, r * 0.95, 0.011);
-        target.set(x, y, z - 0.009);
-      }
+      if (held) e.mesh.scale.set(r * 0.55, r * 0.55, r * 1.1); // hanging from the fingers
+      else e.mesh.scale.set(r * 1.2, r * 0.95, 0.011);
+      const next = new THREE.Vector3(x, y, held ? z - r * 0.6 : z - 0.009);
+      const moved = e.location !== it.location || target.distanceTo(next) > MOVE_EPS;
+      if (moved) target.copy(next); // the loop's lerp redraws while it moves
       if (held || e.location === null) e.mesh.position.copy(target); // grabbed: follows the TCP exactly
+      if (e.location !== it.location) this.dirty = true;
       e.location = it.location;
     }
     for (const [id, e] of this.items) {
       if (!seen.has(id)) {
+        this.dirty = true;
         this.world.remove(e.mesh);
         e.mesh.geometry.dispose();
         this.items.delete(id);
@@ -477,6 +504,11 @@ export class TwinScene {
   }
 
   private applyState(S: TwinState) {
+    const pose = JSON.stringify([S.links, S.camera]);
+    if (pose !== this.lastPose) {
+      this.lastPose = pose;
+      this.dirty = true;
+    }
     for (const [name, m] of Object.entries(S.links)) {
       const g = this.links[name];
       if (!g) continue;

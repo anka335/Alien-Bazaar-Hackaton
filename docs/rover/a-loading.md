@@ -73,6 +73,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 
 - The front end (`frontend/`) still has the table's "Auto" tab and 3D table. Update the shared parts (`api.ts` modes, `TopBar` tabs `/load`, `/unload`, the 3D view drawing `parts` generically, the phases), then the load panel. Tell B when the shared part is merged: B's panel builds on it.
 - Rewrite the skipped `tests/dashboard/test_server.py` and `test_calibrate.py` (calibration now on the floor view).
+- Keep the 3D view rendering on demand. The meshes are ~730k triangles, drawn twice with shadows. Drawn every frame, they overloaded an integrated GPU and crashed VS Code's browser pane, so `twin/scene.ts` draws only when the pose, the view or an item changes (moves under 2 mm are skipped; the sim cloth jitters ~1.5 mm at rest), and it frees its WebGL context on unmount. Set `dirty` for anything new that changes the picture.
 
 ### A7: Benchmark
 
