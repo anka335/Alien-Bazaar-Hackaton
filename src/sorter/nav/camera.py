@@ -197,3 +197,42 @@ def colorize_depth(depth_mm: np.ndarray, max_m: float = 5.0) -> np.ndarray:
     img = img.copy()
     img[depth_mm == 0] = 0
     return img
+
+
+def fit_floor(frames: list[Frame], max_m: float = 3.0) -> tuple[float, float, float, int] | None:
+    """The floor plane in the depth of `frames` (lower image half, RANSAC then least squares):
+    (camera height above it m, pitch down deg, roll deg, inlier count), None if too few points.
+    The camera's mount can be read off the real floor this way (`hw-check`)."""
+    pts = []
+    for f in frames:
+        z = f.depth_mm.astype(np.float32) / 1000
+        h, w = z.shape
+        vv, uu = np.mgrid[0:h, 0:w]
+        m = (z > 0.2) & (z < max_m) & (vv > h * 0.55)
+        pts.append(
+            np.stack([(uu[m] - f.K.cx) / f.K.fx * z[m], (vv[m] - f.K.cy) / f.K.fy * z[m], z[m]], 1)
+        )
+    P = np.concatenate(pts) if pts else np.zeros((0, 3))
+    if len(P) < 500:
+        return None
+    rng = np.random.default_rng(0)
+    best = None
+    for _ in range(300):
+        a, b, c = P[rng.choice(len(P), 3, replace=False)]
+        n = np.cross(b - a, c - a)
+        if np.linalg.norm(n) < 1e-9:
+            continue
+        n /= np.linalg.norm(n)
+        cnt = int((np.abs((P - a) @ n) < 0.02).sum())
+        if best is None or cnt > best[0]:
+            best = (cnt, n, a)
+    cnt, n, a = best
+    Q = P[np.abs((P - a) @ n) < 0.02]
+    c = Q.mean(0)
+    n = np.linalg.svd(Q - c, full_matrices=False)[2][2]
+    if n[1] > 0:  # the floor's normal points up, i.e. toward the camera's -y
+        n = -n
+    height = abs(float(n @ c))
+    pitch = math.degrees(math.asin(float(-n[2])))
+    roll = math.degrees(math.atan2(float(n[0]), float(-n[1])))
+    return height, pitch, roll, len(Q)

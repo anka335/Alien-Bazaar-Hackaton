@@ -331,19 +331,27 @@ def cmd_hw_check(args) -> None:
                 str(out / "hw_depth.png"),
                 cv2.cvtColor(colorize_depth(f.depth_mm), cv2.COLOR_RGB2BGR),
             )
-            fl = f.floor_point(f.K.cx, f.K.height * 0.85)
-            z = f.depth_at(f.K.cx, f.K.height * 0.85)
-            print(
-                f"camera OK: {f.rgb.shape[1]}x{f.rgb.shape[0]}, fx {f.K.fx:.1f}, "
-                f"depth valid {valid:.0%}; frames in {out}/hw_*.png"
-            )
-            if fl is not None and z is not None:
-                pd = f.point(f.K.cx, f.K.height * 0.85, z)
+            from sorter.nav.camera import fit_floor
+            from sorter.nav.model import BASE_Z
+
+            frames = [f] + [cam.capture() for _ in range(4)]
+            fit = fit_floor(frames)
+            h_cfg = BASE_Z + cfg.camera.mount_xyz_m[2]
+            if fit is None:
+                print("  floor check: too little floor in the depth (aim at the floor, more light)")
+            else:
+                h, pitch, roll, n = fit
                 print(
-                    f"  floor check (image bottom-center): depth says x {pd[0]:.2f} m z "
-                    f"{pd[2]:+.3f} m, the mount says x {fl[0]:.2f} m. A z far from 0 or x "
-                    "apart by > 5 cm: fix nav.camera.mount_xyz_m / pitch_deg"
+                    f"  floor check ({n} floor points): the camera is {h:.3f} m above the floor, "
+                    f"{pitch:.1f} deg down, roll {roll:+.1f} deg; the config says "
+                    f"{h_cfg:.3f} m, {cfg.camera.pitch_deg:.1f} deg"
                 )
+                if abs(h - h_cfg) > 0.02 or abs(pitch - cfg.camera.pitch_deg) > 2:
+                    print(
+                        f"  -> set nav.camera.mount_xyz_m z = {h - BASE_Z:+.3f} and pitch_deg = "
+                        f"{pitch:.1f} (config/local.yaml); x = the camera ahead of the rover's "
+                        "center (measure it)"
+                    )
             if valid < 0.2:
                 print("  little depth: is the floor plain (passive stereo needs texture)?")
         except Exception as e:  # noqa: BLE001 - a hardware check reports, never crashes
