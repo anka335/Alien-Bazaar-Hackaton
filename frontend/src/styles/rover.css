@@ -74,3 +74,27 @@
 }
 
 .real-badge { padding: 0 0.5em; border-radius: 6px; background: var(--red); color: #fff; }
+
+/* the command panel: one card per command */
+.nav-commands h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.nav-command-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--gap); }
+.nav-command {
+  display: grid;
+  gap: 0.35rem;
+  align-content: start;
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius);
+  background: var(--enamel-hi);
+  border: 1px solid var(--line);
+}
+.nav-command header { display: flex; justify-content: space-between; align-items: center; }
+.nav-command code { font-size: 1rem; font-weight: 600; }
+.nav-command label { display: grid; grid-template-columns: 1fr 7rem; align-items: center; gap: 0.4rem; color: var(--muted); font-size: 0.9rem; }
+.nav-command input[type="text"], .nav-command select { width: 100%; }
+.nav-command button { padding: 0.3rem 1rem; border-radius: 999px; border: 1px solid var(--line); background: var(--water); color: #fff; cursor: pointer; font-weight: 600; }
+.nav-command button:disabled { opacity: 0.45; cursor: default; }
+.nav-command button.stop { background: var(--red); border-color: var(--red-deep); }
+.nav-command .doc { margin: 0; color: var(--muted); font-size: 0.8rem; line-height: 1.3; }
+.nav-command .hint { margin: 0; color: var(--amber); font-size: 0.8rem; }
+.nav-command .last { margin: 0; font-size: 0.8rem; color: var(--ink); border-top: 1px solid var(--line); padding-top: 0.3rem; }
+.nav-command .last.warn { color: var(--red-deep); }

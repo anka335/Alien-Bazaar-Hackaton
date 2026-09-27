@@ -76,3 +76,14 @@ def test_nudge_takes_a_step_size():
     res = ep.rover.nudge("right", 15)
     assert abs(res.turned_deg + 15) < 1.5
     ep.close()
+
+
+def test_the_panel_lists_every_command_with_its_parameters():
+    from sorter.nav.commands import Rover
+    from sorter.nav.server import command_specs
+
+    specs = {c["name"]: c for c in command_specs()}
+    assert set(specs) == set(Rover.COMMANDS)
+    gp = {p["name"]: p for p in specs["go_to_pixel"]["params"]}
+    assert gp["u"]["required"] and gp["snap"]["type"] == "bool" and gp["far_m"]["default"] == 1.5
+    assert specs["nudge"]["params"][0]["type"] == "str"

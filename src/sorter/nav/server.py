@@ -116,8 +116,12 @@ class NavLive:
                     x, y, yaw = ep.sim.true_pose()
                     sx, sy = score.sock_x_m, score.sock_y_m
                     out |= {
-                        "truth": {"x": x, "y": y, "yaw_deg": math.degrees(yaw),
-                                  "sock_rover": [sx, sy]},
+                        "truth": {
+                            "x": x,
+                            "y": y,
+                            "yaw_deg": math.degrees(yaw),
+                            "sock_rover": [sx, sy],
+                        },
                         "score": score.summary(),
                     }
                 out |= {
@@ -299,9 +303,41 @@ class NavLive:
             self.jpeg_seq += 1
 
 
+def command_specs() -> list[dict]:
+    import inspect
+
+    out = []
+    for name in Rover.COMMANDS:
+        fn = getattr(Rover, name)
+        params = []
+        for pn, prm in inspect.signature(fn).parameters.items():
+            if pn == "self":
+                continue
+            ann = str(prm.annotation)
+            kind = "bool" if "bool" in ann else "str" if "str" in ann else "number"
+            default = None if prm.default is inspect.Parameter.empty else prm.default
+            if isinstance(default, float) and math.isinf(default):
+                default = None
+            params.append(
+                {
+                    "name": pn,
+                    "type": kind,
+                    "default": default,
+                    "required": prm.default is inspect.Parameter.empty,
+                }
+            )
+        out.append({"name": name, "params": params, "doc": " ".join((fn.__doc__ or "").split())})
+    return out
+
+
 def router(live_factory) -> APIRouter:
     """The /api/nav routes; `live_factory()` gives the NavLive (made on first use)."""
     r = APIRouter(prefix="/api/nav")
+
+    @r.get("/commands")
+    def commands() -> list[dict]:
+        """Every command with its parameters (name, default, type) and its doc: the panel's form."""
+        return command_specs()
 
     @r.get("/state")
     def state() -> dict:

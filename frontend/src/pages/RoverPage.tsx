@@ -2,6 +2,7 @@
 // screen: click a pixel, then Face / Go to it. Chase and overview are debug views (ground truth).
 import { useEffect, useRef, useState } from "react";
 import { getJSON, postJSON } from "../api";
+import { NavCommands } from "../components/NavCommands";
 
 interface NavResult {
   command: string;
@@ -226,6 +227,13 @@ export function RoverPage(): React.JSX.Element {
       </section>
 
       {(err || s?.error) && <p className="rover-error">{err ?? s?.error}</p>}
+
+      <NavCommands
+        busy={busy}
+        pixel={pixel}
+        log={s?.log ?? []}
+        run={(name, args) => (name === "stop" && busy ? send("/api/nav/stop", {}) : cmd(name, args))}
+      />
 
       <section className="rover-log">
         <table>

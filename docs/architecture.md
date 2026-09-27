@@ -282,6 +282,7 @@ The Rover tab talks to `sorter.nav.server` (mounted by `create_app(..., nav=)`, 
 
 | Route | What |
 | --- | --- |
+| `GET /api/nav/commands` | every command with its parameters (name, type, default, required) and doc, from the signatures: the tab's command panel |
 | `GET /api/nav/state` | episode, busy, last results, detections, odometry, ground truth (debug), score |
 | `GET /api/nav/view/{rgb,depth,chase,overview}.jpg`, `/api/nav/stream/{…}.mjpg` | the OAK-D's RGB (goal zone drawn) and depth; chase and overview are debug views |
 | `POST /api/nav/reset` `{scenario, seed, overrides}` | a new episode (with `serve --real`: reconnect the real rover) |
