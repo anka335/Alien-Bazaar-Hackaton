@@ -30,11 +30,12 @@ COLORS = list(ColorClass)
 
 
 def unload_config(overrides: dict[str, Any] | None = None):
-    """The committed config (the rover's layout and rig) with only the unload scene, and
-    `overrides`."""
+    """The committed config (the rover's layout and rig) with only the unload scene, no cloth on
+    cloth collisions (a pile with them runs ~5x slower, ~0.05x real time), and `overrides`."""
     from sorter.core.config import deep_merge, load_config
 
-    return load_config(overrides=deep_merge({"sim": {"scenes": ["unload"]}}, overrides or {}))
+    base = {"sim": {"scenes": ["unload"], "cloth_collisions": False}}
+    return load_config(overrides=deep_merge(base, overrides or {}))
 
 
 @dataclass

@@ -38,7 +38,10 @@ MAX_PUT_BACKS = 6  # in a row before each more counts as a failure
 RELOCATE_MM = 20.0  # a bin found this far from where the look was centered: look again there
 DROP_IN_MM = 20.0  # the TCP this far below the bin's rim to let go (the bin is 140 mm inside)
 DROP_ABOVE_MM = 90.0  # over the rim before going down to the drop height (the sock hangs)
-LANDED_MM3 = 3000.0  # cloth "volume" (mm·px) a sock adds to a bin, at least
+# the depth over an empty bin floor is off by up to ~5 mm (sim noise, like the D435i's): only
+# what stands higher counts as cloth; a sock lying in a bin stands 10–17 mm
+CLOTH_ABOVE_MM = 6.0
+LANDED_MM = 0.3  # the mean cloth height over the bin floor a sock adds, at least
 BIN_FLOOR_MM = 5.0  # the bin's inside floor above the floor
 
 
@@ -48,7 +51,7 @@ class Bin:
     yaw: float
     look: np.ndarray  # joints of the look pose centered on it
     found: bool  # seen (else: the layout's place)
-    cloth: float = 0.0  # cloth seen in it at the last look (mm·px)
+    cloth: float = 0.0  # cloth seen in it at the last look (mean height over its floor, mm)
 
 
 class UnloadLoop(Loop):
@@ -98,8 +101,9 @@ class UnloadLoop(Loop):
         from sorter.sim.layout import look_pose
 
         cfg = self.s.cfg
-        try:
-            return look_pose(cfg.sim, cfg.arm, center, cfg.sim.layout.floor_z_mm)
+        try:  # one a move from home reaches: else the IK may bend the tool into the base column
+            home = cfg.poses["home"]
+            return look_pose(cfg.sim, cfg.arm, center, cfg.sim.layout.floor_z_mm, home=home)
         except SystemExit as e:  # the layout tool's way to say "none"
             raise SorterError(str(e)) from None
 
@@ -186,7 +190,8 @@ class UnloadLoop(Loop):
         return out
 
     def _cloth_in(self, obs: Observation, b: Bin) -> float:
-        """Cloth inside bin `b` (the sum of its height over the bin floor, mm·px)."""
+        """Cloth inside bin `b`: its height over the bin floor where it stands above the depth
+        noise, averaged over the whole floor in view (mm; the same for any look distance)."""
         lay = self.s.cfg.sim.layout
         bins = lay.laundry
         p = points(obs)
@@ -196,8 +201,10 @@ class UnloadLoop(Loop):
         half = bins.size_mm / 2 - bins.wall_t_mm - 8.0  # off the walls
         h = p[..., 2] - (lay.floor_z_mm + BIN_FLOOR_MM)
         with np.errstate(invalid="ignore"):
-            inside = (np.abs(u) < half) & (np.abs(v) < half) & (h > 3) & (h < bins.height_mm + 60)
-        return float(np.nansum(np.where(inside, h, 0.0)))
+            floor = (np.abs(u) < half) & (np.abs(v) < half) & np.isfinite(h)
+            cloth = floor & (h > CLOTH_ABOVE_MM) & (h < bins.height_mm + 60)
+        n = int(floor.sum())
+        return float(np.where(cloth, h, 0.0).sum() / n) if n else 0.0
 
     # --- the phases ---
 
@@ -386,13 +393,13 @@ class UnloadLoop(Loop):
         grew = cloth - b.cloth
         b.cloth = cloth
         self.put_backs = 0
-        if grew >= LANDED_MM3:
+        if grew >= LANDED_MM:
             sm.counters[color] += 1
             sm.failures = 0
-            summary = f"{color} sock landed in its bin (+{grew:.0f})"
+            summary = f"{color} sock landed in its bin (+{grew:.2f} mm)"
         else:
             sm.failures += 1
-            summary = f"{color} sock not seen in its bin (+{grew:.0f})"
+            summary = f"{color} sock not seen in its bin (+{grew:.2f} mm)"
             log.warning(summary)
         self._publish(obs, None, Overlay(text=[summary]), summary)
         self.next_obs = box_obs

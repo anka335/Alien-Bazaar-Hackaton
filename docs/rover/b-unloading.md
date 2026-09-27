@@ -44,11 +44,12 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 
 ### B2: Detectors
 
-- Known sim gaps that show up here: the fingers may pinch the sock under the target (the second look into the box tells which one went) and drag a neighboring sock out of the box. `sim.cloth_collisions` (on by default) makes the pile stack instead of pass through itself, ~5× slower; the benchmark in the *Log* ran without it.
+- Known sim gaps that show up here: the fingers may pinch the sock under the target (the second look into the box tells which one went) and drag a neighboring sock out of the box. `sim.cloth_collisions` (on by default) makes the pile stack instead of pass through itself, but a 6-sock pile then runs at ~0.05× real time (without: ~0.25×; the solver of ~1150 cloth DOF is ~80 % of a step), so the demo and the benchmark (`unload_config`) turn it off; with it on, the scene starts the socks 45 mm apart (at 6 mm they start tangled and fly out of the box).
 
 ### B3: Pick and drop with verification
 
 - The held sock's color comes from the box, lit from above: hanging from the gripper it is seen from the side, in shade, and light socks look dark there.
+- A drop counts when the look into the bin sees its cloth grow by ≥ 0.3 mm of mean height over the bin floor, counting only what stands > 6 mm above it (the depth over an empty floor is off by up to ~5 mm; a sock lying there stands 10–17 mm).
 
 ### B4: Unload loop
 
@@ -88,3 +89,4 @@ B0–B6 done on the sim.
 - 2026-09-27: the loop kept putting socks back: the sim's stiff cloth stayed bunched at the fingers, below the camera's view from `show_held` (it sees ≥ 55 mm below them), and the box's "one sock gone" failed on a pile that settles anew. Fixed by limp socks in the unload scene and the box's best match as the fallback color ([D-044](../decisions.md)). Also fixed the dashboard's `/` crash (the front end still had the `auto` mode).
 - 2026-09-27: on the measured rover (A's layout merged): the station moved into the committed `sim.layout.laundry` (in front of the rover, [D-043](../decisions.md)); `sorter.sim.layout` computes the cargo pick zone (corners cut by 45 mm for the bigger box) and `show_held` into `rig.yaml`, so `run --mode unload` runs on the rig without an overlay; `unload.rover` / `REAL_ROVER` removed. Not benchmarked on the new layout yet.
 - 2026-09-27: the cargo box moved to the arm's right ([D-045](../decisions.md)): `sim.layout.cargo.center_mm` (−50, −200); `rig.yaml` recomputed (look_cargo, cargo_*, scan poses, both zones, views, keep-out changed). Rebase and rerun your layout-dependent tests.
+- 2026-09-27: on the box on the right: the bins' look poses are the ones a move from `home` reaches (else the IK bent the tool into the base column and every run stopped at `look_cargo`); the drop check counts cloth above the depth noise (it missed most drops); the demo and the benchmark run without cloth-on-cloth collisions (the pile flew apart: the socks started tangled). Bench, 6 × 3 socks: 72 % in the right bin, 0 in a wrong one, 5 of 18 elsewhere (a missed grasp drags the sock out of the box: 14 of 32 picks took nothing and went to a bin empty), bins found to ≤ 1.8 mm, ~60 s of sim per sock.

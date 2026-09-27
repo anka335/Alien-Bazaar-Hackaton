@@ -22,10 +22,12 @@ BIN_RGBA = {
     ColorClass.COLORED: "0.14 0.55 0.67 1",
 }
 Place = tuple[float, float, float]  # x, y (mm), yaw (rad)
-# socks in one box start this much above each other: cloth passes through cloth in the sim, so
-# a sock dropped from higher up lands on nothing and stands up against a wall; low, they settle
-# overlapping on the bottom like a loose pile
+# socks in one box start this much above each other. Without `sim.cloth_collisions` cloth
+# passes through cloth, so a sock dropped from higher up lands on nothing and stands up against
+# a wall; low, they settle overlapping on the bottom like a loose pile. With it they must start
+# apart (folds CLOTH_FOLD_M + twice the cloth's radius), or they start tangled and fly out
 PILE_STEP_MM = 6.0
+PILE_STEP_COLLIDING_MM = 45.0
 
 
 def station(cfg: SimConfig, rng: np.random.Generator) -> dict[ColorClass, Place]:
@@ -89,7 +91,8 @@ def add(world: ET.Element, asset: ET.Element, cfg: SimConfig, rng: np.random.Gen
         (cx, cy), (w, h) = rect.center_mm, rect.size_mm
         for _ in range(n):
             k = in_rect[key] = in_rect.get(key, 0) + 1
-            z = cargo.floor_z_mm + 8 + PILE_STEP_MM * (k - 1)
+            step = PILE_STEP_COLLIDING_MM if cfg.cloth_collisions else PILE_STEP_MM
+            z = cargo.floor_z_mm + 8 + step * (k - 1)
             if own:  # a narrow compartment: in the middle, square to the walls
                 dx, dy = rng.uniform(-5, 5), rng.uniform(-20, 20)
                 yaw = rng.choice([0.0, np.pi / 2]) + rng.uniform(-0.1, 0.1)
