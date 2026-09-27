@@ -199,11 +199,19 @@ class SpectaclesBridge(Node):
             self.get_logger().error(f"teleop mode not enabled ({why}): every lens is refused")
 
 
+def install_stop_signals() -> None:
+    """SIGINT and SIGTERM raise KeyboardInterrupt in the main thread. Set explicitly: a node
+    started from a background job (`cmd &` in a script, then ros2 launch) inherits SIGINT as
+    ignored, and Python keeps an inherited SIG_IGN."""
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
+
+
 def main(args=None):
     # Own SIGINT/SIGTERM handling: rclpy's would shut the context down first, and then the zero
     # Twist at shutdown could not be published. Both raise KeyboardInterrupt here instead.
     rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
-    signal.signal(signal.SIGTERM, signal.default_int_handler)
+    install_stop_signals()
     try:
         node = SpectaclesBridge()
     except ValueError as e:  # a base limit out of range
