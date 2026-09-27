@@ -63,7 +63,7 @@ STARTING → SCAN → SENSE_FLOOR ─sock─► PICK_FROM_FLOOR → DROP_TO_CARG
                       └─no sock × empty_confirmations─► DONE
 ```
 
-**Unload (stage B):** only the wrist camera tells where things are ([D-036](decisions.md)). Once per run the bins are found (a look at each bin's layout place, a second one centered on the estimate if the bin was cut by the image edge). Per sock: the sock on top of the pile, its grasp and finger directions; after the pick a second look into the box (the sock gone from it gives the color; it is also the next cycle's look), the `show_held` pose (is anything held); the drop over the found bin via home, then a look into the bin: only a seen drop is counted.
+**Unload (stage B):** only the wrist camera tells where things are ([D-036](decisions.md)). Once per run the bins are found (a look at each bin's layout place, a second one centered on the estimate if the bin was cut by the image edge). Per sock: the sock on top of the pile, its grasp and finger directions (the open fingers kept off other socks); after the pick a second look into the box (exactly one sock gone gives the color; none or several: everything back into the box, and again; it is also the next cycle's look), the `show_held` pose (is anything held); the drop into the found bin via home, then a look into the bin: only a seen drop is counted.
 
 ```text
 STARTING → LOOK_CARGO (the bins, once) → SENSE_CARGO ─sock─► PICK_FROM_CARGO → DROP_TO_LAUNDRY(color) → LOOK_CARGO …
@@ -193,7 +193,7 @@ class BoxDetector(Protocol):
 
 The unload loop's vision works on arm-frame points (depth + camera pose, `box_detector.geometry.points`), not on image heuristics:
 
-- `cargo.find_sock(obs, box, floor_z, rim_z, workspace, classifier_cfg, segment, avoid) -> CargoView(target: SockTarget | None, cloth_px, seen: list[SockSeen], overlay)`: cloth is what stands over the box floor inside its walls; socks are the segmentation's instances; the target is the top of the pile, grasped at its highest point inside the workspace, with finger directions to try. `taken(before, after)`: the socks of one view missing in a later one (matched by color and place).
+- `cargo.find_sock(obs, box, floor_z, rim_z, workspace, classifier_cfg, segment, avoid) -> CargoView(target: SockTarget | None, cloth_px, seen: list[SockSeen], overlay)`: cloth is what stands over the box floor inside its walls; socks are the segmentation's instances; the target is the top of the pile, grasped at its highest point inside the workspace, with finger directions to try. `taken(before, after)`: the socks of one view missing in a later one from the same pose (matched by color and pixel overlap).
 - `station.find_bin(obs, guess, floor_z, size, height, wall) -> BinFit(center, yaw, score, seen, complete, overlay)`: a square ring of the bin's size matched to the wall points on a top-down grid.
 - `held.find_held(frame, segment, classifier_cfg) -> HeldView(color | None, …)`: the instance mostly nearer than 330 mm (or without depth) from `show_held`; `show_pose(...)` searches that pose.
 

@@ -65,6 +65,7 @@ class SockSeen:
     lab: tuple[float, float, float]  # median L*, a*, b*
     xy: tuple[float, float]  # centroid of its visible part, mm
     area_px: int
+    mask: np.ndarray | None = field(default=None, repr=False, compare=False)  # its pixels
 
 
 @dataclass
@@ -151,7 +152,7 @@ def find_sock(
         st = color_stats(obs.frame.color, m, classifier.erode_px)
         c, conf = decide(st, classifier)
         xy = (float(np.nanmean(x[m])), float(np.nanmean(y[m])))
-        seen.append(SockSeen(c, conf, (st["L"], st["a"], st["b"]), xy, int(m.sum())))
+        seen.append(SockSeen(c, conf, (st["L"], st["a"], st["b"]), xy, int(m.sum()), m))
 
     # inside the workspace, a few pixels in: the calibration's grasp point is a bit off this one
     reach = _erode(in_polygon(x, y, workspace), 4)
@@ -200,21 +201,36 @@ def find_sock(
 
 
 SAME_DE = 12.0  # a sock in two views of the box: this close in color (ΔE, Lab)
-SAME_MM = 60.0  # and in place (its visible part's centroid; a neighbor taken moves it a bit)
+SAME_MM = 60.0  # and in place (its visible part's centroid), when there are no masks
+SAME_OVERLAP = 0.3  # or covering this much of where it was (the same look pose)
+
+
+def _same(b: SockSeen, a: SockSeen) -> float | None:
+    """How unlike sock `b` of an earlier view sock `a` of a later one is (lower: more alike);
+    None: not the same sock. Taking the sock above another shows more of that one, and moves
+    its centroid: where masks are there, the overlap with where it was decides."""
+    de = math.dist(b.lab, a.lab)
+    if de >= SAME_DE:
+        return None
+    if b.mask is not None and a.mask is not None and b.mask.shape == a.mask.shape:
+        kept = float((b.mask & a.mask).sum()) / max(int(b.mask.sum()), 1)
+        return de + 50.0 * (1.0 - kept) if kept >= SAME_OVERLAP else None
+    d = math.dist(b.xy, a.xy)
+    return de + 0.2 * d if d < SAME_MM else None
 
 
 def taken(before: CargoView, after: CargoView) -> list[SockSeen]:
     """The socks seen in `before` that are not in `after`: what a pick took out of the box.
-    Each sock in `after` is the one of `before` closest in color and place, if close enough."""
-    pairs = sorted(
-        (math.dist(b.lab, a.lab) + 0.2 * math.dist(b.xy, a.xy), i, j)
-        for i, b in enumerate(before.seen)
-        for j, a in enumerate(after.seen)
-        if math.dist(b.lab, a.lab) < SAME_DE and math.dist(b.xy, a.xy) < SAME_MM
-    )
+    Each sock in `after` is the one of `before` most like it, if alike enough."""
+    pairs = []
+    for i, b in enumerate(before.seen):
+        for j, a in enumerate(after.seen):
+            cost = _same(b, a)
+            if cost is not None:
+                pairs.append((cost, i, j))
     kept: set[int] = set()
     used: set[int] = set()
-    for _, i, j in pairs:
+    for _, i, j in sorted(pairs):
         if i not in kept and j not in used:
             kept.add(i)
             used.add(j)

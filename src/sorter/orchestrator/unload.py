@@ -32,6 +32,7 @@ from sorter.orchestrator.state_machine import Loop
 log = logging.getLogger(__name__)
 
 FINGER_TRAVEL_MM = 50.0  # each finger from the middle, the gripper all open (rebot_b601)
+MAX_PUT_BACKS = 6  # in a row before each more counts as a failure
 RELOCATE_MM = 20.0  # a bin found this far from where the look was centered: look again there
 DROP_IN_MM = 20.0  # the TCP this far below the bin's rim to let go (the bin is 140 mm inside)
 DROP_ABOVE_MM = 90.0  # over the rim before going down to the drop height (the sock hangs)
@@ -58,6 +59,7 @@ class UnloadLoop(Loop):
         self.target: SockTarget | None = None
         self.held: HeldView | None = None
         self.gone: list[SockSeen] = []  # what the last pick took out of the box, as seen
+        self.put_backs = 0  # in a row, since the last drop
         self.color: ColorClass | None = None  # of the sock in the gripper
         self.next_obs: Observation | None = None  # a look into the box still true now
         self.bins: dict[ColorClass, Bin] | None = None
@@ -258,6 +260,11 @@ class UnloadLoop(Loop):
             self.avoid.append(target)
             sm.failures += 1
             return Phase.SENSE_CARGO  # same observation
+        # out over the middle of the box first: what hangs from the fingers (and a neighbor
+        # stuck to them) would drag over the near wall on the way out
+        cargo = self.s.cfg.sim.layout.cargo
+        lift = self.s.cfg.zones[Zone.CARGO].lift_z_mm
+        self.s.arm.move_tcp((*cargo.center_mm, lift), linear=True)  # type: ignore[attr-defined]
         # which sock left the box? The box lit from above shows colors best; this look is
         # also the next cycle's
         after_obs = self.s.observer.observe(Zone.CARGO)
@@ -270,32 +277,35 @@ class UnloadLoop(Loop):
         cfg = self.s.cfg
         held = find_held(obs, self.segment(), cfg.color_classifier, cfg.sim.layout.floor_z_mm)
         self.held = held
-        if held.color is None and not gone:
-            # the camera sees only what hangs low: the fingers not closed all the way may hold
-            # a sock it doesn't see, of a color nobody saw go: better back into the box
-            if result.likely_empty:
-                summary = f"nothing in the gripper (opening {result.gripper_opening:.2f})"
-            else:
-                summary = "the fingers hold something nobody saw: back into the box"
-                self._put_back()
+        if held.color is None and not gone and result.likely_empty:
+            summary = f"nothing in the gripper (opening {result.gripper_opening:.2f})"
             log.warning(summary)
             self._publish(obs, held, held.overlay, summary)
             self.avoid.append(target)
             sm.failures += 1
             return Phase.LOOK_CARGO
-        if len(gone) > 1 or held.count > 1:
-            # a neighbor came along, pinched or stuck to a finger: it would fall anywhere
-            summary = f"{max(len(gone), held.count)} socks came out: back into the box"
+        if len(gone) != 1 or held.count > 1:
+            # none seen go: the held sock was hidden under others, its color unknown; back on
+            # top of the pile it shows next time. Several: a neighbor came along, pinched or
+            # stuck to a finger, and would fall anywhere
+            n = max(len(gone), held.count)
+            summary = (
+                f"{n} socks came out: back into the box"
+                if n > 1
+                else "holding a sock nobody saw go: back on top of the pile"
+            )
             log.warning(summary)
             self._publish(obs, held, held.overlay, summary)
             self._put_back()
-            sm.failures += 1
+            self.put_backs += 1
+            if self.put_backs > MAX_PUT_BACKS:  # not getting anywhere with this pile
+                sm.failures += 1
             return Phase.LOOK_CARGO
-        self.color, why = self._held_color(t, gone, held)
+        self.color = gone[0].color
         self.next_obs = after_obs
-        summary = f"holding a {self.color} sock ({why})"
+        summary = f"holding a {self.color} sock (gone from the box)"
         if self.color is not t.color:
-            log.info("%s; it was seen as %s in the box", summary, t.color)
+            log.info("%s; the target was a %s one", summary, t.color)
         self._publish(obs, held, held.overlay, summary)
         return Phase.DROP_TO_LAUNDRY
 
@@ -311,22 +321,6 @@ class UnloadLoop(Loop):
         arm.set_gripper(cfg.arm.gripper.open)  # type: ignore[attr-defined]
         arm.move_tcp((*cargo.center_mm, cfg.zones[Zone.CARGO].lift_z_mm), linear=True)  # type: ignore[attr-defined]
         arm.look(Zone.CARGO)
-
-    @staticmethod
-    def _held_color(t: SockTarget, gone: list[SockSeen], held: HeldView) -> tuple[ColorClass, str]:
-        """The held sock's color: the one sock gone from the box (seen lit from above); of
-        several, the one like the target; none (it was hidden under others): as seen hanging,
-        if sure, else the target's."""
-        if len(gone) == 1:
-            return gone[0].color, "gone from the box"
-        if gone:
-            like = [g for g in gone if g.color is t.color]
-            if like:
-                return t.color, "the target, gone from the box"
-            return max(gone, key=lambda g: g.area_px).color, "the largest gone from the box"
-        if held.color is not None and held.confidence >= 0.8:
-            return held.color, f"seen hanging ({held.confidence:.2f})"
-        return t.color, "as the target"
 
     def _drop_to_laundry(self) -> Phase:
         sm, arm = self.sm, self.s.arm
@@ -351,6 +345,7 @@ class UnloadLoop(Loop):
         cloth = self._cloth_in(obs, b)
         grew = cloth - b.cloth
         b.cloth = cloth
+        self.put_backs = 0
         if grew >= LANDED_MM3:
             sm.counters[color] += 1
             sm.failures = 0

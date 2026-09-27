@@ -58,7 +58,8 @@ REAL_ROVER: dict[str, Any] = {
 RIG_CACHE = Path("data/unload_rig")
 GRIPPER_OPEN = 0.6
 CARGO_MARGIN_MM = 16.0  # the cargo workspace this far from the walls
-CORNER_CUT_MM = 30.0  # off each corner of the cargo workspace
+CORNER_CUT_MM = 30.0
+CARGO_GRASP_DEPTH_MM = 8.0  # below the top of the cloth  # off each corner of the cargo workspace
 
 
 def chamfer(square: list[tuple[float, float]], cut: float) -> list[tuple[float, float]]:
@@ -134,6 +135,8 @@ def compute_rig(cfg: Config) -> dict[str, Any]:
     # yaw fits); at a corner both walls are close, and none does
     square = lay_tool.rect_polygon(cargo, CARGO_MARGIN_MM)
     zones[Zone.CARGO].workspace_mm = chamfer(square, CORNER_CUT_MM)
+    # a shallow pinch at the top of the pile: deeper, the fingers catch the socks under it too
+    zones[Zone.CARGO].grasp_depth_mm = CARGO_GRASP_DEPTH_MM
     return {
         "arm": {"z_min_mm": arm.z_min_mm, "keep_out_mm": [list(b) for b in arm.keep_out_mm]},
         "poses": {

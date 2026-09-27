@@ -178,3 +178,20 @@ def test_the_sock_gone_from_the_box():
     after = CargoView(None, 7000, [dark_after, white], Overlay())
     assert taken(before, after) == [red]
     assert taken(before, CargoView(None, 9000, [red, dark, white], Overlay())) == []
+
+
+def test_a_sock_shown_more_once_the_one_on_it_is_gone_is_still_there():
+    from sorter.box_detector.cargo import CargoView, SockSeen, taken
+    from sorter.core.types import Overlay
+
+    def mask(u0, u1):
+        m = np.zeros((H, W), bool)
+        m[200:260, u0:u1] = True
+        return m
+
+    top = SockSeen(ColorClass.DARK, 1.0, (18.0, 0.0, 0.0), (-110.0, 200.0), 6000, mask(300, 400))
+    under = SockSeen(ColorClass.DARK, 1.0, (20.0, 0.0, 0.0), (-170.0, 200.0), 3000, mask(150, 200))
+    # the top one taken: the one under it shows all of itself, its centroid 90 mm further
+    shown = SockSeen(ColorClass.DARK, 1.0, (20.0, 0.0, 0.0), (-80.0, 200.0), 15000, mask(150, 400))
+    before = CargoView(None, 9000, [top, under], Overlay())
+    assert taken(before, CargoView(None, 15000, [shown], Overlay())) == [top]

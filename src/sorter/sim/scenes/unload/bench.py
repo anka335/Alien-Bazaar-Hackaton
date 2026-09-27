@@ -161,7 +161,10 @@ def run(sc: Scenario, runs_dir: Path | None = None) -> Result:
         res.socks = len(world.items)
         for it in world.items:
             loc, where = _where(world, it.id, truth)
-            res.where.append({"item": it.id, "color": it.color.value, "at": loc, "in": where})
+            xyz = [round(float(v)) for v in world.vertices(it.id).mean(axis=0)]
+            res.where.append(
+                {"item": it.id, "color": it.color.value, "at": loc, "in": where, "xyz": xyz}
+            )
             if loc == "laundry":
                 if where == it.color.value:
                     res.in_right_bin += 1
