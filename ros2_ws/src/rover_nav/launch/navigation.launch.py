@@ -50,7 +50,11 @@ def _static_map_actions(static_map: str) -> list:
             executable="lifecycle_manager",
             name="lifecycle_manager_static_map",
             output="screen",
-            parameters=[{"autostart": True, "node_names": ["static_map_server"]}],
+            # no bond: under the startup load the manager gave up waiting and left the map server
+            # inactive (no /map); it only publishes a file, nothing to watch
+            parameters=[
+                {"autostart": True, "node_names": ["static_map_server"], "bond_timeout": 0.0}
+            ],
         ),
     ]
 
@@ -110,7 +114,7 @@ def _keepout_actions(params: str, mask: str) -> list:
             executable="lifecycle_manager",
             name="lifecycle_manager_filters",
             output="screen",
-            parameters=[{"autostart": True, "node_names": FILTER_NODES}],
+            parameters=[{"autostart": True, "node_names": FILTER_NODES, "bond_timeout": 0.0}],
         ),
     ]
 
@@ -124,6 +128,8 @@ def _setup(context):
         maps_dir, arg("map_name") + "_nav.yaml"
     )
     use_file = os.path.isfile(static_map)
+    places = os.path.join(maps_dir, "places.yaml")
+    initial_pose = stack.start_pose(places) if arg("start") == "auto" else arg("start")
     params = stack.share("config", "nav2.yaml")
     stack.check_choice("nav_camera", arg("nav_camera"), tuple(stack.TOPICS))
     topics = stack.TOPICS[arg("nav_camera")]
@@ -137,7 +143,10 @@ def _setup(context):
             arg("camera_serial"),
             arg("camera_profile"),
         ),
-        *stack.rtabmap_actions(True, database, False, topics, RTABMAP_GRID if use_file else "/map"),
+        *stack.rtabmap_actions(
+            True, database, False, topics, RTABMAP_GRID if use_file else "/map", initial_pose
+        ),
+        LogInfo(msg=f"RTAB-Map starts at {initial_pose or 'its last known pose'} (map frame)"),
         *(
             _static_map_actions(static_map)
             if use_file
@@ -178,6 +187,11 @@ def generate_launch_description():
         ("maps_dir", stack.default_maps_dir(), "where the map database and map files live"),
         ("map_name", "room", "database <map_name>.db in maps_dir"),
         ("keepout", "", "keepout mask yaml; '' = <maps_dir>/keepout.yaml"),
+        (
+            "start",
+            "auto",
+            "auto: `start` in <maps_dir>/places.yaml; '' = last pose; or 'x y z r p y'",
+        ),
         (
             "static_map",
             "",

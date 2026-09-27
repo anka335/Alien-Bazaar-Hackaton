@@ -88,11 +88,12 @@ local_costmap:
         depth:
           topic: /rover_nav/obstacle_cloud
           data_type: "PointCloud2"
-          min_obstacle_height: 0.05   # above the floor (z of leo/odom)
+          min_obstacle_height: 0.10   # above the floor (z of leo/odom); 0.05 let floor noise
+                                      # from the low camera through as phantom obstacles
           max_obstacle_height: 0.9
           marking: true
           clearing: true
-          obstacle_max_range: 2.5
+          obstacle_max_range: 2.0
           raytrace_max_range: 3.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
@@ -129,11 +130,11 @@ global_costmap:
         depth:
           topic: /rover_nav/obstacle_cloud
           data_type: "PointCloud2"
-          min_obstacle_height: 0.05
+          min_obstacle_height: 0.10
           max_obstacle_height: 0.9
           marking: true
           clearing: true
-          obstacle_max_range: 2.5
+          obstacle_max_range: 2.0
           raytrace_max_range: 3.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"

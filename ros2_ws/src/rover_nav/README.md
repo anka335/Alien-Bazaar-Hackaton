@@ -83,10 +83,11 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=/leo
 In teleop, press `z` a few times first (slower: ~0.2 m/s, turns ~0.5 rad/s). Drive slowly along the walls and through the middle, and come back to places you've already seen: that's where RTAB-Map closes loops. Watch the map grow in RViz. Then, **still running**, save the 2D map (3rd terminal):
 
 ```bash
-ros2 run nav2_map_server map_saver_cli -f ~/rover_nav_maps/room --ros-args -p map_subscribe_transient_local:=true
+export ROS_DOMAIN_ID=1   # the stack runs in domain 1
+ros2 run nav2_map_server map_saver_cli -f ~/rover_nav_maps/room --ros-args -p map_subscribe_transient_local:=true -p save_map_timeout:=20.0
 ```
 
-Ctrl+C the launch: RTAB-Map writes `~/rover_nav_maps/room.db`. Launching mapping again extends the same map; `new_map:=true` starts over.
+(While RTAB-Map is busy mapping, the default 2 s wait for the map can fail with "Failed to spin map subscription"; hence the 20 s.) Ctrl+C the launch: RTAB-Map writes `~/rover_nav_maps/room.db`. Launching mapping again extends the same map; `new_map:=true` starts over.
 
 ## 2. Forbid half of the room
 
@@ -131,7 +132,12 @@ ros2 launch rover_nav navigation.launch.py camera:=external  # terminal 2
 
 The same works for mapping (`mapping.launch.py camera:=external`). Navigation can then be restarted without touching the camera.
 
-RViz: wait until the rover appears on the map (RTAB-Map has to recognise a place first; if it doesn't, drive a little with teleop where it was mapped), then **Nav2 Goal**. A goal in the forbidden half is refused. Without `keepout.yaml` the launch says so and the whole map is allowed.
+**Where the rover starts.** RTAB-Map can't yet recognise the room by itself (the low camera sees mostly floor: place-recognition scores stay just under its thresholds), so it must be told where the rover is:
+
+- **Fixed start (normal case):** put the rover at the `start` pose in `~/rover_nav_maps/places.yaml` (ours: (0, 2.5), facing south towards (0, 0)); navigation passes it to RTAB-Map as `initial_pose`. `start:=''` uses RTAB-Map's last known pose instead, `start:='x y 0 0 0 yaw'` any other pose.
+- **Anywhere else:** RViz **2D Pose Estimate** where the rover really stands, facing the right way. RTAB-Map logs `initialpose received` when it gets it.
+
+Without either, the rover is placed at RTAB-Map's stale last pose and Nav2 plans from a wrong position (it once "saw" the rover jammed against a wall that was 1 m away, and aborted with *collision ahead*). Then **Nav2 Goal**. A goal in the forbidden half is refused. Without `keepout.yaml` the launch says so and the whole map is allowed.
 
 Stop: Ctrl+C the launch; the rover stops 0.5 s after `/leo/cmd_vel` goes quiet (firmware `controller.input_timeout`). Keep a hand near the rover's power switch on the first runs.
 
@@ -141,8 +147,8 @@ Stop: Ctrl+C the launch; the rover stops 0.5 s after `/leo/cmd_vel` goes quiet (
 | --- | --- |
 | `config/mounts.yaml` | OAK-D and arm on the rover; wrist camera in the drive pose. Placeholders |
 | `config/oak.yaml` | DepthAI driver: color 640×360 at 15 fps, 400p stereo with extended disparity, depth aligned to color, synced, no IMU / NN |
-| `config/nav2.yaml` | Nav2: speeds (0.2 m/s, 0.6 rad/s), footprint (placeholder), costmaps (obstacles from depth 5–90 cm above the floor), keepout filter |
-| `rover_nav/stack.py` | Topic and frame names per camera, RealSense settings (same as cloth_task), RTAB-Map parameters |
+| `config/nav2.yaml` | Nav2: speeds (0.2 m/s, 0.6 rad/s), footprint (placeholder), costmaps (obstacles from depth 10–90 cm above the floor, up to 2 m; at 5 cm floor noise from the low camera showed up as phantom obstacles), keepout filter |
+| `rover_nav/stack.py` | Topic and frame names per camera, RealSense settings (same as cloth_task), RTAB-Map parameters (`Rtabmap/LoopThr` 0.05, `Vis/MinInliers` 12 for the low camera), start pose from `places.yaml` |
 | `rover/robot.urdf.xacro` | The rover's model, deployed by `setup_rover.sh` |
 
 ## Tests
@@ -158,5 +164,6 @@ cd ros2_ws/src/rover_nav && python3 -m pytest test -q      # keepout mask tool, 
 - Started in the same launch as RTAB-Map (loading its database), Nav2 and RViz, the OAK-D has connected, said "Camera ready!" and then streamed nothing (driver at ~1–6 % CPU, no `camera_info`); started alone it streams at once. Hence `camera.launch.py` + `camera:=external`.
 - After the driver is killed hard, the next start can take ~40 s (`Device already closed or disconnected`, once `Device crashed`) before it reconnects by itself. Stop it with Ctrl+C and wait; replug the camera if it never reconnects.
 - `wrist`: the arm must not move while driving (map and localization assume a fixed camera).
-- RTAB-Map needs texture: a bare wall or a dark room gives few features. Keep the room lit as when mapping.
+- RTAB-Map needs texture: a bare wall or a dark room gives few features. Keep the room lit as when mapping. With the low OAK-D it doesn't confirm its position by itself yet (best matches 8–11 feature inliers, needs 12): start at the `start` pose or give a 2D Pose Estimate. A depth-vs-map check found the rover placed ~25 cm off the start mark once: place it carefully (tape on the floor).
+- RViz draws in software on this laptop: a camera image display alone took ~175 % CPU and starved Nav2's controller (control loop at 7 Hz instead of 10). Leave camera images and point clouds out of RViz.
 - The rover's time is served by the laptop (`setup_time_sync.sh`); if the laptop's address on the rover network changes, run it again.

@@ -246,16 +246,41 @@ def rtabmap_params(localization: bool) -> dict:
         "Grid/MaxObstacleHeight": "0.9",  # above the rover + arm nothing can be hit
         "Grid/NormalsSegmentation": "false",  # plain height thresholds (3 DoF, flat floor)
         "Grid/RayTracing": "true",  # clear free space between the camera and obstacles
+        # A low camera sees mostly floor: place recognition scores stay ~0.05-0.08 even at the
+        # right place (default threshold 0.11, never reached in our room). Every candidate is
+        # still checked geometrically before it is accepted: at 640x360 from 16 cm the right
+        # place gives 6-15 feature inliers, so the default 20 rejected every match; 12 with the
+        # 3-DoF constraint (flat floor) still rejects wrong places.
+        "Rtabmap/LoopThr": "0.05",
+        "Vis/MinInliers": "12",
         "Mem/IncrementalMemory": "false" if localization else "true",
         "Mem/InitWMWithAllNodes": "true" if localization else "false",
     }
 
 
+def start_pose(places_file: str) -> str:
+    """RTAB-Map's initial_pose ("x y z roll pitch yaw") from the `start` entry of places.yaml,
+    or "" (RTAB-Map then starts from its last known pose)."""
+    if not os.path.isfile(places_file):
+        return ""
+    with open(places_file) as f:
+        start = (yaml.safe_load(f) or {}).get("start")
+    if not start:
+        return ""
+    return f"{float(start['x'])} {float(start['y'])} 0 0 0 {float(start.get('yaw', 0.0))}"
+
+
 def rtabmap_actions(
-    localization: bool, database: str, new_map: bool, topics: dict, grid_topic: str = "/map"
+    localization: bool,
+    database: str,
+    new_map: bool,
+    topics: dict,
+    grid_topic: str = "/map",
+    initial_pose: str = "",
 ) -> list:
     """rgbd_sync + RTAB-Map. `grid_topic`: where RTAB-Map publishes its occupancy grid; moved off
-    /map when navigation serves an edited map file there instead."""
+    /map when navigation serves an edited map file there instead. `initial_pose` ("x y z roll
+    pitch yaw", map frame): where localization starts instead of the last known pose."""
     os.makedirs(os.path.dirname(database), exist_ok=True)
     if localization and not os.path.isfile(database):
         raise RuntimeError(f"no map database {database}: run mapping.launch.py first")
@@ -277,7 +302,11 @@ def rtabmap_actions(
             executable="rtabmap",
             name="rtabmap",
             output="screen",
-            parameters=[rtabmap_params(localization), {"database_path": database}],
+            parameters=[
+                rtabmap_params(localization),
+                {"database_path": database},
+                {"initial_pose": initial_pose} if initial_pose else {},
+            ],
             remappings=[("rgbd_image", "/rover_nav/rgbd_image"), ("map", grid_topic)],
             arguments=["-d"] if new_map and not localization else [],  # -d: delete the database
         ),
