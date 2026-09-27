@@ -18,7 +18,7 @@ Everything is built and accepted on a MuJoCo simulator first ([D-032](docs/decis
 
 ## Project plan
 
-Three stages ([docs/plan.md](docs/plan.md)): [0 Preparation](docs/rover/0-preparation.md) (done: the shared base), then [A Loading](docs/rover/a-loading.md) and [B Unloading](docs/rover/b-unloading.md) in parallel, one agent each.
+Stages ([docs/plan.md](docs/plan.md)): [0 Preparation](docs/rover/0-preparation.md) (done: the shared base); then [A Loading](docs/rover/a-loading.md), [B Unloading](docs/rover/b-unloading.md) and [N Navigation](docs/rover/n-navigation.md) in parallel, one agent each; then [C Full mission](docs/rover/c-mission.md) and [D Sim-to-real](docs/rover/d-sim-to-real.md); then the hardware.
 
 | File | What's inside |
 | --- | --- |
