@@ -98,7 +98,10 @@ class UnloadLoop(Loop):
         from sorter.sim.layout import look_pose
 
         cfg = self.s.cfg
-        return look_pose(cfg.sim, cfg.arm, center, cfg.sim.layout.floor_z_mm)
+        try:
+            return look_pose(cfg.sim, cfg.arm, center, cfg.sim.layout.floor_z_mm)
+        except SystemExit as e:  # the layout tool's way to say "none"
+            raise SorterError(str(e)) from None
 
     def _show_pose(self) -> np.ndarray:
         """Where the camera sees what the gripper holds: the rig's `show_held`, else found now."""
@@ -114,6 +117,7 @@ class UnloadLoop(Loop):
                 cfg.sim.layout.floor_z_mm,
                 cfg.sim.focal_px,
                 (cfg.sim.width, cfg.sim.height),
+                link5_points=cfg.arm.link5_points_mm,
             )
             if q is None:
                 raise SorterError("no pose shows the camera what the gripper holds")

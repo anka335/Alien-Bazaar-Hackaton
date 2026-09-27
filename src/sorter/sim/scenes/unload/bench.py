@@ -1,4 +1,4 @@
-"""Unload benchmark: N seeded scenarios on the real rover's geometry, headless, judged by what
+"""Unload benchmark: N seeded scenarios on the rover's layout, headless, judged by what
 the simulator knows (where every sock and bin really is), not by what the loop believes.
 
     uv run python -m sorter.sim.scenes.unload.bench [-n 20] [--socks 2,2,2] [--jobs 4]
@@ -27,6 +27,14 @@ import numpy as np
 from sorter.core.types import ColorClass
 
 COLORS = list(ColorClass)
+
+
+def unload_config(overrides: dict[str, Any] | None = None):
+    """The committed config (the rover's layout and rig) with only the unload scene, and
+    `overrides`."""
+    from sorter.core.config import deep_merge, load_config
+
+    return load_config(overrides=deep_merge({"sim": {"scenes": ["unload"]}}, overrides or {}))
 
 
 @dataclass
@@ -93,11 +101,10 @@ def run(sc: Scenario, runs_dir: Path | None = None) -> Result:
     from sorter.app import build_system
     from sorter.core.types import Command, OperatorMode, Phase
     from sorter.orchestrator.state_machine import StateMachine
-    from sorter.sim.scenes.unload.rover import rover_config
 
     res = Result(sc.seed)
     t_wall = time.monotonic()
-    cfg = rover_config(
+    cfg = unload_config(
         {
             "sim": {
                 "seed": sc.seed,
@@ -264,9 +271,6 @@ def main() -> None:
         Scenario(a.seed0 + i, socks, a.station_mm, a.station_deg, a.bin_mm, a.bin_deg)  # type: ignore[arg-type]
         for i in range(a.n)
     ]
-    from sorter.sim.scenes.unload.rover import rover_config
-
-    rover_config()  # the rig into the cache before the workers start
     runs = out / "runs" if a.runs else None
     results: list[Result] = []
     with ProcessPoolExecutor(a.jobs) as pool:

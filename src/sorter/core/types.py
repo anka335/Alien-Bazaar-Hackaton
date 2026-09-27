@@ -24,7 +24,7 @@ class Zone(StrEnum):
     """Where the wrist camera looks / the arm works (D-032)."""
 
     FLOOR = "floor"  # in front of the rover: socks to load
-    CARGO = "cargo"  # the rover's cargo box, one compartment per ColorClass
+    CARGO = "cargo"  # the rover's cargo box (one box, D-040; can be split by color)
     LAUNDRY = "laundry"  # the unload station's bins, one per ColorClass (drops only)
 
 
@@ -190,8 +190,10 @@ class Phase(StrEnum):
     # load (stage A)
     SCAN = "scan"
     SENSE_FLOOR = "sense_floor"
+    AIM = "aim"  # a closer look at the chosen sock
     PICK_FROM_FLOOR = "pick_from_floor"
     DROP_TO_CARGO = "drop_to_cargo"
+    CHECK_LOAD = "check_load"  # the spot the sock was picked from, then the cargo box
     # unload (stage B)
     LOOK_CARGO = "look_cargo"
     SENSE_CARGO = "sense_cargo"

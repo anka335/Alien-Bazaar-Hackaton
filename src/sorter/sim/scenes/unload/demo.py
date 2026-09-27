@@ -1,4 +1,4 @@
-"""Watch the unload loop at work: one seeded scenario on the real rover's geometry, live in the
+"""Watch the unload loop at work: one seeded scenario on the rover's layout, live in the
 MuJoCo viewer (and the dashboard), then where every sock really ended.
 
     uv run mjpython -m sorter.sim.scenes.unload.demo [--seed 3] [--socks 2,2,2] [--speed 1]
@@ -49,10 +49,10 @@ def main() -> None:
 
     from sorter.app import _serve, build_system
     from sorter.orchestrator.state_machine import StateMachine
-    from sorter.sim.scenes.unload.rover import rover_config
+    from sorter.sim.scenes.unload.bench import unload_config
 
     socks = [int(v) for v in a.socks.split(",")]
-    cfg = rover_config(
+    cfg = unload_config(
         {
             "sim": {
                 "seed": a.seed,

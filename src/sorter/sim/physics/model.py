@@ -20,8 +20,10 @@ from rebot_b601.assets import ASSETS_DIR
 from rebot_b601.kinematics import _FINGER_L, _FINGER_R, FINGER_TRAVEL_M
 
 from sorter.core.types import ColorClass
-from sorter.sim.config import SimConfig
-from sorter.sim.rig import PALETTE, camera_mount
+from sorter.sim.config import RAIL_INSET_MM, SimConfig
+from sorter.sim.physics.floor import parquet_texture
+from sorter.sim.physics.floor import tile_mm as floor_tile_mm
+from sorter.sim.rig import CAMERA_BODY_MM, PALETTE, camera_mount
 
 URDF = ASSETS_DIR / "reBot_Lite_RS_with_gripper.urdf"
 ARM_JOINTS = tuple(f"joint{i}" for i in range(1, 7))
@@ -47,6 +49,7 @@ _BIN_RGB = {
 }
 
 CARDBOARD = "0.5 0.01 0.001"  # friction of the cargo box and the bins
+CARDBOARD_RGBA = "0.66 0.5 0.34 1"
 # tray floors reach this far into what they stand on: a cloth vertex pressed through a thin
 # slab would sit between its underside and the support, pushed both ways, and stay pinned there
 # (the cloth then stretches from the gripper to the support and snaps back)
@@ -74,6 +77,10 @@ class ItemSpec:
     gather: float = CLOTH_GATHER
     young: float = CLOTH_YOUNG
     thickness_m: float = CLOTH_THICKNESS_M
+    fold_m: float = CLOTH_FOLD_M  # height of the folds
+    # the rest shape instead of a gathered sheet: CLOTH_N² points (x, y, z in m, flattened, in
+    # the order of `crumpled_sheet`: row by row, a row along x), its lowest point at z = 0
+    rest_m: tuple[float, ...] | None = None
     id: int = -1
 
 
@@ -135,6 +142,7 @@ def crumpled_sheet(
     rng: np.random.Generator,
     sheet_m: tuple[float, float] = CLOTH_SHEET_M,
     gather: float = CLOTH_GATHER,
+    fold_m: float = CLOTH_FOLD_M,
 ) -> tuple[np.ndarray, list[int]]:
     """Points (N², 3) of a gathered, folded sheet (its lowest point at z = 0) and triangles."""
     n = CLOTH_N
@@ -148,14 +156,20 @@ def crumpled_sheet(
         k = rng.uniform(2, 6) * np.pi / side
         a, ph = rng.uniform(0, np.pi), rng.uniform(0, 2 * np.pi)
         Z += np.sin(k * (U * np.cos(a) + V * np.sin(a)) + ph)
-    Z = CLOTH_FOLD_M * (Z - Z.min()) / np.ptp(Z)
+    Z = fold_m * (Z - Z.min()) / np.ptp(Z)
     pts = np.c_[(U * gather).ravel(), (V * gather).ravel(), Z.ravel()]
+    return pts, grid_triangles()
+
+
+def grid_triangles() -> list[int]:
+    """The triangles of the CLOTH_N × CLOTH_N grid of a cloth item, vertex indices."""
+    n = CLOTH_N
     tris = []
     for i in range(n - 1):
         for j in range(n - 1):
             a, b, c, e = i * n + j, i * n + j + 1, (i + 1) * n + j, (i + 1) * n + j + 1
             tris += [a, b, e, a, e, c]
-    return pts, tris
+    return tris
 
 
 def palette_rgb(color: ColorClass, rng: np.random.Generator) -> tuple[float, float, float]:
@@ -261,13 +275,14 @@ def _arm(parent: ET.Element, cfg: SimConfig) -> None:
     ET.SubElement(tcp, "geom", name="palm", type="box", size="0.042 0.09 0.034", pos="-0.115 0 0")
     T = camera_mount(cfg)
     mount = T[:3, 3] / 1000
+    w, h, d = (v / 2000 for v in CAMERA_BODY_MM)
     ET.SubElement(
         bodies["link5"],
         "geom",
         name="camera_body",
         type="box",
-        size="0.013 0.045 0.0125",
-        pos=_f(*(mount - T[:3, 2] * 0.013)),
+        size=_f(w, h, d),
+        pos=_f(*(mount - T[:3, 2] * d)),
         quat=_f(*_mat_quat(T[:3, :3])),
         rgba="0.1 0.1 0.12 1",
     )
@@ -372,8 +387,13 @@ def tray(
         box(parent, f"{name}_wall{k}", (*lo, base_z), (*hi, rim_z), rgba, friction=CARDBOARD)
 
 
-def _cloth(parent: ET.Element, it: ItemSpec, rng: np.random.Generator) -> None:
-    pts, tris = crumpled_sheet(rng, it.sheet_m, it.gather)
+def _cloth(
+    parent: ET.Element, it: ItemSpec, rng: np.random.Generator, collide: bool = True
+) -> None:
+    if it.rest_m is not None:
+        pts, tris = np.array(it.rest_m).reshape(-1, 3), grid_triangles()
+    else:
+        pts, tris = crumpled_sheet(rng, it.sheet_m, it.gather, it.fold_m)
     c, s = math.cos(it.yaw), math.sin(it.yaw)
     pts = pts @ np.array([[c, s, 0], [-s, c, 0], [0, 0, 1]])
     f = ET.SubElement(
@@ -399,8 +419,9 @@ def _cloth(parent: ET.Element, it: ItemSpec, rng: np.random.Generator) -> None:
         damping="0.002",
         elastic2d="both",
     )
-    # cloth touches the floor, the rover, the boxes and the fingers, but not other cloth:
-    # flex-flex contacts cost ~10x the rest of the step, so items in a pile pass through each other
+    # cloth touches the floor, the rover, the boxes, the fingers and (`collide`) other cloth: a
+    # sock dropped on others lies on top, as a camera looking into the box sees it. Cloth apart
+    # costs nothing; a pile costs ~5x the rest of the step. Without, piles pass through
     ET.SubElement(
         f,
         "contact",
@@ -409,59 +430,112 @@ def _cloth(parent: ET.Element, it: ItemSpec, rng: np.random.Generator) -> None:
         selfcollide="none",
         solref="0.004 1",
         contype="2",
-        conaffinity="1",
+        conaffinity="3" if collide else "1",
     )
 
 
 def _rover(world: ET.Element, cfg: SimConfig) -> None:
-    """The rover under the arm: chassis, wheels, the deck plate (top at z = 0), the cargo box."""
+    """The rover under the arm, as on the photos of the real one: wheels at the corners of
+    `body`, side rails, the battery under the deck plate (top at z = 0), the equipment behind
+    the arm, and the cardboard cargo box to its left."""
     lay = cfg.layout
     fz = lay.floor_z_mm / 1000
     x0, x1, y0, y1 = (v / 1000 for v in lay.body.bounds())
-    wheel_r, wheel_w = 0.06, 0.05
-    # the chassis between the wheels, clear of the floor
-    box(
-        world,
-        "chassis",
-        (x0 + 0.05, y0 + wheel_w + 0.01, fz + wheel_r),
-        (x1 - 0.05, y1 - wheel_w - 0.01, -0.012),
-        "0.62 0.64 0.66 1",
-    )
-    for k, (x, y) in enumerate(
-        ((x0 + wheel_r, y0), (x1 - wheel_r, y0), (x0 + wheel_r, y1), (x1 - wheel_r, y1))
-    ):
-        side = 1 if y == y0 else -1
+    r, w = lay.wheel_radius_mm / 1000, lay.wheel_width_mm / 1000
+    for k, (x, y) in enumerate(((x0 + r, y0), (x1 - r, y0), (x0 + r, y1), (x1 - r, y1))):
+        side = 1 if y == y0 else -1  # towards the rover's middle
+        yc = y + side * w / 2
         ET.SubElement(
             world,
             "geom",
             name=f"wheel{k}",
             type="cylinder",
-            size=_f(wheel_r, wheel_w / 2),
-            pos=_f(x, y + side * wheel_w / 2, fz + wheel_r),
+            size=_f(r, w / 2),
+            pos=_f(x, yc, fz + r),
             quat=_f(*_quat((math.pi / 2, 0, 0))),
-            rgba="0.1 0.1 0.1 1",
+            rgba="0.09 0.09 0.1 1",
+        )
+        for part, (rr, hw, dy, rgba) in {
+            "hub": (0.022, 0.004, -side * w / 2, "0.75 0.76 0.78 1"),  # the outer hub cap
+            "motor": (0.02, 0.015, side * (w / 2 + 0.015), "0.8 0.81 0.83 1"),  # hub motor
+        }.items():
+            ET.SubElement(
+                world,
+                "geom",
+                name=f"wheel{k}_{part}",
+                type="cylinder",
+                size=_f(rr, hw),
+                pos=_f(x, yc + dy, fz + r),
+                quat=_f(*_quat((math.pi / 2, 0, 0))),
+                rgba=rgba,
+                contype="0",
+                conaffinity="0",
+            )
+    # the side rails (black aluminium extrusion) from wheel to wheel, over the hub motors
+    ri = RAIL_INSET_MM / 1000
+    for side, y in ((1, y0), (-1, y1)):
+        yr = y + side * (w + 0.04)
+        box(
+            world,
+            f"rail{0 if side > 0 else 1}",
+            (x0 + ri, yr - 0.01, fz + r + 0.005),
+            (x1 - ri, yr + 0.01, fz + r + 0.045),
+            "0.05 0.05 0.06 1",
+        )
+    ry0, ry1 = y0 + w + 0.03, y1 - w - 0.03
+    for k, x in enumerate((x0 + ri + 0.01, x1 - ri - 0.01)):
+        box(
+            world,
+            f"crossbar{k}",
+            (x - 0.01, ry0, fz + r + 0.005),
+            (x + 0.01, ry1, fz + r + 0.045),
+            "0.05 0.05 0.06 1",
         )
     dx0, dx1, dy0, dy1 = (v / 1000 for v in lay.deck.bounds())
-    box(world, "deck", (dx0, dy0, -0.012), (dx1, dy1, 0.0), "0.06 0.06 0.07 1")
+    # the battery in its orange bag, hanging under the deck plate between the rails
+    box(
+        world,
+        "battery",
+        (dx0 + 0.02, dy0 + 0.03, fz + r),
+        (dx1 - 0.03, dy1 - 0.03, -0.008),
+        "0.95 0.36 0.08 1",
+    )
+    box(world, "deck", (dx0, dy0, -0.008), (dx1, dy1, 0.0), "0.06 0.06 0.07 1")
+    for name, b in lay.equipment.items():
+        bx0, bx1, by0, by1, bz0, bz1 = (v / 1000 for v in b.box_mm)
+        box(world, name, (bx0, by0, bz0), (bx1, by1, bz1), _f(*b.rgba))
     cargo = lay.cargo
     cx0, cx1, cy0, cy1 = (v / 1000 for v in cargo.bounds())
     t = cargo.wall_t_mm / 1000
-    inner = [cargo.compartment(c) for c in cargo.compartments]
+    inner = cargo.insides()
     dividers = tuple(
         (a.bounds()[1] + b.bounds()[0]) / 2000 for a, b in zip(inner, inner[1:], strict=False)
     )
+    base, rim = cargo.base_z_mm / 1000, cargo.rim_z_mm / 1000
     tray(
         world,
         "cargo",
         (cx0, cx1, cy0, cy1),
-        0.0,
+        base,
         cargo.floor_z_mm / 1000,
-        cargo.rim_z_mm / 1000,
+        rim,
         t,
-        "0.20 0.22 0.25 1",
-        "0.30 0.32 0.35 1",
+        CARDBOARD_RGBA,
+        CARDBOARD_RGBA,
         dividers,
     )
+    # black tape strips down from the rim of the box's outer (+y) wall, as on the real one
+    for k in range(6):
+        x = cx0 + (k + 0.5) * (cx1 - cx0) / 6
+        box(
+            world,
+            f"cargo_tape{k}",
+            (x - 0.007, cy1 + t, rim - 0.022),
+            (x + 0.007, cy1 + t + 0.0005, rim),
+            "0.05 0.05 0.05 1",
+            contype="0",
+            conaffinity="0",
+        )
 
 
 def _floor_view_extras(world: ET.Element, cfg: SimConfig, board: bool, board_z_mm: float):
@@ -539,22 +613,15 @@ def build(cfg: SimConfig, board: bool = False, board_z_mm: float = 1.0) -> Scene
     manifest = json.loads((ASSETS_DIR / "manifest.json").read_text())["links"]
     for mesh in sorted({p["mesh"] for parts in manifest.values() for p in parts}):
         ET.SubElement(asset, "mesh", name=mesh, file=mesh)
+    # herringbone oak parquet, the pattern diagonal to the rover like on the photos
+    ET.SubElement(asset, "texture", name="floor", type="2d", file=str(parquet_texture()))
     ET.SubElement(
         asset,
-        "texture",
+        "material",
         name="floor",
-        type="2d",
-        builtin="flat",
-        rgb1="0.72 0.52 0.32",
-        rgb2="0.66 0.46 0.28",
-        mark="random",
-        random="0.2",
-        markrgb="0.60 0.40 0.24",
-        width="512",
-        height="512",
-    )
-    ET.SubElement(
-        asset, "material", name="floor", texture="floor", texrepeat="6 6", reflectance="0.05"
+        texture="floor",
+        texuniform="true",
+        texrepeat=_f(*(2 * [1000 / floor_tile_mm()])),
     )
     if board:
         from sorter.calibration.board import board_texture
@@ -591,6 +658,7 @@ def build(cfg: SimConfig, board: bool = False, board_z_mm: float = 1.0) -> Scene
         type="plane",
         size="3 3 0.05",
         pos=_f(0, 0, cfg.layout.floor_z_mm / 1000),
+        euler=_f(0, 0, math.pi / 4),
         material="floor",
         friction="0.8 0.01 0.001",
     )
@@ -606,7 +674,7 @@ def build(cfg: SimConfig, board: bool = False, board_z_mm: float = 1.0) -> Scene
     items = [replace(it, id=i) for i, it in enumerate(items)]
     rng = np.random.default_rng(cfg.seed + 1000)
     for it in items:
-        _cloth(world, it, rng)
+        _cloth(world, it, rng, cfg.cloth_collisions)
 
     contact = ET.SubElement(root, "contact")
     ET.SubElement(contact, "exclude", body1="finger_left", body2="finger_right")

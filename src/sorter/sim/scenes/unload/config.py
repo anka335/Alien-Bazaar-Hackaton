@@ -23,6 +23,3 @@ class UnloadSceneConfig(BaseModel):
     station_deg: float = 0.0
     bin_mm: float = 0.0
     bin_deg: float = 0.0
-    # the real rover's parts the base doesn't draw (electronics, the cargo box's bracket, the
-    # box's cardboard): on with its geometry (`sorter.sim.scenes.unload.rover`)
-    rover_parts: bool = False

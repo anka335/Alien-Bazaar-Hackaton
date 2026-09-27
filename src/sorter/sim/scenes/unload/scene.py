@@ -1,5 +1,5 @@
-"""The unload scene (stage B): the laundry bins of the station beside the rover, and socks in
-the cargo box.
+"""The unload scene (stage B): the laundry bins of the station in front of the rover, and socks
+in the cargo box.
 
 `add` is called by `sorter.sim.physics.model.build` after the base (floor, rover, cargo box, arm)
 is in place. It may add geoms and assets, and returns the cloth items to add.
@@ -14,17 +14,13 @@ import numpy as np
 
 from sorter.core.types import ColorClass
 from sorter.sim.config import SimConfig
-from sorter.sim.physics.model import ItemSpec, box, palette_rgb, tray
+from sorter.sim.physics.model import ItemSpec, palette_rgb, tray
 
 BIN_RGBA = {
     ColorClass.LIGHT: "0.92 0.93 0.93 1",
     ColorClass.DARK: "0.22 0.23 0.24 1",
     ColorClass.COLORED: "0.14 0.55 0.67 1",
 }
-# the real rover's parts (`sim.unload.rover_parts`): [x0, x1, y0, y1, z0, z1] mm, arm frame
-ELECTRONICS_MM = (-280.0, -90.0, -125.0, 20.0, 0.0, 70.0)  # power strip and adapters
-BRACKET_MM = (-210.0, -50.0, 120.0, 280.0, -24.0, -20.0)  # holds the cargo box beside the deck
-CARDBOARD_RGBA = "0.66 0.5 0.34 1"
 Place = tuple[float, float, float]  # x, y (mm), yaw (rad)
 # socks in one box start this much above each other: cloth passes through cloth in the sim, so
 # a sock dropped from higher up lands on nothing and stands up against a wall; low, they settle
@@ -63,22 +59,8 @@ def _turned(parent: ET.Element, part: ET.Element, x: float, y: float, yaw: float
         parent.append(g)
 
 
-def _rover_parts(world: ET.Element) -> None:
-    for name, (x0, x1, y0, y1, z0, z1) in (
-        ("electronics", ELECTRONICS_MM),
-        ("cargo_bracket", BRACKET_MM),
-    ):
-        lo, hi = np.array([x0, y0, z0]) / 1000, np.array([x1, y1, z1]) / 1000
-        box(world, name, lo, hi, "0.13 0.13 0.14 1" if name == "electronics" else "0.55 0.57 0.6 1")
-    for g in world.iter("geom"):  # the base draws the cargo box grey; the real one is cardboard
-        if (g.get("name") or "").startswith("cargo_") and g.get("name") != "cargo_bracket":
-            g.set("rgba", CARDBOARD_RGBA)
-
-
 def add(world: ET.Element, asset: ET.Element, cfg: SimConfig, rng: np.random.Generator):
     lay = cfg.layout
-    if cfg.unload.rover_parts:
-        _rover_parts(world)
     fz = lay.floor_z_mm / 1000
     bins = lay.laundry
     t = bins.wall_t_mm / 1000

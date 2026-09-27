@@ -1,5 +1,5 @@
-"""The unload loop end to end on the simulator, on the real rover's geometry, with the station
-off its place: judged by where the sock really lands."""
+"""The unload loop end to end on the simulator, on the rover's layout, with the station off its
+place: judged by where the sock really lands."""
 
 import math
 
@@ -13,10 +13,9 @@ pytest.importorskip("mujoco")
 
 def test_unloads_a_sock_into_its_bin_found_by_the_camera():
     from sorter.orchestrator.state_machine import StateMachine
-    from sorter.sim.scenes.unload.bench import _truth_bins, _where
-    from sorter.sim.scenes.unload.rover import rover_config
+    from sorter.sim.scenes.unload.bench import _truth_bins, _where, unload_config
 
-    cfg = rover_config(
+    cfg = unload_config(
         {
             "sim": {
                 "realtime": 0,

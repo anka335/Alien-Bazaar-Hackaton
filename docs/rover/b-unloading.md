@@ -11,11 +11,11 @@ The rover is parked at the unload station. The arm takes every sock out of the c
 
 ## Where it stands
 
-- **Geometry: the real rover** (photos, 2026-09-27; [D-040](../decisions.md)): one undivided cardboard box 150 × 150 × 60 mm to the arm's left and a bit behind it, so the color is told at unload; three boxes of the same size on the floor in front of the rover; a compact rover (~380 × 300 mm, deck ~160 mm up, electronics behind the arm). `sorter.sim.scenes.unload.rover` lays `REAL_ROVER` (estimates, to be measured) over the committed layout and computes its rig (cached in `data/unload_rig/`); the committed layout and `rig.yaml` still have the 3-compartment box of stage 0, since the box and the load flow are A's too: agree before moving them.
-- **Camera:** the sim camera sits at the rig's measured hand-eye mount ([D-041](../decisions.md)). It doesn't see the fingertips; the held sock is seen from the `show_held` pose when it hangs ≥ 55–60 mm below the fingers, so the unload scene's socks are limp like real ones (`sim.unload.sock_young` / `sock_thickness_mm`, [D-042](../decisions.md)).
-- **Loop** (`orchestrator/unload.py`, only the wrist camera): the bins are found once per run (`box_detector/station.py`: a square ring matched to the wall points); per sock the top of the pile (`box_detector/cargo.py`), the pick with finger directions tried in turn (open fingers kept off other socks, the gripper opened to ±30 mm), a shake, a second look into the box, `show_held` + the gripper's opening (anything held?); the color from the sock seen hanging (side-lit thresholds), else the box's best match (the one sock gone; of several, the one nearest the grasp; none gone, the grasp's target; [D-042](../decisions.md)); socks of different colors hanging → back into the box, and again; the drop into the found bin (fingers below its rim) via home, a look into the bin (only a seen drop is counted).
+- **Geometry: the committed layout** (the rover measured, [D-042](../decisions.md)): one cardboard box 182 × 182 mm inside, 75 deep, to the arm's left and a bit behind it, so the color is told at unload; the station ([D-043](../decisions.md), not measured): three boxes like it (190 mm, 75 high) on the floor in a row in front of the rover. `python -m sorter.sim.layout --write` computes B's part of `rig.yaml` too: the cargo pick zone and `show_held`. The real run (`python -m sorter run --mode unload`) and the sim use the same rig.
+- **Camera:** the sim camera sits at the rig's measured hand-eye mount ([D-041](../decisions.md)). It doesn't see the fingertips; the held sock is seen from the `show_held` pose when it hangs ≥ 55–60 mm below the fingers, so the unload scene's socks are limp like real ones (`sim.unload.sock_young` / `sock_thickness_mm`, [D-044](../decisions.md)).
+- **Loop** (`orchestrator/unload.py`, only the wrist camera): the bins are found once per run (`box_detector/station.py`: a square ring matched to the wall points); per sock the top of the pile (`box_detector/cargo.py`), the pick with finger directions tried in turn (open fingers kept off other socks, the gripper opened to ±27 mm), a shake, a second look into the box, `show_held` + the gripper's opening (anything held?); the color from the sock seen hanging (side-lit thresholds), else the box's best match (the one sock gone; of several, the one nearest the grasp; none gone, the grasp's target; [D-044](../decisions.md)); socks of different colors hanging → back into the box, and again; the drop into the found bin (fingers below its rim) via home, a look into the bin (only a seen drop is counted).
 - **Benchmark:** `uv run python -m sorter.sim.scenes.unload.bench -n 20` (seeded; the station ±30 mm / ±5°, each bin ±15 mm / ±8°; judged by the sim's ground truth; report in `data/bench/`). Latest result in the *Log*.
-- Commands: `python -m sorter.sim.scenes.unload.rover` (rig + pick check, 0 problems), `.preview [--view]`.
+- Commands: `python -m sorter.sim.scenes.unload.demo` (one scenario, live), `.preview [--view]`.
 
 ## Your lane
 
@@ -39,12 +39,12 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 
 ### B0: Realistic unload scene
 
-- Done: the real rover's geometry, `sim.unload.station_mm` / `station_deg` / `bin_mm` / `bin_deg` (parking and placement noise), socks of mixed colors piled in the box (`sim.unload.cargo`, `sock_mm`).
-- Open: socks as A makes them (share the sock model); measure the rover (`REAL_ROVER`); the box's rim is about at deck level on the rover (the box hangs lower), the sim box stands on the deck.
+- Done: the measured rover, the station in front of it, `sim.unload.station_mm` / `station_deg` / `bin_mm` / `bin_deg` (parking and placement noise), socks of mixed colors piled in the box (`sim.unload.cargo`, `sock_mm`).
+- Open: socks as A makes them (`load.scene.sock_shape`, limp); the station's real place and bins; the box's center and the wheel diameter aren't measured ([D-042](../decisions.md)).
 
 ### B2: Detectors
 
-- Known sim gaps that show up here: cloth passes through cloth, so the fingers may pinch the sock under the target (the second look into the box tells which one went), and the fingers drag a neighboring sock out of the box.
+- Known sim gaps that show up here: the fingers may pinch the sock under the target (the second look into the box tells which one went) and drag a neighboring sock out of the box. `sim.cloth_collisions` (on by default) makes the pile stack instead of pass through itself, ~5× slower; the benchmark in the *Log* ran without it.
 
 ### B3: Pick and drop with verification
 
@@ -68,7 +68,7 @@ B0–B6 done on the sim.
 
 ## Open questions
 
-- Move the committed layout to the real rover's geometry (one box, color told at unload)? Decide with A: it changes A's drop and removes A's color step.
+- The station's real place and bins: measure them, set `sim.layout.laundry`, recompute the rig.
 
 ## Requests from other blocks
 
@@ -78,7 +78,12 @@ B0–B6 done on the sim.
 
 - 2026-09-27: stage defined ([D-032](../decisions.md)).
 - 2026-09-27: stage 0 done; the brief rewritten for what it delivered ([D-034](../decisions.md)).
+- 2026-09-27 (from A): the rover layout follows its photos ([D-040](../decisions.md)): deck 160 mm above the floor, one cargo box 150 × 150 × 60 mm at (−50, 200) with no compartments (`compartment(c)` = the whole box, `location()` → `("cargo", None)`), keep-out for the wheels and the equipment behind the arm. The laundry bins didn't move. `unload.py` walks the compartments and now finds none.
+- 2026-09-27 (from A, [D-041](../decisions.md)): the sim camera is the calibrated one; `look_cargo` is now ~210 mm over the box floor (tilt allowed); `rig.yaml` has `scan_1` … `scan_7`; joint moves swing joint 1 first or last or go via home (`Controller.plan_move`); the camera body is in the collision checks (`arm.link5_points_mm`); drops wait `arm.drop_settle_s`; `CARGO_MARGIN_MM` along is 50; `sim.cloth_collisions` (on) makes piles in the box stack and ~5x slower; `PhysicsWorld.location` says `laundry` only with the unload scene.
+- 2026-09-27 (from A): `ArmController.drop_to_cargo` comes in high over the box, goes straight down under the rim, lets go and backs out (`arm.cargo_drop_*`); `drop_to_laundry` is unchanged. The live viewer in `load.watch` draws a copy of the sim data (as `unload.demo` does).
+- 2026-09-27 (from A): the rover measured ([D-042](../decisions.md)): deck 200 mm above the floor, 300 × 185 with the arm at its front edge, body 420 × 420, the box 182 × 182 inside, 75 deep, floor z −41, rim z 34; `rig.yaml` recomputed, poses and zones changed. Rebase and rerun your layout-dependent tests.
 - 2026-09-27: stages N (navigation), C (full mission), D (sim-to-real) added ([D-035](../decisions.md)): N4 docks at the station, which bounds B0's parking noise.
 - 2026-09-27: B0 started: unload scene supports an undivided box; preview of the real rover's geometry.
 - 2026-09-27: vision-only loop on the real rover's geometry, bench and demo (`python -m sorter.sim.scenes.unload.demo`). Bench, 8 × 6 socks, before the held-first color: 64.6 % in the right bin, 6 in a wrong one, 11 lost; bins found to 1–2 mm. The held-first color and the flatter initial pile are not benchmarked yet. Open problems: the sim's pile (cloth passes through cloth: the wrong sock pinched, the pile settles anew), neighbors dragged out of the box, the held sock seen only when it hangs ≥ 60 mm (the rig camera is off to the side) and side-lit color thresholds tuned on ~12 sim samples, ~50 s of sim per sock, the rover's dimensions are estimates, the committed layout still has stage 0's 3-compartment box.
-- 2026-09-27: the loop kept putting socks back: the sim's stiff cloth stayed bunched at the fingers, below the camera's view from `show_held` (it sees ≥ 55 mm below them), and the box's "one sock gone" failed on a pile that settles anew. Fixed by limp socks in the unload scene and the box's best match as the fallback color ([D-042](../decisions.md)). Also fixed the dashboard's `/` crash (the front end still had the `auto` mode).
+- 2026-09-27: the loop kept putting socks back: the sim's stiff cloth stayed bunched at the fingers, below the camera's view from `show_held` (it sees ≥ 55 mm below them), and the box's "one sock gone" failed on a pile that settles anew. Fixed by limp socks in the unload scene and the box's best match as the fallback color ([D-044](../decisions.md)). Also fixed the dashboard's `/` crash (the front end still had the `auto` mode).
+- 2026-09-27: on the measured rover (A's layout merged): the station moved into the committed `sim.layout.laundry` (in front of the rover, [D-043](../decisions.md)); `sorter.sim.layout` computes the cargo pick zone (corners cut by 45 mm for the bigger box) and `show_held` into `rig.yaml`, so `run --mode unload` runs on the rig without an overlay; `unload.rover` / `REAL_ROVER` removed. Not benchmarked on the new layout yet.

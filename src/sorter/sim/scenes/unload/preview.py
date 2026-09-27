@@ -1,10 +1,9 @@
-"""Preview of the unload scene on the real rover's geometry: renders it to PNGs, or opens the
-MuJoCo viewer.
+"""Preview of the unload scene on the rover's layout: renders it to PNGs, or opens the MuJoCo
+viewer.
 
     uv run python -m sorter.sim.scenes.unload.preview [--out data/preview] [--view] [--seed N]
 
-The geometry is `sorter.sim.scenes.unload.rover.REAL_ROVER` (estimates from photos, to be
-measured); the arm stands at `home`.
+The geometry is the committed `sim.layout`; the arm stands at `home`.
 """
 
 from __future__ import annotations
@@ -16,7 +15,7 @@ import mujoco
 import numpy as np
 
 from sorter.sim.physics.model import ARM_JOINTS, build
-from sorter.sim.scenes.unload.rover import rover_config
+from sorter.sim.scenes.unload.bench import unload_config
 
 SOCKS = {"light": 1, "dark": 1, "colored": 1}
 SOCK_MM = (200, 90)  # an adult sock laid flat
@@ -25,14 +24,14 @@ SETTLE_S = 2.0
 VIEWS = (
     ("overview", (40, 0, -80), 1300, 215, -30),
     ("top", (40, 30, -100), 1150, 180, -89),
-    ("cargo_box", (-130, 200, 0), 480, 250, -55),
+    ("cargo_box", (-50, 200, 0), 480, 250, -55),
     ("from_behind_left", (-40, 60, -60), 1000, 330, -28),
 )
 
 
 def scene(seed: int = 0, **unload) -> tuple[mujoco.MjModel, mujoco.MjData]:
     """The settled scene; `unload`: overrides of `sim.unload` (e.g. station_mm)."""
-    cfg = rover_config(
+    cfg = unload_config(
         {"sim": {"seed": seed, "unload": {"cargo": SOCKS, "sock_mm": SOCK_MM, **unload}}}
     )
     model = mujoco.MjModel.from_xml_string(build(cfg.sim).xml)

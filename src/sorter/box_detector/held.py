@@ -105,14 +105,16 @@ def show_pose(
     size: tuple[int, int],
     samples: int = 60000,
     seed: int = 0,
+    link5_points: list | tuple = (),
     collides: Callable[[np.ndarray], bool] | None = None,
 ) -> np.ndarray | None:
     """Joints that show the camera what hangs from the gripper: `HANG_MM` below the fingers in
     the image, the floor behind it far away, the gripper in front of the rover (`front_x_mm`),
-    nothing in the keep-out. The camera is off to the side of the fingers (the rig's mount
-    doesn't see the fingertips at all), so this is found by a search around `home`, the closest
-    to it that shows the sock near the image middle. `collides(q)`: a full collision check (the
-    arm with itself and the scene), of the pose and the straight way to it from `home`."""
+    nothing in the keep-out (the camera's body, `link5_points`, included). The camera is off to
+    the side of the fingers (the rig's mount doesn't see the fingertips at all), so this is found
+    by a search around `home`, the closest to it that shows the sock near the image middle.
+    `collides(q)`: a full collision check (the arm with itself and the scene), of the pose and
+    the straight way to it from `home`."""
     from sorter.arm import kinematics as kin
 
     w, h = size
@@ -149,7 +151,7 @@ def show_pose(
         if not np.isfinite(off):
             continue
         score = off + 0.15 * float(np.abs(q - home)[:5].sum())
-        if kin.keep_out_hit(q, keep_out, keep_out_margin_mm) is not None:
+        if kin.keep_out_hit(q, keep_out, keep_out_margin_mm, link5_points) is not None:
             continue
         if kin.arm_points(q)[:, 2].min() < z_min_mm + 20:
             continue

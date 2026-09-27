@@ -27,7 +27,11 @@ class ColorClassifierConfig(BaseModel):
     overlap_max: float = 0.5  # drop an instance this much covered by a better-scored one
     erode_px: int = 5  # erode the mask before color stats: shadows, edges
     chroma_colored: float = 20.0  # median Lab chroma at or above → colored
-    lightness_dark: float = 22.0  # median L* below → dark whatever the chroma (navy, dark brown)
+    lightness_dark: float = 22.0  # median L* below → dark whatever the chroma
+    # median L* below and chroma below → dark too: a dim, muted color (navy, dark brown), which
+    # a lamp or a slanting view lifts over `lightness_dark`; colored socks are brighter or bolder
+    lightness_dim: float = 35.0
+    chroma_muted: float = 35.0
     lightness_light: float = 55.0  # median L* (0..100) at or above → light, else dark
     confidence_margin: float = 10.0  # distance from a threshold that gives confidence 1
     grasp_inset_px: int = 15  # the re-grasp point is at least this far inside the blob

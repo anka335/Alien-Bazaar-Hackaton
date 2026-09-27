@@ -25,13 +25,13 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | Stage | Status | Owner | Branch | Notes |
 | --- | --- | --- | --- | --- |
 | [0: Preparation](rover/0-preparation.md) | done | Softjey + Claude | `stage/0-preparation` | contracts, base scene, rig on the rover, wiring; known issues handed to A and B |
-| [A: Loading](rover/a-loading.md) | todo | — | — | socks from the floor into the cargo compartments |
-| [B: Unloading](rover/b-unloading.md) | in progress | Softjey + Claude | `claude/b-unloading-stage-d746d4` | on the real rover's geometry: vision-only loop and benchmark working, tuning ([D-040](decisions.md)) |
+| [A: Loading](rover/a-loading.md) | in progress | Softjey + Claude | `claude/pensive-banach-a6b5d1` | scene, scan-all-around loop, detector, benchmark ([D-040](decisions.md), [D-041](decisions.md)); known issues in the brief |
+| [B: Unloading](rover/b-unloading.md) | in progress | Softjey + Claude | `claude/b-unloading-stage-d746d4` | vision-only loop and benchmark on the measured rover, station in front; tuning ([D-043](decisions.md)) |
 | [F: Far detection](rover/f-far-detection.md) | todo | — | — | socks seen 0.5–3 m away from a search pose, as targets on the floor |
 | [N: Navigation](rover/n-navigation.md) | todo | — | — | driving rover: to F's targets, stop within reach, dock at the station |
 | [C: Full mission](rover/c-mission.md) | todo | — | — | needs A, B, F, N: rover interface, stow, mission loop, benchmark |
 | [D: Sim-to-real](rover/d-sim-to-real.md) | todo | — | — | needs C: the benchmarks under rig-like errors |
-| Hardware | todo | — | — | not planned in detail yet: measure the rover, calibrate, the real interface, real socks |
+| Hardware | todo | — | — | not planned in detail yet: the rover measured ([D-042](decisions.md)); calibrate, the real interface, real socks |
 | [ROS 2: rover navigation](rover/ros2-navigation.md) | in progress | Slava + Claude | `block/09-rover-navigation` | outside the stages: RTAB-Map + Nav2 on the real Leo Rover (room mapped, mask made; first navigation run next); MuJoCo Leo Rover sim driven by jevomir (D-039), reusable for N1 |
 
 ## How the parallel stages stay out of each other's way

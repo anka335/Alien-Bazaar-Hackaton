@@ -46,6 +46,11 @@ class ArmDriver(Protocol):
         the fingers keeps it from closing fully)."""
         ...
 
+    def wait(self, seconds: float) -> None:
+        """Hold still for `seconds` of the arm's own clock (simulated time in the simulator).
+        EStopped if the driver is stopped."""
+        ...
+
     def stop(self) -> None:
         """Thread-safe: abort the motion, hold where the arm is; later motions raise EStopped
         until `resume()`."""
@@ -127,6 +132,13 @@ class RebotDriver:
             raise EStopped("arm is held")
         self._call(self.arm.set_gripper, opening)
         return self.gripper()
+
+    def wait(self, seconds: float) -> None:
+        clock = self.arm._clock  # the control loop's clock: simulated time in the simulator
+        end = clock() + seconds
+        while clock() < end:
+            if self._stopped.wait(0.005):
+                raise EStopped("arm is held")
 
     def stop(self) -> None:
         self._stopped.set()
