@@ -1,4 +1,4 @@
-# The laundry boxes' ArUco markers (box_detector, D-045). Boxes left → right: dark, colored, light.
+# The laundry boxes' ArUco markers (box_detector, D-047). Boxes left → right: dark, colored, light.
 box_detector:
   ros__parameters:
     marker_size_m: 0.04        # the black square, edge to edge

@@ -107,7 +107,7 @@ RViz: wait until the rover appears on the map (RTAB-Map has to recognise a place
 
 Stop: Ctrl+C the launch; the rover stops 0.5 s after `/leo/cmd_vel` goes quiet (firmware `controller.input_timeout`). Keep a hand near the rover's power switch on the first runs.
 
-## The laundry boxes from their ArUco markers ([D-045](../../../docs/decisions.md))
+## The laundry boxes from their ArUco markers ([D-047](../../../docs/decisions.md))
 
 Three boxes, left → right: **dark** (black clothes), **colored**, **light** (white), each with a 4 cm ArUco marker. `box_detector` finds them in the OAK-D's image, takes the distance from its depth image, and publishes each box in the rover's frame.
 

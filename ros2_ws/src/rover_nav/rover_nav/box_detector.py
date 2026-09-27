@@ -1,4 +1,4 @@
-"""box_detector: the laundry boxes from their ArUco markers, in the rover's frame (D-045).
+"""box_detector: the laundry boxes from their ArUco markers, in the rover's frame (D-047).
 
 Boxes left → right: dark, colored, light (rover_nav/boxes.py; config/boxes.yaml).
 

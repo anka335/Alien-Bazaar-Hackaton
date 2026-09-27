@@ -27,7 +27,7 @@ The Leo Rover carries the laptop and the arm, and drives autonomously inside one
 - [x] `rover_nav/README.md`: install, map once, make the mask, navigate. (`ros2_ws/README.md` belongs to the ROS track: a pointer there is requested, not edited.)
 - [x] **MuJoCo sim** (`sim/`, plain Python + uv, no ROS, [D-039](../decisions.md)): the Leo Rover from the official `leo_description` 3.2.0 in a furnished room, `cmd_vel` / odometry / closed-loop moves like the real rover, the rover's camera and the OAK-D rendered, web UI. The jevomir VLM (scoring API) drives it from the camera alone (`guided` / `direct` policies); an oracle scorer runs the same loop without a GPU; `bench` scores seeded rooms, `tools/eval_direct.py` scores prompts on labelled frames, `--memory` uses the rover's path. 62 tests. Usage: [sim/README.md](../../ros2_ws/src/rover_nav/sim/README.md).
 
-## The laundry boxes ([D-045](../decisions.md))
+## The laundry boxes ([D-047](../decisions.md))
 
 Three boxes, left → right dark / colored / light, each with a 4 cm ArUco marker. `box_detector` (`boxes.launch.py`): markers in the OAK-D's image, distance from its depth image, each box in the rover's frame on `/boxes/<label>`, the chosen box's distance on `/boxes/target_distance`. Labelled by marker id once `config/boxes.yaml` has them (the log shows every marker's dictionary + id), else by left-to-right order. `boxes.py`, 12 tests (range, order and id labelling, depth: within 1.5 % to 1 m; the marker's own size alone is 4–10 % too long). Checked end to end with synthetic OAK-D frames: the three boxes at the expected positions, the target distance right. Not yet run with the camera; the ids are still to fill in. Range ~1 m with 4 cm markers.
 
@@ -88,4 +88,4 @@ _None yet._
 - 2026-09-27: jevomir on the real API (Brev H100 over an SSH tunnel): `guided` 5/12 rooms, `direct` 7/12 after a new prompt (asks where the target is; 82% right moves on 50 labelled frames against 20% for the first prompt). Oracle: 9/12 and 10/12. `bench` command and `tools/eval_direct.py` added.
 - 2026-09-27: path memory (`leo_sim/memory.py`, `--memory`): told to jevomir before each question it made things worse (direct 7/12 → 2/12; 82% → 40–64% on the labelled frames, even with true hints); used by the agent instead (search where last seen, halve back-and-forth turns, explore after a full circle) 6/12. Default stays off.
 - 2026-09-27: merged with main: brief moved from `docs/tasks/09-rover-navigation.md`, decisions renumbered D-019/D-020/D-034 → D-037/D-038/D-039.
-- 2026-09-27: the laundry boxes from their 4 cm ArUco markers, distance from the OAK-D's depth (D-045): `box_detector`, `boxes.launch.py`, `config/boxes.yaml`.
+- 2026-09-27: the laundry boxes from their 4 cm ArUco markers, distance from the OAK-D's depth (D-047): `box_detector`, `boxes.launch.py`, `config/boxes.yaml`.

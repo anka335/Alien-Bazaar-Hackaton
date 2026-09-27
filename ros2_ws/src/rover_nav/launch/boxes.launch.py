@@ -1,4 +1,4 @@
-"""The laundry boxes from their ArUco markers (D-045): OAK-D + box_detector.
+"""The laundry boxes from their ArUco markers (D-047): OAK-D + box_detector.
 
     ros2 launch rover_nav boxes.launch.py                    # starts the OAK-D too
     ros2 launch rover_nav boxes.launch.py camera:=false      # an OAK-D already running

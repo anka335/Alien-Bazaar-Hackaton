@@ -1,4 +1,4 @@
-"""Laundry boxes from their ArUco markers (D-045), without ROS: image in, labelled boxes out.
+"""Laundry boxes from their ArUco markers (D-047), without ROS: image in, labelled boxes out.
 
 Three boxes, always in this order from the left: dark (black clothes), colored, light (white).
 Each carries an ArUco marker. A box is known by its marker id (`ids` in config/boxes.yaml); until
