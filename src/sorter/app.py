@@ -190,10 +190,11 @@ def run(
     autostart: bool = False,
     mode: OperatorMode = OperatorMode.LOAD,
     rig_file: Path | None = None,
+    record: bool = False,
 ) -> None:
     """The sorter: the state machine and, with `dashboard`, the web dashboard with its operator
     modes (load, unload, manual, calibrate), starting in `mode`. Ctrl+C → hold → rest pose →
-    motors off."""
+    motors off. `record`: the session recorder (`sorter.orchestrator.recorder`)."""
     from sorter.dashboard.modes import ModeSwitch
     from sorter.orchestrator.state_machine import StateMachine
 
@@ -204,6 +205,11 @@ def run(
             cfg = _nominal_hand_eye(cfg)
     system = build_system(cfg, sim=sim)
     logging.getLogger("sorter").addHandler(HubLogHandler(system.hub))
+    recorder = None
+    if record:
+        from sorter.orchestrator.recorder import Recorder
+
+        recorder = Recorder(system).start()
     log.info("backends: %s", system.cfg.backends.model_dump(mode="json"))
 
     system.camera.start()
@@ -237,3 +243,5 @@ def run(
         if server is not None:
             server.should_exit = True
         _close(system)
+        if recorder is not None:
+            recorder.close()

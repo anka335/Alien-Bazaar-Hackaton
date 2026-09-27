@@ -332,7 +332,7 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 
 ## Recording format
 
-`sorter.core.io.save_observation` / `load_observation`: one `.npz` per observation (+ `.png`). Run logs (`sorter.orchestrator.runlog`): `data/runs/<run_id>/` (the run id ends with the mode), one record per `decide()`: the observation and a `.json` with the result, summary, counters and `next_phase`; `run.json` with the config and the end. `data/` is gitignored.
+`sorter.core.io.save_observation` / `load_observation`: one `.npz` per observation (+ `.png`). Run logs (`sorter.orchestrator.runlog`): `data/runs/<run_id>/` (the run id ends with the mode), one record per `decide()`: the observation and a `.json` with the result, summary, counters and `next_phase`; `run.json` with the config and the end. The session recorder (`sorter.orchestrator.recorder`, `run --record`, on by default on the rig) writes `data/sessions/<stamp>/`: `sorter.log` (DEBUG), `telemetry.csv` (the arm at 50 Hz and the phase), `events.jsonl` (status changes, arm / detector / observer calls with durations, decisions, operator marks), `decisions/*.jpg`, `wrist_NNN.mp4` + `wrist_frames.csv`; it wraps the components' methods on the instance and reads `rebot_b601.Arm`'s measurement, and changes nothing the system does. `data/` is gitignored.
 
 ## Simulator
 
@@ -376,7 +376,7 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 | `src/sorter/sim/config.py`, `rig.py`, `layout.py`, `physics/` (the base scene) | shared |
 | `src/sorter/sim/scenes/load/`, `config/default.yaml` → `sim.load`, `sim.layout.floor_view` | A |
 | `src/sorter/sim/scenes/unload/`, `config/default.yaml` → `sim.unload`, `sim.layout.laundry` | B |
-| `src/sorter/orchestrator/state_machine.py`, `runlog.py` | shared |
+| `src/sorter/orchestrator/state_machine.py`, `runlog.py`, `recorder.py` | shared |
 | `src/sorter/orchestrator/load.py`, `src/sorter/floor_detector/`, `src/sorter/color_classifier/` | A |
 | `src/sorter/orchestrator/unload.py`, `src/sorter/box_detector/` | B |
 | `src/sorter/dashboard/`, `frontend/` (the shared parts: A6) | shared; the load panel A, the unload panel B |
