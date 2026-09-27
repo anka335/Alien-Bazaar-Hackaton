@@ -35,7 +35,7 @@ Without the map: from where the rover stands, a 1 m square (stops at the corners
 
 - Waypoints / patrols (later, with laundry search; Nav2's waypoint follower).
 - Autonomous exploration for mapping (the room is mapped once by hand).
-- Searching for laundry and picking from the floor.
+- Searching for laundry and picking from the floor: a separate task, [ros2-laundry-search.md](ros2-laundry-search.md) (to do).
 - Running the sorter (`src/sorter/`) at the same time: only one stack owns the camera and the arm at a time (D-014).
 
 ## Depends on / Unblocks
@@ -89,3 +89,4 @@ _None yet._
 - 2026-09-27: path memory (`leo_sim/memory.py`, `--memory`): told to jevomir before each question it made things worse (direct 7/12 → 2/12; 82% → 40–64% on the labelled frames, even with true hints); used by the agent instead (search where last seen, halve back-and-forth turns, explore after a full circle) 6/12. Default stays off.
 - 2026-09-27: merged with main: brief moved from `docs/tasks/09-rover-navigation.md`, decisions renumbered D-019/D-020/D-034 → D-037/D-038/D-039.
 - 2026-09-27: hard-coded patrol on odometry (D-046): 1 m square or circle, a look-around at every stop; `patrol`, `patrol_ctl`, `fake_rover`, `patrol.launch.py`.
+- 2026-09-27: laundry search in front of the boxes written down as a task for a collaborator ([ros2-laundry-search.md](ros2-laundry-search.md)).
