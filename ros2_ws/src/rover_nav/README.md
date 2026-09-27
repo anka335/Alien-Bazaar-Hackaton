@@ -16,6 +16,16 @@ Block 9 ([task](../../../docs/tasks/09-rover-navigation.md), [D-019](../../../do
 
 Map and navigate **with the same camera**: the map is made of what that camera saw. With `oak`, the arm and its camera stay entirely with the cloth task (no shared driver).
 
+## Two ROS domains and a bridge
+
+The laptop's stack (mapping / navigation / camera launches) runs in **ROS domain 1** with discovery kept on the laptop; the rover stays in domain 0. `domain_bridge` (`config/rover_bridge.yaml`, started by the mapping / navigation launches) is the only process on the rover's Wi-Fi: rover → laptop `/leo/merged_odom`, `/tf`, `/tf_static`; laptop → rover `/leo/cmd_vel`.
+
+Why: in one shared domain, every laptop node is announced to every rover node. With the full navigation stack that flooded the rover's Wi-Fi (~3 MB/s from the laptop, pings of 0.4–0.8 s), and the rover's motor controller lost its micro-ROS session: hundreds of reconnects, then stuck with no odometry until a rover power cycle. With the bridge: 2–13 KB/s to the rover, no reconnects.
+
+- Teleop still talks to the rover directly (domain 0, the default): the command below is unchanged.
+- To look at the stack from a terminal (`ros2 topic list`, `echo`, …): `export ROS_DOMAIN_ID=1` first. RViz started by the launches is already in domain 1.
+- `sudo apt install ros-jazzy-domain-bridge`
+
 ## Names and frames
 
 The arm owns the plain names (`base_link`, `/joint_states`, `/robot_description`). The rover runs under LeoOS's `ROBOT_NAMESPACE=leo`: topics `/leo/…`, frames `leo/…`. The OAK-D driver runs in `/rover_nav` so its own `robot_description` doesn't replace the arm's.
@@ -41,7 +51,7 @@ The arm mount is always published (the arm rides on the rover). With `nav_camera
 ## One-time setup
 
 ```bash
-sudo apt install -y ros-jazzy-rtabmap-ros ros-jazzy-navigation2 ros-jazzy-nav2-bringup \
+sudo apt install -y ros-jazzy-rtabmap-ros ros-jazzy-navigation2 ros-jazzy-nav2-bringup ros-jazzy-domain-bridge \
   ros-jazzy-depthai-ros                  # OAK-D; for the wrist camera: ros-jazzy-realsense2-camera
 sudo ros2_ws/src/rover_nav/scripts/setup_oak.sh    # OAK-D USB permissions, then replug it
 cd ros2_ws && source /opt/ros/jazzy/setup.bash && colcon build --symlink-install && source install/setup.bash

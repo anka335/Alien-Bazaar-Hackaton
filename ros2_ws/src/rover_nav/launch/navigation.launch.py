@@ -128,6 +128,8 @@ def _setup(context):
     stack.check_choice("nav_camera", arg("nav_camera"), tuple(stack.TOPICS))
     topics = stack.TOPICS[arg("nav_camera")]
     actions = [
+        *stack.isolate_actions(),
+        stack.bridge_action(),
         *stack.camera_setup(
             arg("nav_camera"),
             arg("camera"),

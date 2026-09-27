@@ -17,7 +17,7 @@ from rover_nav import stack
 
 
 def _setup(context):
-    return stack.oak_actions(stack.oak_mount())
+    return [*stack.isolate_actions(), *stack.oak_actions(stack.oak_mount())]
 
 
 def generate_launch_description():

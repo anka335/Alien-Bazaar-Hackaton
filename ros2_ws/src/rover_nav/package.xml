@@ -25,6 +25,7 @@
   <exec_depend>nav2_regulated_pure_pursuit_controller</exec_depend>
   <exec_depend>nav2_bringup</exec_depend>
   <exec_depend>teleop_twist_keyboard</exec_depend>
+  <exec_depend>domain_bridge</exec_depend>
   <exec_depend>rviz2</exec_depend>
   <!-- nav_camera:=oak (default): sudo apt install ros-jazzy-depthai-ros -->
   <!-- <exec_depend>depthai_ros_driver</exec_depend> -->

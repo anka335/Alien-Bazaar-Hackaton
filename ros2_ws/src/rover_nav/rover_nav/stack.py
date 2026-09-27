@@ -13,7 +13,7 @@ import os
 
 import yaml
 from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, SetEnvironmentVariable
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 
@@ -25,6 +25,9 @@ CMD_VEL = "/leo/cmd_vel"
 ODOM_TOPIC = "/leo/merged_odom"
 
 OBSTACLE_CLOUD = "/rover_nav/obstacle_cloud"
+NAV_DOMAIN = (
+    "1"  # the laptop's stack; the rover (LeoOS) stays in domain 0 (config/rover_bridge.yaml)
+)
 
 # Color, depth aligned to color, color camera info, per navigation camera
 TOPICS = {
@@ -45,6 +48,27 @@ TOPICS = {
 
 def share(*parts: str) -> str:
     return os.path.join(get_package_share_directory("rover_nav"), *parts)
+
+
+def isolate_actions() -> list:
+    """Every node started after these runs in NAV_DOMAIN with discovery kept on this laptop, so
+    nothing of the stack is announced over the rover's Wi-Fi. Put them first in a launch."""
+    return [
+        SetEnvironmentVariable("ROS_DOMAIN_ID", NAV_DOMAIN),
+        SetEnvironmentVariable("ROS_AUTOMATIC_DISCOVERY_RANGE", "LOCALHOST"),
+    ]
+
+
+def bridge_action() -> Node:
+    """domain_bridge: the only process that talks to the rover (domain 0, over Wi-Fi)."""
+    return Node(
+        package="domain_bridge",
+        executable="domain_bridge",
+        name="rover_bridge",
+        arguments=[share("config", "rover_bridge.yaml")],
+        additional_env={"ROS_AUTOMATIC_DISCOVERY_RANGE": "SUBNET"},  # it must reach the rover
+        output="screen",
+    )
 
 
 def default_maps_dir() -> str:

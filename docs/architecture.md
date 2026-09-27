@@ -489,6 +489,7 @@ Each sim component is selected independently through `backends`, so a real compo
 | TF `map` → `leo/odom` | internal | RTAB-Map (localization) |
 | Keepout mask (`.pgm` + `.yaml`) | internal | Generated from the saved 2D map and a dividing line by `rover_nav`'s mask tool |
 
+- **Domains:** the laptop's stack runs in ROS domain 1 (discovery on the laptop only); the rover stays in domain 0. `domain_bridge` (`rover_nav/config/rover_bridge.yaml`) passes `/leo/merged_odom`, `/tf`, `/tf_static` to the laptop and `/leo/cmd_vel` to the rover. Otherwise the stack's discovery traffic floods the rover's Wi-Fi and its motor controller drops out.
 - **Names:** the arm owns the plain names (`base_link`, `/joint_states`, `/robot_description`). The rover runs with LeoOS's `ROBOT_NAMESPACE=leo`: frames `leo/…`, topics `/leo/…` (`rover_nav/scripts/setup_rover.sh`). TF tree: `map` → `leo/odom` → `leo/base_footprint` → `leo/base_link` → `base_link` (arm) → … → camera.
 - With `nav_camera:=wrist`, the arm stays in `drive` while the rover moves: moving it breaks mapping and localization. With `oak` the arm is free.
 

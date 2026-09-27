@@ -1,0 +1,21 @@
+# domain_bridge between the rover (ROS domain 0, LeoOS) and the laptop's navigation stack
+# (domain 1, discovery limited to the laptop). Started by mapping.launch.py / navigation.launch.py.
+# Why: with everything in one domain, every laptop node is announced to every rover node over the
+# rover's Wi-Fi. With the full navigation stack that flooded the link (~3 MB/s), and the rover's
+# motor controller kept losing its micro-ROS session (hundreds of reconnects, no odometry). The
+# rover now sees only this bridge and the topics below.
+name: rover_bridge
+from_domain: 0
+to_domain: 1
+topics:
+  /leo/merged_odom:           # rover → laptop: odometry (100 Hz)
+    type: nav_msgs/msg/Odometry
+  /tf:                        # rover → laptop: leo/odom → leo/base_footprint, wheels
+    type: tf2_msgs/msg/TFMessage
+  /tf_static:                 # rover → laptop: the rover's fixed frames
+    type: tf2_msgs/msg/TFMessage
+    qos:
+      durability: transient_local
+  /leo/cmd_vel:               # laptop → rover: Nav2's drive commands
+    type: geometry_msgs/msg/Twist
+    reversed: true
