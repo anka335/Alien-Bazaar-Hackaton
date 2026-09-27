@@ -18,3 +18,7 @@ MUJOCO_LOG.TXT
 
 # dashboard build (cd frontend && npm run build)
 src/sorter/dashboard/web/
+
+# the mobile base pre-flight (preflight_mobile_base.sh)
+/preflight.log
+/preflight_run/
