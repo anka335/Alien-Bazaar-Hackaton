@@ -18,7 +18,7 @@ Everything is built and accepted on a MuJoCo simulator first ([D-032](docs/decis
 
 ## Project plan
 
-Three stages ([docs/plan.md](docs/plan.md)): [0 Preparation](docs/rover/0-preparation.md) (done: the shared base), then [A Loading](docs/rover/a-loading.md) and [B Unloading](docs/rover/b-unloading.md) in parallel, one agent each.
+Stages ([docs/plan.md](docs/plan.md)): [0 Preparation](docs/rover/0-preparation.md) (done: the shared base); then [A Loading](docs/rover/a-loading.md), [B Unloading](docs/rover/b-unloading.md), [F Far detection](docs/rover/f-far-detection.md) and [N Navigation](docs/rover/n-navigation.md) in parallel, one agent each; then [C Full mission](docs/rover/c-mission.md) and [D Sim-to-real](docs/rover/d-sim-to-real.md); then the hardware.
 
 | File | What's inside |
 | --- | --- |
@@ -69,7 +69,7 @@ uv run pytest                                   # tests
 
 **Config** is in `config/`: `default.yaml` (all sections), `rig.yaml` (computed: poses, zones, ROIs, the arm's floor limit and keep-out), `hand_eye.yaml` (the camera mount), and your own `local.yaml` (gitignored), e.g. `backends: {camera: real}`.
 
-**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth task ([D-014](docs/decisions.md)), outside these stages: [ros2_ws/README.md](ros2_ws/README.md).
+**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth task ([D-014](docs/decisions.md)), outside these stages: [ros2_ws/README.md](ros2_ws/README.md). Its rover navigation drives the real Leo Rover in one room: RTAB-Map + Nav2 with an OAK-D on the rover's front, in `ros2_ws/src/rover_nav` ([D-037](docs/decisions.md), [D-038](docs/decisions.md); brief: [docs/rover/ros2-navigation.md](docs/rover/ros2-navigation.md)). A standalone MuJoCo sim of the Leo Rover from its official model, drivable by the jevomir VLM, is in [`rover_nav/sim`](ros2_ws/src/rover_nav/sim/README.md) ([D-039](docs/decisions.md)).
 
 ## Working with AI agents
 
