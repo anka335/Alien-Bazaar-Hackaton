@@ -228,7 +228,7 @@ class ArmController(Protocol):
     def aim_camera(self, T_link5_cam, target, heights_mm, tilts_deg=(0, 10, 20, 30)) -> float | None:
         ...  # the camera at `target` from the highest safe height; None and no motion if none
     def pick(self, target: ArmPoint, zone: Zone, yaw_rad: float | None = None) -> PickResult: ...
-    def drop_to_cargo(self, color: ColorClass) -> None: ...    # via home → cargo_<color>, settle, open, home
+    def drop_to_cargo(self, color: ColorClass) -> None: ...    # home → high over cargo_<color>, straight down under the rim, settle, open, back out, up, home
     def drop_to_laundry(self, color: ColorClass) -> None: ...  # via home → laundry_<color>, open, home
     def ee_pose(self) -> Pose: ...    # T_base_link5
     def joints(self) -> tuple[float, ...]: ...
@@ -240,6 +240,7 @@ class ArmController(Protocol):
 - **`pick(target, zone, yaw_rad)`**, `target` = the cloth surface point: rejected with no motion (`TargetRejected`) if `target` XY is outside `zones.<zone>.workspace_mm` or any of the three moves fails to plan. Then: to `target.z + approach_mm` with the gripper down (turned to `yaw_rad` by joint 6 if given), open, straight down to `max(target.z − grasp_depth_mm, z_floor_mm)`, close, straight up to `lift_z_mm`. The IK above the target is seeded from where the arm is, else elbow up towards the target.
 - **Every planned path** is checked against the floor (`arm.z_min_mm`, = floor + 3) and the **keep-out boxes** (`arm.keep_out_mm`: the rover's middle below the deck, the wheels, the equipment behind the arm, the cargo box's walls, grown by `arm.keep_out_margin_mm`). Points are sampled along the links, on the gripper and on the camera's body (`arm.link5_points_mm`, from the hand-eye mount; also checked against the floor). A joint move (`plan_move`) goes straight if that's clear, else turns joint 1 first or last, else the same way via `home`.
 - **Drops** hold still `arm.drop_settle_s` over the drop pose before opening: the hanging sock stops swinging.
+- **Into the cargo box** the TCP comes in `arm.cargo_drop_above_mm` over `cargo_<color>` (the hanging sock clears the walls; coming in at the drop height dragged it over the wall), goes straight down to `arm.cargo_drop_depth_mm` below it (under the rim), lets go, backs out along the tool `arm.cargo_drop_back_mm` (the fingers out of the cloth) and goes up. The gripper is tilted outwards `arm.cargo_drop_tilt_deg`: pointing straight down it gets only ~110 mm over a box this close to the base. Without that path: the plain drop.
 - **The camera's poses** (`kin.camera_look`): the optical axis through a target from the highest safe height, up to 30° off vertical (the camera is ~100 mm off the gripper's axis: straight down, it can't get high over every spot).
 - **Hold vs disable:** disabling the motors makes the arm fall; the software stop is `hold()` ([D-009](decisions.md)).
 - **Driver faults** latch until `clear_fault()` ([D-025](decisions.md)).
@@ -313,7 +314,7 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 | `color_classifier` | A | the SAM3 service (`sam`, API key in `local.yaml` or `SAM3_API_KEY`) and the color thresholds |
 | `floor_detector` | A | `min_area_mm2`, `max_area_mm2`, `max_length_mm`, `edge_px`, `avoid_radius_px`, `local_axis_mm` |
 | `load` | A | the load loop: `max_attempts`, `empty_rounds`, `aim_off_center`, `aim_heights_mm`, `same_sock_mm`, `max_sock_height_mm`, `raised_mm`, `min_raised_mm2`, `cargo_margin_mm` |
-| `arm` | shared | `speed_scale` (at start; `POST /api/speed` changes it), `max_speed_scale` (at most `speed_ceiling()` ≈ 1.43, the motors' velocity limit, [D-033](decisions.md)), `approach`, `safe_z_mm`, `z_min_mm`, `drop_height_mm`, `drop_settle_s`, `keep_out_mm`, `keep_out_margin_mm`, `link5_points_mm`, gripper |
+| `arm` | shared | `speed_scale` (at start; `POST /api/speed` changes it), `max_speed_scale` (at most `speed_ceiling()` ≈ 1.43, the motors' velocity limit, [D-033](decisions.md)), `approach`, `safe_z_mm`, `z_min_mm`, `drop_height_mm`, `drop_settle_s`, `cargo_drop_above_mm` / `_tilt_deg` / `_back_mm` / `_depth_mm`, `keep_out_mm`, `keep_out_margin_mm`, `link5_points_mm`, gripper |
 | `poses` | layout tool | `rest`, `home`, `look_floor`, `look_cargo`, `scan_1` … `scan_7`, `cargo_<color>`, `laundry_<color>` (`rig.yaml`) |
 | `zones.<zone>` | layout tool | `floor`, `cargo`: `workspace_mm`, `z_floor_mm`, `grasp_depth_mm`, `approach_mm`, `lift_z_mm` (`rig.yaml`) |
 | `state_machine` | shared | `empty_confirmations`, `max_consecutive_failures`, `low_confidence`, `save_runs`, `runs_dir` |

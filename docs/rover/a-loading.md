@@ -14,7 +14,7 @@ The rover has stopped next to socks on the floor. The arm finds them, classifies
 - **Loop** (`orchestrator/load.py`, [D-036](../decisions.md)): scans a ring of 7 poses around the arm, picks the nearest sock (a closer, aimed look if cut off), drops it after it stops swinging, counts it only if its spot is empty and the box's surface rose where it landed. Retries up to `load.max_attempts`, then leaves the sock.
 - **Detector** (`floor_detector/`): `SockDetector`, masks sized in mm from depth, grasp at the widest part, yaw across the sock there.
 - **Sim**: the camera where the real one was calibrated; the rover, box and parquet from photos; sock-shaped socks over the reachable ring; cloth lies on cloth.
-- **See it**: `uv run python -m sorter.sim.scenes.load.watch --no-viewer --record run.mp4` (a video of one run); `uv run python -m sorter.sim.scenes.load.bench -n 50 --workers 3` (the numbers).
+- **See it**: `uv run mjpython -m sorter.sim.scenes.load.watch` (live in the MuJoCo viewer) or `uv run python -m sorter.sim.scenes.load.watch --no-viewer --record run.mp4` (a video of one run); `uv run python -m sorter.sim.scenes.load.bench -n 50 --workers 3` (the numbers).
 - **Numbers so far**: 12 scenes, 29 socks: 93 % of the reachable socks ended in the box (before the last changes). A partial 50-scene run after them: 15 of 18 socks in the box in 9 scenes, one scene ended in ERROR (5 failures in a row, 0 of 4 loaded).
 
 ### Known issues
@@ -22,8 +22,7 @@ The rover has stopped next to socks on the floor. The arm finds them, classifies
 - **Seed 0 of the 50-scene run: ERROR after 5 consecutive failures, 0/4 loaded.** Not investigated. Likely several socks close together or a sock the pick keeps missing: failures from different socks add up to `max_consecutive_failures`.
 - **Counting**: a sock in the box is sometimes not counted (white socks especially: the raised area stays small), and once one was counted that wasn't there. `load.raised_mm` / `min_raised_mm2` and the box view need tuning with data.
 - **`look_cargo`** sees the box from only ~210 mm (the arm can't get the camera higher over a box that close to its base): the box just fits the frame; a sock draped over the far wall is cut off.
-- **Drops**: now and then a sock lands on the box's rim or slides under the rover (`other` / out of reach). A lower drop or a small shake over the box is untried.
-- **Live viewer**: `mjpython -m sorter.sim.scenes.load.watch` crashes (segfault, exit 139) on macOS; not a GL-context clash (tested). Use `--no-viewer --record`.
+- **Drops**: coming in at the drop height dragged the hanging sock over the box's wall; now the arm comes in high, lets go under the rim and backs out (`arm.cargo_drop_*`). The box (150 mm) is shorter than a sock (200 mm): with 3+ socks the pile reaches the rim and a sock can still flop over it.
 - **Speed**: ~50 s of sim time per sock; a 4-sock scene takes 2–6 min wall (cloth, 3 scenes in parallel). A pile in the box costs ~5x per step with `sim.cloth_collisions`.
 - **Sim nondeterminism**: the loop's thread timing changes when the arm gets its next command, so a seed doesn't replay exactly.
 - **Not done**: A6 (dashboard front end), floor textures other than parquet (A0), the unload loop still walks compartments (B).

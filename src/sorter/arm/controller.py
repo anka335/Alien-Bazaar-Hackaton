@@ -313,7 +313,41 @@ class Controller:
         self._go("home")  # and back the same way, clear of the walls
 
     def drop_to_cargo(self, color: ColorClass) -> None:
-        self._drop(f"cargo_{color.value}")
+        """Over the box high up, then straight down to `cargo_<color>` and back up. A move in at
+        the drop height drags the sock hanging from the fingers across the wall, and it stays
+        there, half out. Without that path (IK, keep-out): the plain drop."""
+        pose = f"cargo_{color.value}"
+        self._go("home")
+        try:
+            in_, down, up = self._plan_drop_from_above(pose)
+        except TargetRejected as e:
+            log.warning("no drop into %s from above (%s): the plain drop", pose, e)
+            self._drop(pose)
+            return
+        self._run(in_)
+        self._run(down)
+        self._check_held()
+        self.driver.wait(self.cfg.drop_settle_s)  # the hanging sock stops swinging first
+        self._gripper(self.cfg.gripper.open)
+        self._run(up)  # out of the cloth, then straight up: the fingers don't drag the sock out
+        self._go("home")
+
+    def _plan_drop_from_above(self, pose: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(home → above, above → drop, drop → back along the tool → above it) with the gripper
+        tilted outwards."""
+        c = self.cfg
+        x, y, z = kin.fk_tcp(self.poses[pose])[:3, 3]
+        r = math.hypot(x, y)
+        t = math.radians(c.cargo_drop_tilt_deg)
+        approach = np.array((x / r * math.sin(t), y / r * math.sin(t), -math.cos(t)))
+        z_above = z + c.cargo_drop_above_mm
+        in_ = self._plan_to(self.driver.joints(), (x, y, z_above), approach)
+        release = np.array((x, y, z - c.cargo_drop_depth_mm))
+        down = self._plan_to(in_[-1], release, approach, linear=True)
+        back = release - c.cargo_drop_back_mm * approach
+        out = self._plan_to(down[-1], back, approach, linear=True)
+        up = self._plan_to(out[-1], (*back[:2], z_above), approach, linear=True)
+        return in_, down, np.vstack([out, up[1:]])
 
     def drop_to_laundry(self, color: ColorClass) -> None:
         self._drop(f"laundry_{color.value}")

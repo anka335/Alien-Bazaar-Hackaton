@@ -41,6 +41,18 @@ class ArmConfig(BaseModel):
     z_min_mm: float = 3.0  # floor clearance: no point of the arm goes lower
     drop_height_mm: float = 30.0  # TCP above the rim at `cargo_<color>` / `laundry_<color>`
     drop_settle_s: float = 0.8  # over the drop pose, before opening: the item stops swinging
+    # into the cargo box from above: the TCP comes in this high over the drop pose (more than a
+    # sock hangs below the fingers, so it clears the walls), then goes straight down and back up
+    cargo_drop_above_mm: float = 125.0
+    # the gripper tilted outwards by this: pointing straight down it can't get that high over a
+    # box this close to the arm's base
+    cargo_drop_tilt_deg: float = 20.0
+    # after the release the fingers first back out along their axis by this: straight up, the
+    # lower finger of the tilted gripper lifts the sock draped over it
+    cargo_drop_back_mm: float = 50.0
+    # and let go this far below `cargo_<color>` (under the rim): a sock let go over a pile
+    # already up to the rim flops over the wall
+    cargo_drop_depth_mm: float = 40.0
     # boxes no point of the arm may enter, [x0, x1, y0, y1, z0, z1] in mm, arm frame: the rover
     # body, the cargo box walls (rig.yaml, from `python -m sorter.sim.layout --write`)
     keep_out_mm: list[tuple[float, float, float, float, float, float]] = Field(default_factory=list)

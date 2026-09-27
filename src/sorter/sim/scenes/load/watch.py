@@ -74,7 +74,11 @@ def main(argv: list[str] | None = None) -> None:
     if not args.no_viewer:
         from mujoco import viewer as mj_viewer
 
-        viewer = mj_viewer.launch_passive(world.model, world.data)
+        # the viewer draws its own copy: the physics thread steps world.data meanwhile
+        shown = mujoco.MjData(world.model)
+        with world.lock:
+            mujoco.mj_copyData(shown, world.model, world.data)
+        viewer = mj_viewer.launch_passive(world.model, shown)
         viewer.cam.lookat[:] = (0.05, 0.0, cfg.sim.layout.floor_z_mm / 1000 + 0.12)
         viewer.cam.distance, viewer.cam.azimuth, viewer.cam.elevation = 1.3, -140, -35
     video = renderer = None
@@ -93,7 +97,8 @@ def main(argv: list[str] | None = None) -> None:
                 if not viewer.is_running():
                     break
                 with world.lock:
-                    viewer.sync()
+                    mujoco.mj_copyData(shown, world.model, world.data)
+                viewer.sync()
             if video is not None and world.time() - t0 >= next_frame:
                 next_frame = max(next_frame + 0.1, world.time() - t0)  # skip if behind
                 with world.lock:
@@ -123,7 +128,8 @@ def main(argv: list[str] | None = None) -> None:
             print("close the viewer window to quit", flush=True)
             while viewer.is_running():
                 with world.lock:
-                    viewer.sync()
+                    mujoco.mj_copyData(shown, world.model, world.data)
+                viewer.sync()
                 time.sleep(0.03)
     finally:
         stop.set()
