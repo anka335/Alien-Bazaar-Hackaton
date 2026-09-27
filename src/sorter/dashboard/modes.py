@@ -16,7 +16,7 @@ import threading
 from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING
 
-from sorter.core.errors import WrongMode
+from sorter.core.errors import SorterError, WrongMode
 from sorter.core.types import OperatorMode
 
 if TYPE_CHECKING:
@@ -41,7 +41,10 @@ class ModeSwitch:
         with self._lock:
             mode = hub.mode()
             if mode in SETUP:
-                self._enter_setup()
+                try:  # the dashboard (camera, 3D view) comes up without the arm too
+                    self._enter_setup()
+                except SorterError as e:
+                    log.error("arm not started: %s (switch the mode to try again)", e)
             if on_change is not None:
                 on_change(mode)
 

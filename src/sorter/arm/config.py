@@ -24,7 +24,7 @@ class GripperConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     open: float = 1.0  # opening before a grasp and at a release, 0 = closed .. 1 = open
-    empty_below: float = 0.01  # a closed gripper opening below this → `likely_empty`
+    empty_below: float = 0.02  # a closed gripper opening below this → `likely_empty`
 
 
 class ArmConfig(BaseModel):
@@ -33,6 +33,12 @@ class ArmConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dry_run: bool = False  # real backend: rebot_b601's simulated motors instead of the CAN bus
+    # where joint 1 = 0 points on the rover, deg counter-clockwise from forward: -90 = to the
+    # rover's right. Every Cartesian pose (FK, IK, the layout, rig.yaml) is in the rover's frame
+    base_yaw_deg: float = 0.0
+    # the base not level: rotations about the rover's x, then y that level the floor the camera
+    # sees (`python -m sorter.calibration.level <run dirs>` measures them)
+    base_tilt_deg: tuple[float, float] = (0.0, 0.0)
     speed_scale: float = Field(1.0, gt=0)  # of rebot_b601's joint speeds, at start
     # the dashboard's speed control goes up to this, at most speed_ceiling() (the motors' limit)
     max_speed_scale: float = Field(1.4, gt=0)
@@ -44,9 +50,11 @@ class ArmConfig(BaseModel):
     # into the cargo box from above: the TCP comes in this high over the drop pose (more than a
     # sock hangs below the fingers, so it clears the walls), then goes straight down and back up
     cargo_drop_above_mm: float = 125.0
-    # the gripper tilted outwards by this: pointing straight down it can't get that high over a
-    # box this close to the arm's base
-    cargo_drop_tilt_deg: float = 20.0
+    # the gripper tilted outwards by the first of these the arm reaches: pointing straight down
+    # it can't get that high over a box this close to the arm's base
+    cargo_drop_tilts_deg: list[float] = Field(default_factory=lambda: [20.0, 25.0, 30.0, 10.0])
+    # … leaning straight away from the arm's base (0) or turned by these about the vertical
+    cargo_drop_azimuths_deg: list[float] = Field(default_factory=lambda: [0.0, 30.0, -30.0])
     # after the release the fingers first back out along their axis by this: straight up, the
     # lower finger of the tilted gripper lifts the sock draped over it
     cargo_drop_back_mm: float = 50.0

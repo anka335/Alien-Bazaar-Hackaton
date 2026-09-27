@@ -54,15 +54,23 @@ class Target:
     confidence: float
     cut: bool  # seen cut off by the frame's edge
     off_center: float  # 0 at the image center .. 1 at a corner
+    cloth_xy: np.ndarray  # Nx2: points of the sock's mask on the floor, arm frame (mm)
     attempts: int = 0
 
+    def gap_mm(self, x: float, y: float) -> float:
+        """How far (x, y) is from this sock's cloth: 0 on it."""
+        if not len(self.cloth_xy):
+            return math.hypot(x - self.point.x, y - self.point.y)
+        return float(np.hypot(*(self.cloth_xy - (x, y)).T).min())
 
-@dataclass
-class Spot:
-    """Where a sock was left after `load.max_attempts`: socks seen there are ignored."""
-
-    x: float
-    y: float
+    def same_sock(self, other: Target, tol_mm: float) -> float | None:
+        """The gap between the two socks' cloth if they are one sock seen twice (each one's
+        grasp point lies on or near the other's cloth; a grasp point moves between views, the
+        cloth doesn't), else None."""
+        gap = min(
+            self.gap_mm(other.point.x, other.point.y), other.gap_mm(self.point.x, self.point.y)
+        )
+        return gap if gap < tol_mm else None
 
 
 @dataclass
@@ -79,8 +87,8 @@ class _Run:
     scan_k: int = 0  # the scan pose to look from next
     empty_views: int = 0  # views in a row without a sock
     target: Target | None = None
-    tries: dict[tuple[int, int], int] = field(default_factory=dict)  # attempts per 50 mm cell
-    given_up: list[Spot] = field(default_factory=list)
+    tried: list[Target] = field(default_factory=list)  # socks that failed, with their attempts
+    given_up: list[Target] = field(default_factory=list)  # left after `max_attempts`: ignored
     box: BoxView | None = None  # the cargo box from `look_cargo`, last check
 
 
@@ -117,7 +125,8 @@ class LoadLoop(Loop):
             r.empty_views = 0
             sm.new_cycle()
             r.target = t = min(targets, key=lambda t: math.hypot(t.point.x, t.point.y))
-            t.attempts = r.tries.get(self._cell(t), 0)
+            seen = self._same_sock(t, r.tried)
+            t.attempts = seen.attempts if seen is not None else 0
             aim = t.cut or t.off_center > self.cfg.aim_off_center
             summary = (
                 f"{pose}: {len(targets)} sock(s); {t.color} {t.confidence:.2f} at "
@@ -143,14 +152,12 @@ class LoadLoop(Loop):
             return Phase.PICK_FROM_FLOOR
         sm.obs = obs
         floor = self.s.floor_detector.detect(obs.frame)
-        near = [
-            u
-            for u in self._targets(obs, floor)
-            if math.hypot(u.point.x - t.point.x, u.point.y - t.point.y) < self.cfg.same_sock_mm
-        ]
-        if not near:
-            return sm.decide(floor, floor.overlay, "the sock isn't there any more", Phase.SCAN)
-        best = min(near, key=lambda u: u.off_center)
+        best = self._same_sock(t, self._targets(obs, floor))
+        if best is None:
+            # counted as a failed attempt: a sock the closer look never finds is left after
+            # `max_attempts`, the scan doesn't pick it again and again
+            sm.decide(floor, floor.overlay, "not found from closer", Phase.SCAN)
+            return self._failed(t, "not found from closer")
         best.attempts = t.attempts
         r.target = best
         summary = f"{best.color} {best.confidence:.2f} at ({best.point.x:.0f}, {best.point.y:.0f})"
@@ -170,16 +177,30 @@ class LoadLoop(Loop):
             "any" if t.yaw is None else f"{math.degrees(t.yaw):.0f}°",
             t.attempts + 1,
         )
-        try:
-            result = self.s.arm.pick(t.point, Zone.FLOOR, t.yaw)
-        except TargetRejected as e:
-            log.warning("pick at (%.0f, %.0f) rejected: %s", t.point.x, t.point.y, e)
+        result = None
+        for yaw in self._yaws(t.yaw):  # a rejected pick doesn't move the arm: the next yaw
+            try:
+                result = self.s.arm.pick(t.point, Zone.FLOOR, yaw)
+                break
+            except TargetRejected as e:
+                err = e
+        if result is None:
+            log.warning("pick at (%.0f, %.0f) rejected: %s", t.point.x, t.point.y, err)
             return self._failed(t, "rejected")
         if result.likely_empty:
             log.warning("gripper empty after the pick at (%.0f, %.0f)", t.point.x, t.point.y)
             self.s.arm.home()
             return self._failed(t, "missed")
         return Phase.DROP_TO_CARGO
+
+    @staticmethod
+    def _yaws(yaw: float | None) -> list[float | None]:
+        """The detector's yaw, then ever further off it up to 90° (fingers along the sock still
+        pinch cloth), then any: near the rover the 184 mm finger rail rules out some yaws."""
+        if yaw is None:
+            return [None]
+        offs = [0] + [s * d for d in range(15, 91, 15) for s in (1, -1)][:-1]  # ±90° is one
+        return [yaw + math.radians(d) for d in offs] + [None]
 
     def _drop_to_cargo(self) -> Phase:
         t = self.r.target
@@ -195,12 +216,7 @@ class LoadLoop(Loop):
         obs = self.s.observer.observe_point(Zone.FLOOR, t.point, self.cfg.aim_heights_mm)
         if obs is not None:
             floor = self.s.floor_detector.detect(obs.frame)
-            left = [
-                u
-                for u in self._targets(obs, floor)
-                if math.hypot(u.point.x - t.point.x, u.point.y - t.point.y) < self.cfg.same_sock_mm
-            ]
-            if left:
+            if self._same_sock(t, self._targets(obs, floor)) is not None:
                 sm.obs = obs
                 sm.decide(floor, floor.overlay, "still on the floor", Phase.SCAN)
                 return self._failed(t, "still on the floor")
@@ -219,7 +235,8 @@ class LoadLoop(Loop):
         if area >= self.cfg.min_raised_mm2 or more > 0:
             sm.counters[t.color] += 1
             sm.failures = 0
-            r.tries.pop(self._cell(t), None)
+            if (seen := self._same_sock(t, r.tried)) is not None:
+                r.tried.remove(seen)
             summary = f"verified: {t.color} in the box ({area / 100:.0f} cm² rose, {more:+d} sock)"
         else:
             # it left the spot but didn't reach the box: on the rover or elsewhere on the floor,
@@ -234,25 +251,31 @@ class LoadLoop(Loop):
     def _failed(self, t: Target, why: str) -> Phase:
         r, sm = self.r, self.sm
         sm.failures += 1
-        cell = self._cell(t)
-        r.tries[cell] = r.tries.get(cell, 0) + 1
-        if r.tries[cell] >= self.cfg.max_attempts:
+        # the sock as seen now (its grasp point moves between views) with one attempt more
+        if (seen := self._same_sock(t, r.tried)) is not None:
+            r.tried.remove(seen)
+        t.attempts += 1
+        r.tried.append(t)
+        if t.attempts >= self.cfg.max_attempts:
             log.warning(
                 "sock at (%.0f, %.0f) left after %d attempts (%s)",
                 t.point.x,
                 t.point.y,
-                r.tries[cell],
+                t.attempts,
                 why,
             )
-            r.given_up.append(Spot(t.point.x, t.point.y))
+            r.tried.remove(t)
+            r.given_up.append(t)
             sm.failures = 0  # given up: not a streak of failures any more
         r.target = None
         return Phase.SCAN
 
     # --- helpers ---
 
-    def _cell(self, t: Target) -> tuple[int, int]:
-        return (round(t.point.x / 50), round(t.point.y / 50))
+    def _same_sock(self, t: Target, seen: list[Target]) -> Target | None:
+        """The one of `seen` that is the sock `t` (its cloth closest to t's), or None."""
+        gaps = [(g, u) for u in seen if (g := t.same_sock(u, self.cfg.same_sock_mm)) is not None]
+        return min(gaps, key=lambda gu: (gu[0], gu[1].off_center))[1] if gaps else None
 
     def _targets(self, obs: Observation, floor: FloorResult) -> list[Target]:
         """The detected socks that lie on the floor where the arm may pick, in arm coordinates."""
@@ -276,40 +299,55 @@ class LoadLoop(Loop):
                     continue  # out of reach
                 sock = replace(sock, grasp=grasp)
                 p = cal.to_arm(obs, grasp)
-            same = self.cfg.same_sock_mm
-            if any(math.hypot(p.x - g.x, p.y - g.y) < same for g in self.r.given_up):
-                continue
             u, v = sock.grasp.px.u, sock.grasp.px.v
             off = math.hypot((u - w / 2) / (w / 2), (v - h / 2) / (h / 2)) / math.sqrt(2)
-            out.append(
-                Target(
-                    point=p,
-                    yaw=self._arm_yaw(obs, sock),
-                    color=sock.color,
-                    confidence=sock.confidence,
-                    cut=sock.touches_roi_edge,
-                    off_center=off,
-                )
+            cloth = self._mask_points(obs, sock.mask, step=4)
+            t = Target(
+                point=p,
+                yaw=self._arm_yaw(obs, sock),
+                color=sock.color,
+                confidence=sock.confidence,
+                cut=sock.touches_roi_edge,
+                off_center=off,
+                cloth_xy=np.zeros((0, 2)) if cloth is None else cloth[2][:2].T,
             )
+            if self._same_sock(t, self.r.given_up) is None:  # not a sock left where it lies
+                out.append(t)
         return out
+
+    @staticmethod
+    def _mask_points(
+        obs: Observation, mask: np.ndarray | None, step: int = 1
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        """The pixels of `mask` with depth (every `step`-th row and column): (u, v, points),
+        points 4xN in arm coordinates (mm). None without a mask, a camera pose or depth."""
+        if mask is None or obs.T_base_cam is None:
+            return None
+        depth = obs.frame.depth_mm
+        sub = np.zeros_like(mask, dtype=bool)
+        sub[::step, ::step] = mask[::step, ::step]
+        v, u = np.nonzero(sub & (depth > 0))
+        if not len(u):
+            return None
+        k = obs.frame.intrinsics
+        z = depth[v, u].astype(np.float64)
+        cam = np.stack([(u - k.cx) / k.fx * z, (v - k.cy) / k.fy * z, z, np.ones_like(z)])
+        return u, v, obs.T_base_cam @ cam
 
     def _grasp_in_reach(
         self, obs: Observation, sock: Sock, workspace: Sequence[tuple[float, float]]
     ) -> GraspPoint | None:
         """The mask pixel deepest inside the sock (at least `grasp_inset_px` in, or half its
         width) whose floor point lies in `workspace`; None if none does."""
-        if sock.mask is None or obs.T_base_cam is None:
+        if sock.mask is None:
             return None
         inset = self.s.cfg.color_classifier.grasp_inset_px
         dist = cv2.distanceTransform(sock.mask.astype(np.uint8), cv2.DIST_L2, 5)
-        depth = obs.frame.depth_mm
-        v, u = np.nonzero((dist >= min(inset, 0.5 * float(dist.max()))) & (depth > 0))
-        if not len(u):
+        pts = self._mask_points(obs, dist >= min(inset, 0.5 * float(dist.max())))
+        if pts is None:
             return None
-        k = obs.frame.intrinsics
-        z = depth[v, u].astype(np.float64)
-        cam = np.stack([(u - k.cx) / k.fx * z, (v - k.cy) / k.fy * z, z, np.ones_like(z)])
-        p = obs.T_base_cam @ cam
+        u, v, p = pts
+        z = obs.frame.depth_mm[v, u].astype(np.float64)
         inside = np.array([in_polygon(x, y, workspace) for x, y in zip(p[0], p[1], strict=True)])
         if not inside.any():
             return None

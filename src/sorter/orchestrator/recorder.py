@@ -26,6 +26,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -69,6 +70,8 @@ class Recorder:
         self._log_handler: logging.Handler | None = None
         self._root_level: int | None = None
         self._marks = 0
+        self._in_flight: dict[int, tuple[str, float]] = {}  # traced calls under way
+        self._dumped: set[int] = set()
         self._rois = {z: list(v.roi) for z, v in system.cfg.views.items()}
 
     # --- lifecycle ---
@@ -177,6 +180,8 @@ class Recorder:
             shown = {"args": [type(a).__name__ for a in args]} if brief_args else {"args": args}
             self.event("call", call=call, **_short(shown | {"kwargs": kwargs}))
             t = time.monotonic()
+            key = id(object())
+            self._in_flight[key] = (call, t)
             try:
                 out = fn(*args, **kwargs)
             except BaseException as e:
@@ -185,6 +190,8 @@ class Recorder:
                     error=f"{type(e).__name__}: {e}",
                 )  # fmt: skip
                 raise
+            finally:
+                self._in_flight.pop(key, None)
             self.event(
                 "return", call=call, dur_s=round(time.monotonic() - t, 3), **_short({"result": out})
             )
@@ -236,6 +243,7 @@ class Recorder:
                 if d is not None and d is not last_decision:
                     last_decision = d
                     self._save_decision(d)
+                self._check_hangs()
                 row = self._arm_row(rebot)
                 if row is not None:
                     now = time.time()
@@ -248,6 +256,21 @@ class Recorder:
                 self._stop.wait(max(0.0, next_t - time.monotonic()))
                 if time.monotonic() - next_t > 1.0:  # fell behind: don't burst to catch up
                     next_t = time.monotonic()
+
+    def _check_hangs(self, after_s: float = 15.0) -> None:
+        """A traced call under way for `after_s`: log every thread's stack, once per call."""
+        now = time.monotonic()
+        for key, (call, t) in list(self._in_flight.items()):
+            if now - t < after_s or key in self._dumped:
+                continue
+            self._dumped.add(key)
+            names = {t.ident: t.name for t in threading.enumerate()}
+            stacks = "\n".join(
+                f"--- {names.get(ident, ident)}\n" + "".join(traceback.format_stack(frame))
+                for ident, frame in sys._current_frames().items()
+            )
+            log.warning("%s has run %.0f s; thread stacks:\n%s", call, now - t, stacks)
+            self.event("hang", call=call, after_s=round(now - t, 1))
 
     def _arm_row(self, rebot) -> list | None:
         if rebot is None or not getattr(rebot, "connected", False):

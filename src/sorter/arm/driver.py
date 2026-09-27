@@ -13,6 +13,9 @@ import numpy as np
 
 from sorter.core.errors import ArmError, EStopped
 
+# rebot_b601's fault when a joint falls too far behind its setpoint (blocked, or just late)
+TRACKING_FAULT = "away from its commanded position"
+
 
 class ArmDriver(Protocol):
     def connect(self) -> None:
@@ -98,15 +101,38 @@ class RebotDriver:
         self._own_loop = own_loop
         self._stopped = threading.Event()
 
+    CONNECT_TIMEOUT_S = 20.0  # the rig connects in ~6 s
+
     def connect(self) -> None:
-        if not self.arm.connected:
-            self._call(
-                self.arm.connect,
-                enable=True,
-                simulate=self.dry_run,
-                backend=self._backend,
-                own_loop=self._own_loop,
+        if self.arm.connected:
+            return
+        kwargs = dict(
+            enable=True, simulate=self.dry_run, backend=self._backend, own_loop=self._own_loop
+        )
+        if self.dry_run or self._backend is not None:
+            self._call(self.arm.connect, **kwargs)
+            return
+        # on the bus in a thread: a wedged USB-CAN adapter blocks inside motorbridge for good,
+        # and the state machine must get an error, not hang
+        done, errors = threading.Event(), []
+
+        def run():
+            try:
+                self._call(self.arm.connect, **kwargs)
+            except BaseException as e:
+                errors.append(e)
+            finally:
+                done.set()
+
+        threading.Thread(target=run, name="arm-connect", daemon=True).start()
+        if not done.wait(self.CONNECT_TIMEOUT_S):
+            raise ArmError(
+                f"the arm didn't connect in {self.CONNECT_TIMEOUT_S:.0f} s: no answer on the CAN "
+                "bus. Quit (Ctrl+C), replug the USB-CAN adapter; if that's not enough, hold the "
+                "arm and power-cycle the motors"
             )
+        if errors:
+            raise errors[0]
 
     def disconnect(self) -> None:
         if self.arm.connected:

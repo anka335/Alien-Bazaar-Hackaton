@@ -97,4 +97,8 @@ def load_config(
             data = deep_merge(data, yaml.safe_load(path.read_text()) or {})
     if overrides:
         data = deep_merge(data, overrides)
-    return Config.model_validate(data)
+    cfg = Config.model_validate(data)
+    from sorter.arm import kinematics  # the arm's base yaw is global to the kinematics
+
+    kinematics.set_base(cfg.arm.base_yaw_deg, cfg.arm.base_tilt_deg)
+    return cfg

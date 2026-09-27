@@ -11,21 +11,22 @@ The rover has stopped next to socks on the floor. The arm finds them, classifies
 
 ## Where it stands
 
-- **Loop** (`orchestrator/load.py`, [D-041](../decisions.md)): scans a ring of 7 poses around the arm, picks the nearest sock (a closer, aimed look if cut off), drops it after it stops swinging, counts it only if its spot is empty and the box's surface rose where it landed. Retries up to `load.max_attempts`, then leaves the sock.
+- **Loop** (`orchestrator/load.py`, [D-041](../decisions.md)): scans a ring of 7 poses around the arm, picks the nearest sock (a closer, aimed look if cut off), drops it after it stops swinging, counts it only if its spot is empty and the box's surface rose where it landed. Retries up to `load.max_attempts`, then leaves the sock. Two sightings are one sock when one's grasp point lies on the other's cloth (its mask on the floor, `load.same_sock_mm`): the grasp point moves between views, the cloth doesn't. A closer look that doesn't find the sock counts as a failed attempt. A pick that doesn't plan at the sock's yaw is turned off it in 15° steps up to 90° ([D-049](../decisions.md)).
 - **Detector** (`floor_detector/`): `SockDetector`, masks sized in mm from depth, grasp at the widest part, yaw across the sock there.
 - **Sim**: the camera where the real one was calibrated; the rover, box and parquet from photos; sock-shaped socks over the reachable ring; cloth lies on cloth.
 - **See it**: `uv run mjpython -m sorter.sim.scenes.load.watch` (live in the MuJoCo viewer) or `uv run python -m sorter.sim.scenes.load.watch --no-viewer --record run.mp4` (a video of one run); `uv run python -m sorter.sim.scenes.load.bench -n 50 --workers 3` (the numbers).
-- **Numbers so far**: 12 scenes, 29 socks: 93 % of the reachable socks ended in the box (before the last changes). A partial 50-scene run after them: 15 of 18 socks in the box in 9 scenes, one scene ended in ERROR (5 failures in a row, 0 of 4 loaded).
+- **Numbers so far** (the box on the right, the arm base turned and leaning as measured, D-045 / D-047 / D-048): 3 scenes, 10 socks, all in the floor zone: 9 in the box (90 %), counted exactly (none extra), colors 100 %, every run DONE. `watch --seed 3` and `--seed 0`: 4/4, a sock that fell on the way was found on the floor and loaded again.
+- **Scene**: `watch` and `bench` put the socks inside `rig.yaml`'s floor zone (`sim.load.area: zone`); the default ring (`reach`) is for the tests.
 
 ### Known issues
 
-- **Seed 0 of the 50-scene run: ERROR after 5 consecutive failures, 0/4 loaded.** Not investigated. Likely several socks close together or a sock the pick keeps missing: failures from different socks add up to `max_consecutive_failures`.
-- **Counting**: a sock in the box is sometimes not counted (white socks especially: the raised area stays small), and once one was counted that wasn't there. `load.raised_mm` / `min_raised_mm2` and the box view need tuning with data.
-- **`look_cargo`** sees the box from only ~210 mm (the arm can't get the camera higher over a box that close to its base): the box just fits the frame; a sock draped over the far wall is cut off.
-- **Drops**: coming in at the drop height dragged the hanging sock over the box's wall; now the arm comes in high, lets go under the rim and backs out (`arm.cargo_drop_*`). The box (150 mm) is shorter than a sock (200 mm): with 3+ socks the pile reaches the rim and a sock can still flop over it.
-- **Speed**: ~50 s of sim time per sock; a 4-sock scene takes 2–6 min wall (cloth, 3 scenes in parallel). A pile in the box costs ~5x per step with `sim.cloth_collisions`.
+- **A sock sometimes falls on the way to the box** (1 of ~14 picks): it lands beside the box or on the rover. On the floor the loop finds it and picks it again; on the rover it is lost. Not seen why yet (the overview camera doesn't show the box behind the arm).
+- **Gripper reading**: in the sim a pinched sock keeps the fingers `PINCHED_SOCK_M` (2.5 mm) apart, so it reads 0.028 against `empty_below` 0.02 (the rig: closed on nothing ≤ 0.012). Measure what a real sock reads; `pick` reads it after the lift.
+- **`look_cargo`** sees the box from ~220 mm above its floor, the highest the arm gets: the frame just covers the box's inside; a sock draped over a wall is cut off.
+- **Drops**: the arm comes in high, lets go under the rim and backs out (`arm.cargo_drop_*`), tilted by the first tilt × azimuth that plans. The box (182 mm) is shorter than a sock (200 mm): a full box can still shed one over the rim.
+- **Speed**: `watch` runs the arm at `--arm-speed 1.4` (the motors' max, as the tests and the bench do); ~40 s of sim time per sock; 3 scenes take ~4–5 min wall on 3 workers. A pile in the box costs ~5x per step with `sim.cloth_collisions`.
 - **Sim nondeterminism**: the loop's thread timing changes when the arm gets its next command, so a seed doesn't replay exactly.
-- **Not done**: A6 (dashboard front end), floor textures other than parquet (A0), the unload loop still walks compartments (B).
+- **Not done**: A6 (dashboard front end), floor textures other than parquet (A0).
 
 ## Your lane
 
@@ -112,3 +113,7 @@ A0–A7 done on the sim.
 - 2026-09-27 (from B): shared `ItemSpec` takes the cloth's `young` and `thickness_m`; the defaults are the base's (1e5 Pa, 4 mm), so your scene is unchanged. B's socks are limp (1e4 Pa, 1 mm) so a held one hangs into the camera's view ([D-044](../decisions.md)); worth trying for A's too if the held sock matters to you.
 - 2026-09-27 (from B, [D-043](../decisions.md)): shared `sim.layout` tool: the cargo zone is B's pick zone (16 mm off the walls, corners cut by 45 mm, `grasp_depth_mm` 8; the check plans a pick at 0/90/45/135° and needs one), and `rig.yaml` has `show_held` (found with a MuJoCo collision check, `layout.collision_check`). The station (`sim.layout.laundry`) moved in front of the rover: 190 mm boxes at x 290, y ±220 / 0, so with both scenes (`run --sim`'s default) the bins stand in your floor ring; your bench and watch use only `load`. B's `sim.camera_mount_T` is gone in favor of your `camera_T_link5_cam`.
 - 2026-09-27: the cargo box moved to the arm's right ([D-045](../decisions.md)): `sim.layout.cargo.center_mm` (−50, −200); `rig.yaml` recomputed (look_cargo, cargo_*, scan poses, both zones, views, keep-out changed). Rebase and rerun your layout-dependent tests.
+- 2026-09-27 (shared, [D-047](../decisions.md)): the arm stands turned on the rover, joint 1 = 0 to its right: `arm.base_yaw_deg: -90` turns FK / IK into the rover's frame (the layout stays as it was); `rest` faces forward; `rig.yaml` recomputed (every pose's joint 1 changed). Seed joint 1 with `kinematics.joint1_toward(x, y)`, never `-atan2(y, x)`.
+- 2026-09-27 (shared, [D-048](../decisions.md)): the base leans ~6° forward on the rover: `arm.base_tilt_deg` levels the frame, `floor_z_mm` −192, the floor zone stops the fingertips 5 mm above it; the cargo box is at (−220, −190) (photo), the PSU on the left; `rig.yaml` recomputed. The rig's auto white balance turns white socks pink: `python -m sorter.camera.wb` fixes it per room. Gripper 4.5 / 2.5 Nm, `empty_below` 0.02.
+
+

@@ -41,7 +41,7 @@ class FakeDriver:
         return self.q.copy()
 
     def gripper(self):
-        return 0.0
+        return getattr(self, "opening", 0.0)  # what the last gripper move ended at
 
     def execute(self, wps, speed_scale):
         if self.stopped:
@@ -58,7 +58,8 @@ class FakeDriver:
         if self.stopped:
             raise EStopped("held")
         self.gripper_cmds.append(opening)
-        return self.grip_after_close if opening == 0 else opening
+        self.opening = self.grip_after_close if opening == 0 else opening
+        return self.opening
 
     def stop(self):
         self.stopped = True
@@ -177,7 +178,10 @@ def test_no_motion_into_the_rover_or_the_cargo_walls(arm, cfg):
 
 def test_drops_go_to_their_poses_via_home_and_open(arm, cfg):
     arm.drop_to_cargo(ColorClass.COLORED)
-    assert any(np.allclose(p[-1], cfg.poses["cargo_colored"]) for p in arm.driver.paths)
+    # from above: the release under the rim, straight below `cargo_colored`
+    x, y, z = kin.fk_tcp(np.asarray(cfg.poses["cargo_colored"]))[:3, 3]
+    ends = [kin.fk_tcp(p[-1])[:3, 3] for p in arm.driver.paths]
+    assert any(np.allclose(e, (x, y, z - cfg.arm.cargo_drop_depth_mm), atol=1.0) for e in ends)
     assert np.allclose(arm.driver.q, cfg.poses["home"])  # back out, clear of the walls
     arm.drop_to_laundry(ColorClass.LIGHT)
     assert any(np.allclose(p[-1], cfg.poses["laundry_light"]) for p in arm.driver.paths)
@@ -295,3 +299,117 @@ def test_max_speed_stays_under_the_motors_limit(cfg):
     fast = cfg.arm.model_copy(update={"max_speed_scale": 5.0, "speed_scale": 5.0})
     arm = Controller(FakeDriver(np.zeros(6)), fast, cfg.poses, cfg.zones)
     assert arm.max_speed_scale == arm.speed_scale == speed_ceiling()
+
+
+def test_tracking_check_allows_a_lag_at_speed_but_not_a_block():
+    from rebot_b601.arm import Arm, Measurement
+
+    def fault_for(measured_deg) -> str | None:
+        """Joint 1's setpoint moves 40 deg/s for 1 s, then stops; 2 s at 50 Hz."""
+        arm = Arm()
+        for i in range(100):
+            t = i * 0.02
+            q_cmd = np.radians([40 * min(t, 1.0), 0, 0, 0, 0, 0])
+            q = np.radians([measured_deg(t), 0, 0, 0, 0, 0])
+            z = np.zeros(6)
+            arm._safety_checks(Measurement(q, z, z, np.full(7, np.nan), 0.0, 0.0), q_cmd, t)
+        return arm._fault
+
+    assert fault_for(lambda t: 40 * min(max(t - 0.35, 0), 1.0)) is None  # 14 deg late, following
+    assert "joint1" in fault_for(lambda t: 0.0)  # blocked
+
+
+class LateDriver(FakeDriver):
+    """The first motion stops halfway with a tracking fault, latched until clear_fault()."""
+
+    def __init__(self, q0, fault="joint1 is 12.4 deg away from its commanded position"):
+        super().__init__(q0)
+        self._fault_msg, self._fault, self.cleared = fault, None, 0
+
+    def execute(self, wps, speed_scale):
+        if self._fault:
+            raise ArmError(f"arm is in a fault state: {self._fault}")
+        if self._fault_msg:
+            self.q = np.asarray(wps[len(wps) // 2], dtype=float)
+            self._fault, self._fault_msg = self._fault_msg, None
+            raise ArmError(f"move aborted: {self._fault}")
+        super().execute(wps, speed_scale)
+
+    def fault(self):
+        return self._fault
+
+    def clear_fault(self):
+        self._fault = None
+        self.cleared += 1
+
+
+def test_a_tracking_fault_is_cleared_and_the_path_finished_slower(cfg):
+    d = LateDriver(cfg.poses["look_floor"])
+    arm = Controller(d, cfg.arm, cfg.poses, cfg.zones)
+    arm.home()
+    assert d.cleared == 1 and d.speeds == [arm.speed_scale / 2]
+    np.testing.assert_allclose(d.q, cfg.poses["home"])
+
+
+def test_other_faults_are_not_retried(cfg):
+    d = LateDriver(cfg.poses["look_floor"], fault="lost motor feedback")
+    arm = Controller(d, cfg.arm, cfg.poses, cfg.zones)
+    with pytest.raises(ArmError, match="feedback"):
+        arm.home()
+    assert d.cleared == 0
+    arm.recover()  # clears it
+    assert d.cleared == 1 and d.fault() is None
+
+
+class _DeadReceive:
+    """Hardware whose adapter stopped receiving: the same feedback frame forever."""
+
+    simulated = False
+
+    def __init__(self):
+        z = np.zeros(6)
+        q = np.radians([-90, 20, 30, -40, 0, 0])
+        from rebot_b601.arm import Measurement
+
+        self.meas = Measurement(q, z, z, np.full(7, np.nan), 0.0, 0.0)
+        self.sent: list[np.ndarray] = []
+
+    def connect(self, enable):
+        return self.meas
+
+    def enable(self, q):
+        pass
+
+    def read(self):
+        return self.meas
+
+    def send_arm(self, q):
+        self.sent.append(np.array(q))
+
+    def send_gripper_torque(self, tau):
+        pass
+
+    def disable(self):
+        pass
+
+    def close(self):
+        pass
+
+
+def test_frozen_feedback_faults_and_holds_the_setpoint():
+    from rebot_b601.arm import Arm
+
+    t = [0.0]
+    arm = Arm(clock=lambda: t[0])
+    hw = _DeadReceive()
+    arm.connect(backend=hw, own_loop=False)
+    q0 = hw.meas.q.copy()
+    arm._execute(np.array([q0, q0 + np.radians([20, 0, 0, 0, 0, 0])]), 0.5, wait=False)
+    for _ in range(40):  # 0.8 s: the setpoint moves, the feedback never changes
+        t[0] += 0.02
+        arm.tick()
+    assert "lost motor feedback" in arm.status()["fault"]
+    held = hw.sent[-1]
+    assert np.degrees(held[0] - q0[0]) > 1  # the last setpoint, not a jump back to the frozen pose
+    with pytest.raises(Exception, match="no motor feedback"):
+        arm.clear_fault()

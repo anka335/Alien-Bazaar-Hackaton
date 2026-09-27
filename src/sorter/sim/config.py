@@ -95,13 +95,14 @@ def _equipment() -> dict[str, Block]:
     # the power supply and the power strip on it
     return {
         "electronics": Block(box_mm=(-200, -55, -100, 95, -75, -5), rgba=(0.72, 0.73, 0.75, 1)),
-        "psu": Block(box_mm=(-190, -70, -95, -30, -5, 30), rgba=(0.08, 0.08, 0.09, 1)),
-        "power_strip": Block(box_mm=(-150, -65, 0, 50, -5, 35), rgba=(0.1, 0.1, 0.11, 1)),
+        # the power supply on the rover's left, the power strip under it (photo from above)
+        "psu": Block(box_mm=(-245, 10, 120, 270, -10, 60), rgba=(0.72, 0.73, 0.75, 1)),
     }
 
 
 class RoverLayout(BaseModel):
-    """The rover around the arm, arm base frame (+x forward, +y left, z up), mm.
+    """The rover around the arm, arm base frame (+x the rover's forward, +y left, z up), mm;
+    the arm itself stands turned by `arm.base_yaw_deg`.
 
     The arm stands on the rover's deck plate; the deck top is z = 0 and the floor is
     `floor_z_mm` below it. The committed `poses`, `zones`, `views` and the arm's keep-out in

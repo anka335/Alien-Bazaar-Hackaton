@@ -110,7 +110,8 @@ class Hub:
 
     def send(self, cmd: Command | str) -> None:
         """HOLD calls on_hold() immediately, in the caller's thread, in any mode. Others are
-        queued, in a run mode only (WrongMode otherwise)."""
+        queued, in a run mode only (WrongMode otherwise). STOP during a run also calls
+        on_hold() first: the phase under way aborts instead of finishing."""
         cmd = Command(cmd)
         if cmd is Command.HOLD:
             log.warning("HOLD requested")
@@ -119,6 +120,11 @@ class Hub:
         with self._lock:
             if self._mode not in RUN_MODES:
                 raise WrongMode(f"{cmd} works in the load / unload mode; the mode is {self._mode}")
+            stop_now = cmd is Command.STOP and self._status.mode != "idle"
+        if stop_now:
+            log.warning("STOP requested: holding the arm")
+            self._on_hold()
+        with self._lock:
             self._commands.put(cmd)
 
     # --- operator mode ---

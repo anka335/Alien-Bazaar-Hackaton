@@ -22,7 +22,7 @@ import mujoco
 import numpy as np
 
 from sorter.core.config import DEFAULT_CONFIG_DIR, load_config
-from sorter.core.types import ColorClass, Command, OperatorMode, Phase
+from sorter.core.types import ColorClass, Command, OperatorMode, Phase, Zone
 
 W, H = 640, 480  # each half of the video
 
@@ -32,6 +32,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--seed", type=int, default=3)
     p.add_argument("--socks", type=int, default=4, help="how many (random colors, by seed)")
     p.add_argument("--speed", type=float, default=1.0, help="sim s per wall s; 0 = flat out")
+    p.add_argument("--arm-speed", type=float, default=1.4, help="arm.speed_scale (1.4: the max)")
     p.add_argument("--no-viewer", action="store_true")
     p.add_argument("--record", help="an .mp4 to write")
     p.add_argument("--time-limit", type=float, default=900.0, help="simulated s")
@@ -55,9 +56,12 @@ def main(argv: list[str] | None = None) -> None:
                 "load": {"socks": colors},
             },
             "backends": dict.fromkeys(("camera", "arm"), "sim"),
+            "arm": {"speed_scale": args.arm_speed},
             "state_machine": {"save_runs": False},
         },
     )
+    # the socks where the rig says the arm picks from the floor
+    cfg.sim.load.area, cfg.sim.load.zone_mm = "zone", list(cfg.zones[Zone.FLOOR].workspace_mm)
     system = build_system(cfg, sim=True)
     world = system.world
     assert world is not None

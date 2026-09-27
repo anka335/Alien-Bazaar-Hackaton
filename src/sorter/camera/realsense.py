@@ -46,6 +46,7 @@ class RealSenseCamera:
         self._seq = 0
         self.intrinsics: Intrinsics | None = None
         self.serial = cfg.serial
+        self._gains = None if cfg.color_gains is None else np.array(cfg.color_gains, np.float32)
         self._uvc = UvcAssistantFreeze()
 
     # --- Camera ---
@@ -225,8 +226,11 @@ class RealSenseCamera:
             if not color or not depth:
                 continue
             depth_mm = np.asanyarray(depth.get_data()).astype(np.float32) * self._depth_mm
+            bgr = np.asanyarray(color.get_data())
+            if self._gains is not None:
+                bgr = np.clip(bgr * self._gains, 0, 255).astype(np.uint8)
             frame = Frame(
-                color=np.asanyarray(color.get_data()).copy(),
+                color=bgr.copy() if self._gains is None else bgr,
                 depth_mm=np.clip(np.rint(depth_mm), 0, 65535).astype(np.uint16),
                 intrinsics=self.intrinsics,
                 timestamp=t,
