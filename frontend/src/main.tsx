@@ -15,7 +15,8 @@ import "./styles/calibrate.css";
 import "./styles/twin.css";
 
 const PAGES: Record<string, () => React.JSX.Element> = {
-  "/auto": AutoPage,
+  "/load": AutoPage,
+  "/unload": AutoPage,
   "/manual": ManualPage,
   "/calibrate": CalibratePage,
   "/3d": TwinPage,

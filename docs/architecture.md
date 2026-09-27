@@ -281,7 +281,7 @@ Decision(phase, obs, overlay, summary)
 | `GET` / `POST /api/manual` | manual control: named poses, a tour `look_floor → look_cargo → cargo_* → laundry_* → home`, jog, gripper, save a pose into `rig.yaml`, release, clear fault |
 | `GET` / `POST /api/calibrate` | the calibration page: marks on the floor view, clicks, the mount fit, look poses (`look_floor`, `look_cargo`) |
 
-**The front end is not updated yet**: it still has an "Auto" tab and draws the table from the old layout JSON. Updating it (tabs Load / Unload, the 3D view from `parts`) is task A6; B adds its panel on top (B5).
+**The front end is updated only in part**: its tabs are Load / Unload (one run page, the tab says which loop it switches to), Manual, Calibrate, 3D view; the run page's phase strip and the 3D view are still the table's (the old layout JSON). The rest (the 3D view from `parts`, the rover phases, the load panel) is task A6; B adds its panel on top (B5).
 
 ## Threads and process
 

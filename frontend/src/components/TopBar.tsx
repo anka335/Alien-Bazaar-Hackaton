@@ -6,7 +6,8 @@ import { navigate, usePath } from "../hooks";
 import { useSorter } from "../sorter";
 
 export const TABS: { path: string; label: string; mode: OperatorMode | null }[] = [
-  { path: "/auto", label: "Auto", mode: "auto" },
+  { path: "/load", label: "Load", mode: "load" },
+  { path: "/unload", label: "Unload", mode: "unload" },
   { path: "/manual", label: "Manual", mode: "manual" },
   { path: "/calibrate", label: "Calibrate", mode: "calibrate" },
   { path: "/3d", label: "3D view", mode: null },
@@ -14,7 +15,7 @@ export const TABS: { path: string; label: string; mode: OperatorMode | null }[] 
 
 export function currentTab(path: string, operator: OperatorMode | undefined): string {
   if (TABS.some((t) => t.path === path)) return path;
-  return TAB_MODES[operator ?? "auto"];
+  return TAB_MODES[operator ?? "load"];
 }
 
 /** The tabs. A mode's tab is its switch too: opening it switches the operator mode, and stays

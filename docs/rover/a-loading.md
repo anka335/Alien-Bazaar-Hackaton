@@ -71,7 +71,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 
 ### A6: Dashboard
 
-- The front end (`frontend/`) still has the table's "Auto" tab and 3D table. Update the shared parts (`api.ts` modes, `TopBar` tabs `/load`, `/unload`, the 3D view drawing `parts` generically, the phases), then the load panel. Tell B when the shared part is merged: B's panel builds on it.
+- The front end (`frontend/`) has the `load` / `unload` modes and the tabs `/load`, `/unload` (both on the old run page, `AutoPage`), but still the table's 3D view and phase strip. Update the rest of the shared parts (the 3D view drawing `parts` generically, the phases), then the load panel. Tell B when the shared part is merged: B's panel builds on it.
 - Rewrite the skipped `tests/dashboard/test_server.py` and `test_calibrate.py` (calibration now on the floor view).
 
 ### A7: Benchmark
@@ -97,3 +97,4 @@ A0–A7 done on the sim.
 - 2026-09-27: stage 0 done; the brief rewritten for what it delivered ([D-034](../decisions.md)).
 - 2026-09-27: stages N (navigation), C (full mission), D (sim-to-real) added ([D-035](../decisions.md)): repositioning and the rover interface are C's, N hands over at the stop requirement.
 - 2026-09-27 (from B): shared `sim.camera_mount_T` (4 × 4 `T_link5_cam`) replaces `sim.camera_mount_mm` when set ([D-041](../decisions.md)); unset by default, so your rig is unchanged. B runs the sim camera at the rig's measured hand-eye mount (−130, +18, +99 mm off the TCP, 6.6° tilt, image turned ~180° from the nominal one): worth moving to it too. B also works on the real rover's geometry (one undivided 150 × 150 × 60 mm cargo box, bins in front; `sorter.sim.scenes.unload.rover`, [D-040](../decisions.md)); moving the committed layout to it needs your agreement, since you drop into that box.
+- 2026-09-27 (from B): shared front end: the `auto` mode replaced by `load` / `unload` (the back end's modes since stage 0; `/` crashed on `TAB_MODES["unload"]`), tabs Load / Unload both on the old run page `AutoPage`, `isRunMode()` in `api.ts`. The 3D view, the phase strip and the load panel are still A6's.
