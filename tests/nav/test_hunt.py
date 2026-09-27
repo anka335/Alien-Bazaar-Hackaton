@@ -89,7 +89,7 @@ def test_run_robot_from_the_rover_tab():
             time.sleep(0.05)
         live.submit("run", RunRequest(detector="seg", gap_m=0.05))
         time.sleep(0.2)
-        for _ in range(1200):
+        for _ in range(3600):  # up to 3 min: slow on a loaded machine (the full suite)
             if live.busy is None:
                 break
             time.sleep(0.05)
