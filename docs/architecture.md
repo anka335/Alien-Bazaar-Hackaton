@@ -5,6 +5,7 @@ Single source of truth for the contracts between the stages. The shared types ar
 ## Physical setup
 
 - **Rover** ([D-032](decisions.md)): built and driven by others. The arm is bolted to its deck plate, **200 mm above the floor**. For our code the rover stands still: in load mode it has stopped next to socks, in unload mode it is parked at the station. There is no rover interface yet.
+- **Leo Rover, ROS 2 track** ([D-037](decisions.md)): separately from the stages, `ros2_ws/src/rover_nav` drives a real Leo Rover (LeoOS, ROS 2 Jazzy) with the laptop on board through one room on a saved map; see [Rover navigation](#rover-navigation-ros-2-track). Not part of the sorter loop.
 - **Arm:** Seeed reBot Arm B601-RS (6 DoF + parallel gripper, [D-011](decisions.md)), driven through `rebot_b601/` ([D-019](decisions.md)). Joint 1 turns ±145°, so nothing right behind the arm is reachable; with the gripper pointing down the TCP reaches ~100 mm above the deck at most, and the floor from ~140 to ~450 mm out.
 - **Camera:** Intel RealSense D435i RGB-D on the wrist, fixed to link5, looking along the gripper ([D-006](decisions.md), [D-027](decisions.md)).
 - **Cargo box** on the deck, to the arm's left: 3 compartments in a row along x (light, dark, colored).
@@ -320,7 +321,7 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 | `zones.<zone>` | layout tool | `floor`, `cargo`: `workspace_mm`, `z_floor_mm`, `grasp_depth_mm`, `approach_mm`, `lift_z_mm` (`rig.yaml`) |
 | `state_machine` | shared | `empty_confirmations`, `max_consecutive_failures`, `low_confidence`, `save_runs`, `runs_dir` |
 | `dashboard` | shared | `host`, `port`, `stream_fps`, `jpeg_quality`, `status_hz` |
-| `nav` | N | the navigation world ([D-037](decisions.md)): `leo` (the rover and its firmware), `camera` (the OAK-D, its mount and depth mode), `goal` (where the sock must end up), `real` (`rosbridge_url`, topics, speed caps, the OAK-D device), `timestep_s`, `control_hz`, `realtime`, `stream_fps`, `max_command_s`, `detector`, `sam_prompt` |
+| `nav` | N | the navigation world ([D-040](decisions.md)): `leo` (the rover and its firmware), `camera` (the OAK-D, its mount and depth mode), `goal` (where the sock must end up), `real` (`rosbridge_url`, topics, speed caps, the OAK-D device), `timestep_s`, `control_hz`, `realtime`, `stream_fps`, `max_command_s`, `detector`, `sam_prompt` |
 
 `rig.yaml` is computed: `uv run python -m sorter.sim.layout --write` after any change to `sim.layout` or `arm.drop_height_mm` (it prints the poses and checks every pick and move; 0 problems or it exits 1). The rig's `arm.z_min_mm` and `arm.keep_out_mm` come from there too.
 
@@ -341,9 +342,27 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 
 ## Navigation world (stage N)
 
-`sorter.nav` is a separate MuJoCo world, not the arm scene ([D-037](decisions.md)): the Leo Rover 1.9 (`model.py`, meshes from `leo_description` in `assets/leo/`), its firmware (`sim.py`: `cmd_vel` → wheel speeds, timeout, odometry from encoders + gyro), the OAK-D (`camera.py`: RGB + aligned stereo depth), scenarios (`scenario.py`), commands (`commands.py`), detectors (`detect.py`), the approach algorithm (`controller.py`), episodes and scoring (`episode.py`). The rover frame has its origin on the floor under the rover's center, x forward, y left, z up. Operators and the algorithm decide from the camera only; ground truth is used for scoring and the debug views.
+`sorter.nav` is a separate MuJoCo world, not the arm scene ([D-040](decisions.md)): the Leo Rover 1.9 (`model.py`, meshes from `leo_description` in `assets/leo/`), its firmware (`sim.py`: `cmd_vel` → wheel speeds, timeout, odometry from encoders + gyro), the OAK-D (`camera.py`: RGB + aligned stereo depth), scenarios (`scenario.py`), commands (`commands.py`), detectors (`detect.py`), the approach algorithm (`controller.py`), episodes and scoring (`episode.py`). The rover frame has its origin on the floor under the rover's center, x forward, y left, z up. Operators and the algorithm decide from the camera only; ground truth is used for scoring and the debug views.
 
 The commands (`sorter.nav.commands.Rover`) need a base with `set_cmd(v, w)`, `tick()`, `odom`, `t`, `dt`, `moving()`, `ref`, `cfg` and a camera with `capture() → Frame`, `K`, `T_rover_cam`: `RoverSim` + `OakD` in the sim, `real_leo.LeoBase` (rosbridge: `/cmd_vel` out every tick, `/merged_odom` in) + `real_oakd.RealOakD` (depthai v3) on the hardware. A `Frame` is RGB uint8, depth uint16 mm aligned to it (0 = none), the RGB intrinsics and the camera's pose in the rover frame.
+
+## Rover navigation (ROS 2 track)
+
+`ros2_ws/src/rover_nav` ([D-037](decisions.md), [D-038](decisions.md)). Ready-made nodes: RTAB-Map for SLAM, Nav2 for driving, a Nav2 keepout filter for the forbidden half of the room. Two launches: **mapping** (RTAB-Map mapping, keyboard teleop, done once) and **navigation** (RTAB-Map localization on the saved database, Nav2, keepout filter).
+
+| Interface | Direction | Notes |
+| --- | --- | --- |
+| `/rover_nav/oak/rgb/image_rect`, `/rover_nav/oak/stereo/image_raw`, `/rover_nav/oak/rgb/camera_info` | in | `nav_camera:=oak` (default): OAK-D on the rover's front, DepthAI driver started by `rover_nav` in `/rover_nav`; TF `leo/base_link` → `oak` → `oak_rgb_camera_optical_frame` from the driver's description |
+| `/camera/camera/color/image_raw`, `/camera/camera/aligned_depth_to_color/image_raw`, `.../color/camera_info` | in | `nav_camera:=wrist`: the RealSense driver as started by `cloth_task` (640×480, 15 fps, TF off); reused, never started twice |
+| TF `leo/base_link` → arm `base_link` → … → `camera_color_optical_frame` | in | Rover → arm base: static, measured mount, published by `rover_nav` (always). Arm → camera: the arm stack's `robot_state_publisher` with the arm in the `drive` pose, or a static transform in the drive pose while the arm stack isn't available |
+| `/leo/merged_odom` (`nav_msgs/Odometry`, 100 Hz) + `leo/odom` → `leo/base_footprint` TF | in | The rover's `odom_filter` (LeoOS, wheel odometry + IMU), over the rover's Wi-Fi |
+| `/leo/cmd_vel` (`geometry_msgs/Twist`) | out | To the rover firmware. Nav2, or `teleop_twist_keyboard` while mapping |
+| `/map` + `map` → `leo/odom` TF | internal | RTAB-Map |
+| Keepout mask (`.pgm` + `.yaml`) | internal | Generated from the saved 2D map and a dividing line by `rover_nav`'s mask tool |
+
+- **Names:** the arm owns the plain names (`base_link`, `/joint_states`, `/robot_description`). The rover runs with LeoOS's `ROBOT_NAMESPACE=leo`: frames `leo/…`, topics `/leo/…` (`rover_nav/scripts/setup_rover.sh`). TF tree: `map` → `leo/odom` → `leo/base_footprint` → `leo/base_link` → `base_link` (arm) → … → camera.
+- With `nav_camera:=wrist`, the arm stays in `drive` while the rover moves: moving it breaks mapping and localization. With `oak` the arm is free.
+- **Sim** (`rover_nav/sim`, [D-039](decisions.md)): a standalone MuJoCo Leo Rover from the official `leo_description` (uv project, no ROS): `cmd_vel` with the firmware's timeout, wheel + gyro odometry, the rover and OAK-D cameras. Not wired to ROS yet; the jevomir VLM drives it through its scoring API.
 
 ## Repo layout
 
@@ -364,5 +383,6 @@ The commands (`sorter.nav.commands.Rover`) need a base with `set_cmd(v, w)`, `ti
 | `tests/<package>/` | same as the package; `tests/conftest.py` shared |
 | `src/sorter/nav/`, `tests/nav/`, `frontend/src/pages/RoverPage.tsx`, `config/default.yaml` → `nav` | N |
 | `ros2_ws/` | the ROS 2 track ([D-014](decisions.md)), outside these stages |
+| `ros2_ws/src/rover_nav/` (incl. `sim/`, the MuJoCo Leo Rover) | the ROS 2 rover navigation track ([D-037](decisions.md), [D-039](decisions.md)); brief: [rover/ros2-navigation.md](rover/ros2-navigation.md) |
 
 "Shared" means: change it only through the contract rules in [AGENTS.md](../AGENTS.md).

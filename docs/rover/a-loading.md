@@ -96,4 +96,4 @@ A0–A7 done on the sim.
 - 2026-09-27: stage defined ([D-032](../decisions.md)).
 - 2026-09-27: stage 0 done; the brief rewritten for what it delivered ([D-034](../decisions.md)).
 - 2026-09-27: stages N (navigation), C (full mission), D (sim-to-real) added ([D-035](../decisions.md)): repositioning and the rover interface are C's, N hands over at the stop requirement.
-- 2026-09-27: shared code touched by stage N ([D-037](../decisions.md)): the root config has a `nav` section, `create_app(..., nav=)` mounts `/api/nav/*` and the `/rover` page, the front end has a Rover tab (`TopBar.tsx`, `main.tsx`), `pyproject.toml` an optional `nav-hw` extra (depthai). Nothing else in the shared code changed.
+- 2026-09-27: shared code touched by stage N ([D-040](../decisions.md)): the root config has a `nav` section, `create_app(..., nav=)` mounts `/api/nav/*` and the `/rover` page, the front end has a Rover tab (`TopBar.tsx`, `main.tsx`), `pyproject.toml` an optional `nav-hw` extra (depthai). Nothing else in the shared code changed.

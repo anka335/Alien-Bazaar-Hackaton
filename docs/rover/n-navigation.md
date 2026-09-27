@@ -19,7 +19,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | N4 | Docking at the station | todo | — | Final approach on a marker (e.g. ArUco) at the station; parking error within what B's drop poses tolerate |
 | N5 | Room coverage | todo | — | Where to drive when F sees no sock; ends when the room is clear or the cargo box is full |
 
-## What exists ([D-037](../decisions.md))
+## What exists ([D-040](../decisions.md))
 
 - `src/sorter/nav/`: the Leo Rover 1.9 in its own MuJoCo world (not the arm scene), its firmware emulated, an OAK-D with stereo-like depth, seeded scenarios (`python -m sorter.nav scenarios`), the command set (`python -m sorter.nav commands`), sock detectors (`classic`, `sam3`, `seg` = sim oracle), the approach algorithm (`controller.py`), a CLI for one-command-per-process episodes and a benchmark. How to run: [README → Rover navigation sim](../../README.md#rover-navigation-sim).
 - The real rover and camera behind the same commands: `real_leo.py` (rosbridge), `real_oakd.py` (depthai v3), `real.py` (session, `hw-check`, `real do|look|detect|auto`, `serve --real`). Tested against a fake rosbridge only; not yet on the hardware.
@@ -55,7 +55,8 @@ No collisions. On unseen seeds 10–19 (plus `random`): 91 %, one collision (obs
 ## Log
 
 - 2026-09-27: commands, detector and algorithm tuned by 10 parallel agents and merged (benchmark 43 % → 92 %); real rover (rosbridge) and OAK-D (depthai) backends, `hw-check`, `serve --real`.
-- 2026-09-27: N1 and N3 started in `sorter.nav` on `feat/rover-nav` ([D-037](../decisions.md)).
+- 2026-09-27: N1 and N3 started in `sorter.nav` on `feat/rover-nav` ([D-040](../decisions.md)).
 
 - 2026-09-27: stage defined ([D-035](../decisions.md)).
 - 2026-09-27: far detection moved to its own stage F ([D-036](../decisions.md)); N2 is now driving to F's target.
+- 2026-09-27: the ROS 2 track has a MuJoCo Leo Rover (official `leo_description` model, firmware-like `cmd_vel`, wheel + gyro odometry, cameras) in `ros2_ws/src/rover_nav/sim` ([D-039](../decisions.md), [brief](ros2-navigation.md)); N1 can reuse its model and meshes.

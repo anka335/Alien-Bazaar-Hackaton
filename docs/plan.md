@@ -28,10 +28,11 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | [A: Loading](rover/a-loading.md) | todo | — | — | socks from the floor into the cargo compartments |
 | [B: Unloading](rover/b-unloading.md) | todo | — | — | cargo compartments into the laundry bins |
 | [F: Far detection](rover/f-far-detection.md) | todo | — | — | socks seen 0.5–3 m away from a search pose, as targets on the floor |
-| [N: Navigation](rover/n-navigation.md) | in progress | Viacheslav + Claude | `feat/rover-nav` | Leo Rover + OAK-D sim (`sorter.nav`), camera-only commands, sock approach, Rover tab (D-037) |
+| [N: Navigation](rover/n-navigation.md) | in progress | Viacheslav + Claude | `feat/rover-nav` | Leo Rover + OAK-D sim (`sorter.nav`), camera-only commands, sock approach, Rover tab (D-040) |
 | [C: Full mission](rover/c-mission.md) | todo | — | — | needs A, B, F, N: rover interface, stow, mission loop, benchmark |
 | [D: Sim-to-real](rover/d-sim-to-real.md) | todo | — | — | needs C: the benchmarks under rig-like errors |
 | Hardware | todo | — | — | not planned in detail yet: measure the rover, calibrate, the real interface, real socks |
+| [ROS 2: rover navigation](rover/ros2-navigation.md) | in progress | Slava + Claude | `block/09-rover-navigation` | outside the stages: RTAB-Map + Nav2 on the real Leo Rover (room mapped, mask made; first navigation run next); MuJoCo Leo Rover sim driven by jevomir (D-039), reusable for N1 |
 
 ## How the parallel stages stay out of each other's way
 

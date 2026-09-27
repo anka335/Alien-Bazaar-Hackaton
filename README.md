@@ -53,7 +53,7 @@ uv run pytest                                   # tests
 
 ## Rover navigation sim
 
-The Leo Rover 1.9 with an OAK-D in its own MuJoCo world, steered by camera-only commands ([D-037](docs/decisions.md), stage N).
+The Leo Rover 1.9 with an OAK-D in its own MuJoCo world, steered by camera-only commands ([D-040](docs/decisions.md), stage N).
 
 - The Rover tab: `/rover` in the dashboard, or on its own `uv run python -m sorter.nav serve` → http://127.0.0.1:8010/rover (build the front end first). Click a pixel of the OAK-D view, then Face / Go to pixel; Forward, Turn, Scan, Seek sock, Clearance, arrow keys nudge, Esc stops; Approach sock runs the algorithm (`classic`, `sam3`, `seg` = sim oracle). Below it, the command panel has every command as a card: its parameters as fields (a click on the view fills `u`, `v`), a Run button and its last result.
 - One command per process, an episode in a directory: `uv run python -m sorter.nav new runs/e1 --scenario easy --seed 0`, then `... do runs/e1 go_to_pixel 220 109`, `... detect runs/e1 --detector classic|sam3|seg`, `... depth runs/e1 U V`, `... finish runs/e1` (the ground-truth score). Frames land in `runs/e1/frames/` (`NNN_grid.png` has a pixel grid and the goal zone).
@@ -87,7 +87,7 @@ The same commands drive the real rover: `sorter.nav.real_leo` talks to the Leo o
 
 **Config** is in `config/`: `default.yaml` (all sections), `rig.yaml` (computed: poses, zones, ROIs, the arm's floor limit and keep-out), `hand_eye.yaml` (the camera mount), and your own `local.yaml` (gitignored), e.g. `backends: {camera: real}`.
 
-**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth task ([D-014](docs/decisions.md)), outside these stages: [ros2_ws/README.md](ros2_ws/README.md).
+**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth task ([D-014](docs/decisions.md)), outside these stages: [ros2_ws/README.md](ros2_ws/README.md). Its rover navigation drives the real Leo Rover in one room: RTAB-Map + Nav2 with an OAK-D on the rover's front, in `ros2_ws/src/rover_nav` ([D-037](docs/decisions.md), [D-038](docs/decisions.md); brief: [docs/rover/ros2-navigation.md](docs/rover/ros2-navigation.md)). A standalone MuJoCo sim of the Leo Rover from its official model, drivable by the jevomir VLM, is in [`rover_nav/sim`](ros2_ws/src/rover_nav/sim/README.md) ([D-039](docs/decisions.md)).
 
 ## Working with AI agents
 
