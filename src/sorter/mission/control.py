@@ -10,6 +10,7 @@ the rover stopped. At `capacity` socks, or with none found: GO TO BOX (the stati
 `nav.boxes.target_id`, the remembered layout `nav.boxes.memory` if any), after driving back on
 the odometry to 1.3 m in front of the station as seen at the start (**start the rover facing the
 station**, 1-2 m from it; not seen: back to the start point). Tag not found: back off, again.
+Parked: the unload run (the unload mode, stage B's loop) sorts the cargo box into the bins.
 
 On the sim (`run --sim`): `mission.run_mission` (the nav world and fresh arm worlds in turn,
 D-052); the dashboard's own arm world stays idle.
@@ -34,6 +35,7 @@ log = logging.getLogger(__name__)
 
 GAP_M = 0.10  # bumper to the sock's near edge: its center ~0.35-0.45 m ahead, in the arm's zone
 LOAD_TIMEOUT_S = 600.0
+UNLOAD_TIMEOUT_S = 1800.0  # up to ~90 s per sock
 STATION_LOOK_M = 1.3  # back at the station: this far in front of its target tag
 
 
@@ -49,9 +51,11 @@ class MissionControl:
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self.phase = "idle"  # idle | searching | loading | to_station | done | stopped | error
+        # idle / searching / loading / to_station / unloading / done / stopped / error
+        self.phase = "idle"
         self.note = ""
         self.cargo: dict[str, int] = {}
+        self.sorted: dict[str, int] = {}  # unload: socks in the bin of their color
         self.stops = 0
         self.events: deque[dict] = deque(maxlen=60)
         self._jpeg: bytes = b""
@@ -68,6 +72,7 @@ class MissionControl:
                 "running": self.running,
                 "real": not self.sim,
                 "cargo": dict(self.cargo),
+                "sorted": dict(self.sorted),
                 "loaded": sum(self.cargo.values()),
                 "stops": self.stops,
                 "events": list(self.events),
@@ -84,7 +89,7 @@ class MissionControl:
             raise RuntimeError("the arm's run is going: stop it in the Load tab first")
         self._stop.clear()
         with self._lock:
-            self.cargo, self.stops, self.note = {}, 0, ""
+            self.cargo, self.sorted, self.stops, self.note = {}, {}, 0, ""
             self.events.clear()
         self._t0 = time.time()
         target = self._run_sim if self.sim else self._run_real
@@ -150,6 +155,10 @@ class MissionControl:
                     self.stops += 1
                 elif kind == "to_station":
                     self.phase = "to_station"
+                elif kind == "unloading":
+                    self.phase = "unloading"
+                elif kind == "unloaded":
+                    self.sorted = dict(e.get("sorted", {}))
 
         report = run_mission(
             config_dir=self.config_dir,
@@ -159,8 +168,15 @@ class MissionControl:
             cancelled=self._stop.is_set,
             on_frame=self._frame,
         )
-        st = report.station or {}
-        self._set("done" if st.get("ok") else "error", st.get("note", ""))
+        st, un = report.station or {}, report.unload
+        if not st.get("ok"):
+            self._set("error", st.get("note", ""))
+        elif un is not None:
+            note = f"{un['right']} of {report.loaded} socks in the bin of their color"
+            ok = un["end"] == "done" or un["right"] == report.loaded  # all sorted: the loop's end
+            self._set("done" if ok else "error", f"{note} (unload loop: {un['end']})")
+        else:
+            self._set("done", st.get("note", ""))
 
     def _run_real(self, capacity: int, gap_m: float, detector: str | None) -> None:
         from sorter.mission.mission import drive_to
@@ -227,7 +243,26 @@ class MissionControl:
                 self._check()
                 rover.run("forward", -0.5, 0.2)
                 res = approach_box(rover, b.target_id, b.stop_m, b.tag_size_m, memory)
-            self._set("done" if res.ok else "error", res.note)
+            if not res.ok:
+                self._set("error", res.note)
+                return
+            self._event("at_station", note=res.note)
+            if sum(self.cargo.values()):
+                try:
+                    got = self._arm_run(
+                        OperatorMode.UNLOAD, "unloading", "the arm sorts into the bins"
+                    )
+                    end = ""
+                except RuntimeError as e:  # e.g. B's loop on the emptied box: still count
+                    got = {c.value: n for c, n in self.sm.counters.items() if n}
+                    end = f" ({e})"
+                with self._lock:
+                    self.sorted = got
+                n, total = sum(got.values()), sum(self.cargo.values())
+                note = f"{n} of {total} socks in the bin of their color{end}"
+                self._set("done" if n >= total else "error", note)
+            else:
+                self._set("done", "nothing to unload")
         finally:
             rover.run = run
             session.close()  # stops the rover
@@ -251,11 +286,15 @@ class MissionControl:
         )
 
     def _load(self) -> dict[str, int]:
-        """One load run with the rover standing: the state machine in the load mode until it is
-        done; the arm ends at home. Returns the socks it put in the box, by color class."""
+        return self._arm_run(OperatorMode.LOAD, "loading", "the arm picks what is in reach")
+
+    def _arm_run(self, mode: OperatorMode, phase: str, note: str) -> dict[str, int]:
+        """One run of the arm with the rover standing: the state machine in `mode` until it is
+        done; the arm ends at home. Returns its counters by color class (load: socks put in
+        the box; unload: socks landed in the bin of their color)."""
         hub, sm = self.system.hub, self.sm
-        self._set("loading", "the arm picks what is in reach")
-        hub.set_mode(OperatorMode.LOAD)
+        self._set(phase, note)
+        hub.set_mode(mode)
         hub.send(Command.START)
         t0 = time.time()
         while sm.mode == "idle" and time.time() - t0 < 5:  # the state machine takes it
@@ -265,13 +304,14 @@ class MissionControl:
             if sm.mode == "idle":
                 break
             if sm.phase in (Phase.ERROR, Phase.HELD):
-                raise RuntimeError(f"the load run stopped: {sm.phase.value} {sm.error or ''}")
-            if time.time() - t0 > LOAD_TIMEOUT_S:
+                raise RuntimeError(f"the {mode} run stopped: {sm.phase.value} {sm.error or ''}")
+            limit = UNLOAD_TIMEOUT_S if mode is OperatorMode.UNLOAD else LOAD_TIMEOUT_S
+            if time.time() - t0 > limit:
                 hub.send(Command.STOP)
-                raise RuntimeError("the load run took too long")
+                raise RuntimeError(f"the {mode} run took too long")
             time.sleep(0.1)
         if sm.phase is not Phase.DONE and sm.error:
-            raise RuntimeError(f"the load run ended: {sm.error}")
+            raise RuntimeError(f"the {mode} run ended: {sm.error}")
         return {c.value: n for c, n in sm.counters.items() if n}
 
 

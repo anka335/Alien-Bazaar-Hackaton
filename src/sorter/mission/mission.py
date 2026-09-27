@@ -69,6 +69,7 @@ class MissionReport:
     stops: list[Stop] = field(default_factory=list)
     cargo: dict[str, int] = field(default_factory=dict)  # color class → socks in the box
     station: dict | None = None  # the drive to the station
+    unload: dict | None = None  # the unload run at the station
     stopped: str = ""  # why the collecting ended
     wall_s: float = 0.0
 
@@ -85,6 +86,7 @@ class MissionReport:
             "stops": [s.summary() for s in self.stops],
             "collecting_ended": self.stopped,
             "station": self.station,
+            "unload": self.unload,
             "wall_s": round(self.wall_s, 1),
         }
 
@@ -211,6 +213,100 @@ def load_stop(
         world.stop()
 
 
+def unload_stop(
+    cargo: dict[str, int],
+    seed: int,
+    video: Path | None = None,
+    cancelled: Callable[[], bool] | None = None,
+    arm_speed: float = 1.4,
+) -> dict:
+    """The unload run at the station (stage B's loop) in a fresh arm world with `cargo` (socks
+    per color class) in the cargo box; the station parks within B's tolerance (±30 mm, ±5°).
+    Returns where every sock ended (the sim's truth) and the loop's own count."""
+    from sorter.app import build_system
+    from sorter.core.types import Command, OperatorMode, Phase
+    from sorter.orchestrator.state_machine import StateMachine
+    from sorter.sim.scenes.unload.bench import _truth_bins, _where, unload_config
+
+    cfg = unload_config(
+        {
+            "sim": {
+                "seed": seed,
+                "realtime": 0,
+                "unload": {
+                    "cargo": {c.value: cargo.get(c.value, 0) for c in ColorClass},
+                    "sock_mm": [200, 90],
+                    "station_mm": 30,
+                    "station_deg": 5,
+                    "bin_mm": 15,
+                    "bin_deg": 8,
+                },
+            },
+            "backends": dict.fromkeys(("camera", "arm"), "sim"),
+            "arm": {"speed_scale": arm_speed},
+            "state_machine": {"save_runs": False},
+        }
+    )
+    system = build_system(cfg, sim=True)
+    world = system.world
+    assert world is not None
+    system.camera.start()
+    sm = StateMachine(system)
+    stop = threading.Event()
+    thread = threading.Thread(target=sm.run, args=(stop,), name="state-machine", daemon=True)
+    thread.start()
+    system.hub.set_mode(OperatorMode.UNLOAD)
+    system.hub.send(Command.START)
+    rec = _ArmVideo(world, system.camera, video, cfg) if video is not None else None
+    limit = 90.0 * sum(cargo.values()) + 60.0
+    t0, end, last = world.time(), "time limit", None
+    try:
+        while world.time() - t0 < limit:
+            if cancelled is not None and cancelled():
+                from sorter.nav.commands import Cancelled
+
+                raise Cancelled
+            if rec is not None:
+                rec.frame(f"{world.time() - t0:5.1f} s  unload  {sm.phase.value}")
+            d = system.hub.decision()
+            if d is not None and d is not last:
+                last = d
+                log.info("  unload %6.1f s  %-14s %s", world.time() - t0, d.phase.value, d.summary)
+            if sm.run_id is not None and (
+                sm.phase is Phase.ERROR or (sm.mode == "idle" and sm.phase is Phase.DONE)
+            ):
+                end = "done" if sm.phase is Phase.DONE else f"error: {sm.error}"
+                break
+            time.sleep(0.01 if rec is None else 0.001)
+        bins = _truth_bins(world)
+        right: Counter[str] = Counter()
+        wrong = left = 0
+        for it in world.items:
+            at, where = _where(world, it.id, bins)
+            if at == "laundry" and where == it.color.value:
+                right[it.color.value] += 1
+            elif at == "laundry":
+                wrong += 1
+            else:
+                left += 1
+        return {
+            "end": end,
+            "sim_s": round(world.time() - t0, 1),
+            "sorted": dict(right),
+            "right": sum(right.values()),
+            "wrong_bin": wrong,
+            "not_in_a_bin": left,
+            "counted": {c.value: n for c, n in sm.counters.items() if n},
+        }
+    finally:
+        stop.set()
+        thread.join(timeout=5)
+        if rec is not None:
+            rec.close()
+        system.camera.close()
+        world.stop()
+
+
 class _ArmVideo:
     """An MP4 of a stop: an overview of the rover and the wrist camera, one frame per 0.1 s of
     simulated time (like `sim.scenes.load.watch --record`)."""
@@ -267,6 +363,7 @@ def run_mission(
     on_event: Callable[[dict], None] | None = None,
     cancelled: Callable[[], bool] | None = None,
     on_frame: Callable[[object], None] | None = None,
+    unload: bool = True,
 ) -> MissionReport:
     """The whole mission on the sim (see the module doc). `capacity`: socks the cargo box takes
     before the rover drives to the station. `out`: the nav frames and log, `mission.json` and,
@@ -380,6 +477,11 @@ def run_mission(
         if spec.station is not None:
             report.station["true_gap_m"] = round(_station_gap(sim, spec.station), 3)
         event("at_station", **report.station)
+        if unload and arm and res.ok and report.loaded:
+            event("unloading", cargo=dict(cargo))
+            vid = root / "unload.mp4" if (video and root is not None) else None
+            report.unload = unload_stop(dict(cargo), seed, vid, cancelled=cancelled)
+            event("unloaded", **report.unload)
     finally:
         rover.run = run
         ep.close()

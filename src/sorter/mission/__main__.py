@@ -26,6 +26,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--out", help="a directory: nav frames, mission.json, stop videos")
     p.add_argument("--video", action="store_true", help="an MP4 per stop (needs --out)")
     p.add_argument("--no-arm", action="store_true", help="no arm world: socks in reach count")
+    p.add_argument("--no-unload", action="store_true", help="stop at the station")
     p.add_argument("--config-dir", default=str(DEFAULT_CONFIG_DIR))
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.WARNING, format="%(message)s")
@@ -40,6 +41,7 @@ def main(argv: list[str] | None = None) -> None:
         out=args.out,
         video=args.video,
         arm=not args.no_arm,
+        unload=not args.no_arm and not args.no_unload,
     )
     print(json.dumps(report.summary(), indent=1))
 

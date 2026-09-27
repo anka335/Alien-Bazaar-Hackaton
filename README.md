@@ -74,9 +74,9 @@ The Leo Rover 1.9 with an OAK-D in its own MuJoCo world, steered by camera-only 
 
 ### Full mission (sim)
 
-Drive, load at every stop, drive to the station ([D-052](docs/decisions.md), stage C): `uv run python -m sorter.mission --seed 0 --out data/mission/s0 --video` (JSON lines per step, `mission.json`, an MP4 per stop); `--no-arm` checks the driving alone in seconds; `--capacity N` sends the rover to the station after N socks. Unloading at the station is not run yet.
+Drive, load at every stop, drive to the station ([D-052](docs/decisions.md), stage C): `uv run python -m sorter.mission --seed 0 --out data/mission/s0 --video` (JSON lines per step, `mission.json`, an MP4 per stop); `--no-arm` checks the driving alone in seconds; `--capacity N` sends the rover to the station after N socks. Parked at the station, the unload run sorts the cargo box into the bins (`--no-unload`: stop at the station).
 
-**Mission tab** (`/mission` in the dashboard): START MISSION runs it all, STOP stops the rover and the arm. On the sim (`run --sim`) it is the above; on the rig (`uv run python -m sorter run`, the Leo's Wi-Fi joined, see *Rover navigation on the real Leo*) the real Leo drives up to each sock (stops 10 cm before it; SAM3 if the key is set), the real arm loads what is in reach, and at the end the rover goes back to the station and parks 15 cm from tag 13. Start the rover facing the station, 1–2 m from it: it remembers the station from there. Don't use the Rover tab at the same time (a second rosbridge session).
+**Mission tab** (`/mission` in the dashboard): START MISSION runs it all, STOP stops the rover and the arm. On the sim (`run --sim`) it is the above; on the rig (`uv run python -m sorter run`, the Leo's Wi-Fi joined, see *Rover navigation on the real Leo*) the real Leo drives up to each sock (stops 10 cm before it; SAM3 if the key is set), the real arm loads what is in reach, at the end the rover goes back to the station, parks 15 cm from tag 13, and the arm sorts the cargo box into the laundry bins (the unload mode). Start the rover facing the station, 1–2 m from it: it remembers the station from there. Don't use the Rover tab at the same time (a second rosbridge session).
 
 ### Rover navigation on the real Leo
 

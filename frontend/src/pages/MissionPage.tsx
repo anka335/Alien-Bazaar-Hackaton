@@ -9,6 +9,7 @@ interface MissionState {
   running: boolean;
   real: boolean;
   cargo: Record<string, number>;
+  sorted: Record<string, number>;
   loaded: number;
   stops: number;
   events: Record<string, unknown>[];
@@ -19,6 +20,7 @@ const PHASES: Record<string, string> = {
   searching: "looking for a sock / driving to it",
   loading: "the arm is loading",
   to_station: "driving to the station",
+  unloading: "the arm is sorting into the bins",
   done: "at the station",
   stopped: "stopped",
   error: "error",
@@ -73,6 +75,7 @@ export function MissionPage(): React.JSX.Element {
             <span>
               in the box: {s?.loaded ?? 0}
               {s && Object.keys(s.cargo).length > 0 ? ` (${Object.entries(s.cargo).map(([c, n]) => `${c} ${n}`).join(", ")})` : ""} · stops {s?.stops ?? 0}
+              {s && Object.keys(s.sorted).length > 0 ? ` · sorted: ${Object.entries(s.sorted).map(([c, n]) => `${c} ${n}`).join(", ")}` : ""}
             </span>
           </div>
         </div>
