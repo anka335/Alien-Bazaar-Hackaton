@@ -75,6 +75,10 @@ def _number(v: Any) -> bool:
     return isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v)
 
 
+def _clamp(v: float, lo: float, hi: float) -> float:
+    return min(max(float(v), lo), hi)
+
+
 def parse_teleop(msg: Any) -> Teleop | None:
     """A teleop v1 message (decoded JSON) → Teleop, or None if malformed. Unknown fields are
     ignored; a quaternion with a finite norm of at least MIN_QUAT_NORM is renormalized."""
@@ -107,7 +111,7 @@ def parse_teleop(msg: Any) -> Teleop | None:
         arm_engaged=arm["engaged"],
         position=np.array(pos, dtype=float),
         orientation=q / norm,
-        gripper=min(max(float(grip), 0.0), 1.0),
+        gripper=_clamp(grip, 0.0, 1.0),
         base_engaged=base["engaged"],
         vx=float(base["vx"]),
         wz=float(base["wz"]),
@@ -128,7 +132,7 @@ def quat_to_R(q: np.ndarray) -> np.ndarray:
 
 def rotvec(R: np.ndarray) -> np.ndarray:
     """Rotation matrix → axis · angle (rad)."""
-    ang = math.acos(min(max((float(np.trace(R)) - 1.0) / 2.0, -1.0), 1.0))
+    ang = math.acos(_clamp((float(np.trace(R)) - 1.0) / 2.0, -1.0, 1.0))
     w = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
     s = float(np.linalg.norm(w))  # 2 sin(ang)
     if s > 1e-9:
@@ -219,7 +223,7 @@ class Session:
         self._send_gripper = send_gripper
         self._clock = clock
         self._send_base = send_base
-        self._rover = bool(rover)
+        self._rover_enabled = bool(rover)
         self._max_vx, self._max_reverse, self._max_wz = max_vx, max_reverse, max_wz
         self._t_odom: float | None = None
         self._socket_open = False
@@ -256,9 +260,9 @@ class Session:
         self._update()
 
     def on_odometry(self) -> None:
-        """A rover odometry message arrived; its content is not used."""
+        """A rover odometry message arrived; its content is not used. A returning rover never
+        starts the base by itself: the left hand must be seen open first."""
         self._t_odom = self._clock()
-        self._update()
 
     def on_connect(self) -> bool:
         """A lens socket arrived. Accepted only once teleop mode is on and a joint measurement
@@ -323,7 +327,7 @@ class Session:
         if self._socket_open and not present:
             self._base_need_release = True
         driving = (
-            self._rover
+            self._rover_enabled
             and present
             and self._socket_open
             and not self._shut_down
@@ -362,8 +366,8 @@ class Session:
             self._base_need_release = False
         self._base_engaged = t.base_engaged
         self._base_cmd = (
-            min(max(t.vx, -self._max_reverse), self._max_vx),
-            min(max(t.wz, -self._max_wz), self._max_wz),
+            _clamp(t.vx, -self._max_reverse, self._max_vx),
+            _clamp(t.wz, -self._max_wz, self._max_wz),
         )
         self._update_base()
         if self._need_release and self._arm_ok() and not t.arm_engaged:
