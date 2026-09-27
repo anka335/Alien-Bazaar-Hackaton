@@ -10,7 +10,7 @@ Everything is built and accepted on a MuJoCo simulator first ([D-032](docs/decis
 
 | Component | Details |
 | --- | --- |
-| Rover | built and driven by others; four wheels, the arm stands on its deck, ~160 mm above the floor |
+| Rover | built and driven by others; four wheels, the arm stands on its deck, 200 mm above the floor |
 | Robot arm | Seeed reBot Arm B601-RS (RobStride motors): 6 DoF + parallel gripper, driven through [`rebot_b601/`](rebot_b601/README.md) |
 | Camera | Intel RealSense D435i RGB-D on the arm's wrist (eye-in-hand), USB 3 |
 | Cargo box | one cardboard box, 150 × 150 × 60 mm, left of the arm and a bit behind, over the rear left wheel |
