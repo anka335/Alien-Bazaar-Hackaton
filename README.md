@@ -62,14 +62,16 @@ The Leo Rover 1.9 with an OAK-D in its own MuJoCo world, steered by camera-only 
 
 ### Rover navigation on the real Leo
 
-The same commands drive the real rover: `sorter.nav.real_leo` talks to the Leo over rosbridge (`/cmd_vel` out, `/merged_odom` in; no ROS install needed), `sorter.nav.real_oakd` reads the OAK-D through depthai v3 (RGB 640×480 + stereo depth aligned to it, extended disparity).
+The same commands drive the real rover over rosbridge (LeoOS runs it on port 9090 for its web UI; no ROS install needed here): `sorter.nav.real_leo` sends `cmd_vel` every control tick and reads `merged_odom`, or, if that topic is silent, integrates the wheel encoders (`firmware/wheel_states`) and the IMU's gyro (`imu/data`) itself. Topic names are relative, so rosbridge resolves them in the rover's namespace (`/leo/` on ours).
 
-1. On the machine the OAK-D is plugged into (the rover's Raspberry Pi, USB 3): `uv sync --extra nav-hw` (installs depthai).
-2. rosbridge on the rover: LeoOS runs it for its web UI (port 9090); if not, `ros2 launch rosbridge_server rosbridge_websocket_launch.xml` there.
-3. Check: `uv run python -m sorter.nav hw-check` (on the rover; from a laptop add `--rosbridge ws://10.0.0.1:9090`). It saves `data/nav_hw/hw_rgb.png` and `hw_depth.png`, compares the depth of the floor with the mount in `nav.camera` (fix `mount_xyz_m` / `pitch_deg` if they disagree) and checks `/merged_odom`. `--move` also turns 10° and back: clear space first.
-4. Drive: `uv run python -m sorter.nav serve --real --host 0.0.0.0` on the rover and open `http://<rover-ip>:8010/rover` from a laptop (the rover's Wi-Fi: `http://10.0.0.1:8010/rover`), or one command per process: `... real look runs/r1`, `... real do runs/r1 go_to_pixel 320 300`, `... real detect runs/r1 --detector sam3`, `... real auto --detector sam3 --out runs/r2`.
-5. Safety: speeds are capped by `nav.real.max_linear_mps` (0.25) and `max_angular_rps` (0.8); a twist is sent every control tick, so if the process dies the firmware stops the rover within 0.5 s; `forward` stops for obstacles in the depth image (the Leo has no bumper). Stop: Esc / Stop in the tab, Ctrl+C on the CLI.
-6. The mount: OAK-D on the front of the top plate, 25° down (`nav.camera.mount_xyz_m`, `pitch_deg`); keep depth mode `extended` (normal mode has no depth closer than ~0.7 m). Measure the real mount and put it in `config/local.yaml` → `nav.camera`.
+The camera (`nav.real.camera`, `auto` tries them in this order): the OAK-D's ROS driver on the rover over rosbridge (`/oak/rgb/image_raw/compressed`, `/oak/stereo/image_raw/compressedDepth`, `/oak/rgb/camera_info`); an OAK-D plugged into this machine (depthai v3, `uv sync --extra nav-hw`); none (gray frames, no obstacle guard: drive with care).
+
+1. Join the rover's Wi-Fi (the rover is 10.0.0.1; `nav.real.rosbridge_url` defaults to `ws://10.0.0.1:9090`).
+2. An OAK-D on this machine's USB needs the Luxonis udev rule once: `echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="03e7", MODE="0666"' | sudo tee /etc/udev/rules.d/80-movidius.rules && sudo udevadm control --reload-rules && sudo udevadm trigger`, then replug it.
+3. Check: `uv run python -m sorter.nav hw-check` saves `data/nav_hw/hw_rgb.png` / `hw_depth.png`, compares the floor's depth with the mount in `nav.camera` (fix `mount_xyz_m` / `pitch_deg` if they disagree) and checks the odometry. `--move` also turns 10° and back: clear space first.
+4. Drive: `uv run python -m sorter.nav serve --real` → http://127.0.0.1:8010/rover: the command panel's buttons move the rover (the status line shows the rosbridge URL, the camera, the odometry source). **Reconnect** reconnects (after plugging the camera in). On the rover itself: `serve --real --host 0.0.0.0 --rosbridge ws://127.0.0.1:9090` and open `http://10.0.0.1:8010/rover`. One command per process: `... real look runs/r1`, `... real do runs/r1 forward 0.3`, `... real auto --detector sam3 --out runs/r2`.
+5. Safety: speeds are capped by `nav.real.max_linear_mps` (0.25) and `max_angular_rps` (0.8), a command by `max_command_s` (10 s); a twist goes out every tick, so if this process dies the firmware stops the rover within 0.5 s; if the odometry moves opposite to the command for 0.4 s the rover stops with a fault (a sign error would otherwise run away). Stop: Esc / Stop in the tab, Ctrl+C on the CLI.
+6. The mount: OAK-D on the front of the top plate, 25° down (`nav.camera.mount_xyz_m`, `pitch_deg`); keep depth mode `extended`. Measure the real mount and put it in `config/local.yaml` → `nav.camera`.
 
 ## Setup on the rig
 

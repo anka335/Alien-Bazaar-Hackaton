@@ -139,8 +139,21 @@ class NavLive:
                         "center_m": list(ep.cfg.goal.center_m),
                         "half_size_m": list(ep.cfg.goal.half_size_m),
                     },
-                    "frame_size": [ep.cfg.camera.width, ep.cfg.camera.height],
+                    "frame_size": (
+                        [ep.rover.frame.K.width, ep.rover.frame.K.height]
+                        if ep.rover.frame is not None
+                        else [ep.cfg.camera.width, ep.cfg.camera.height]
+                    ),
                 }
+                if self.real:
+                    out["hardware"] = {
+                        "rosbridge": ep.cfg.real.rosbridge_url,
+                        "camera": getattr(ep, "camera_kind", ""),
+                        "odometry": getattr(ep.sim, "odom_source", None),
+                        "fault": getattr(ep.sim, "fault", None),
+                        "max_mps": ep.cfg.real.max_linear_mps,
+                        "max_rps": ep.cfg.real.max_angular_rps,
+                    }
             return out
 
     def view(self, kind: str) -> bytes:
@@ -165,9 +178,13 @@ class NavLive:
                 self.error = None
             except Cancelled:
                 self._note({"command": "stop", "note": "stopped by the operator"})
+                self._cancel.clear()  # else the stop below is cancelled too and kills this thread
                 if self.episode:
                     self.episode.sim.set_cmd(0, 0)
-                    self.episode.rover.stop()
+                    try:
+                        self.episode.rover.stop()
+                    except Exception:  # noqa: BLE001 - the loop must survive
+                        log.exception("stop after cancel failed")
             except Exception as e:  # noqa: BLE001 - shown in the panel, the loop goes on
                 log.exception("nav job %s failed", kind)
                 self.error = f"{kind}: {e}"
@@ -359,19 +376,23 @@ def router(live_factory) -> APIRouter:
         live = live_factory()
 
         async def gen():
-            seq = -1
+            # every part is closed by the next boundary right away: a browser shows a part only
+            # once its boundary arrives, so an idle rover would otherwise show nothing; the
+            # latest frame is sent again every second so the stream stays alive
+            yield f"--{BOUNDARY}\r\n".encode()
+            seq, sent = -1, 0.0
             while not await request.is_disconnected():
-                if live.jpeg_seq != seq:
-                    seq = live.jpeg_seq
+                now = time.monotonic()
+                if live.jpeg_seq != seq or now - sent > 1.0:
+                    seq, sent = live.jpeg_seq, now
                     data = live.view(kind)
                     if data:
                         yield (
                             (
-                                f"--{BOUNDARY}\r\nContent-Type: image/jpeg\r\n"
-                                f"Content-Length: {len(data)}\r\n\r\n"
+                                f"Content-Type: image/jpeg\r\nContent-Length: {len(data)}\r\n\r\n"
                             ).encode()
                             + data
-                            + b"\r\n"
+                            + f"\r\n--{BOUNDARY}\r\n".encode()
                         )
                 await asyncio.sleep(0.05)
 

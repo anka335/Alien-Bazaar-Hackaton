@@ -34,6 +34,7 @@ interface NavState {
   scenarios: string[];
   jpeg_seq: number;
   real?: boolean;
+  hardware?: { rosbridge: string; camera: string; odometry: string | null; fault: string | null; max_mps: number; max_rps: number };
   odom?: { x: number; y: number; yaw_deg: number; v: number; w: number; distance: number };
   truth?: { sock_rover: [number, number] };
   score?: { success: boolean; in_zone: boolean; collisions: number; sock_pushed_m: number };
@@ -197,6 +198,13 @@ export function RoverPage(): React.JSX.Element {
         {s?.real ? (
           <div className="rover-group">
             <h3>Real rover</h3>
+            {s.hardware && (
+              <p className={s.hardware.fault ? "warn" : "ok"}>
+                {s.hardware.rosbridge} · camera: {s.hardware.camera} · odometry: {s.hardware.odometry ?? "–"} · max{" "}
+                {s.hardware.max_mps} m/s, {s.hardware.max_rps} rad/s
+                {s.hardware.fault ? ` · ${s.hardware.fault}` : ""}
+              </p>
+            )}
             <button onClick={() => send("/api/nav/reset", {})}>Reconnect</button>
             <p className="hint">Speeds are capped by nav.real. Esc or Stop halts it.</p>
           </div>

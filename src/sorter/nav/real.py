@@ -24,24 +24,36 @@ from sorter.nav.episode import goal_pixels, grid
 
 
 class RealSession:
-    """The real rover and camera behind the command set. Close it: it stops the rover."""
+    """The real rover and camera behind the command set. Close it: it stops the rover.
+
+    One rosbridge connection serves both; the camera is `nav.real.camera` (see
+    `real_camera.open_camera`). A command runs at most `nav.real.max_command_s`.
+    """
 
     def __init__(self, cfg: NavConfig, base=None, camera=None):
+        cfg = cfg.model_copy(deep=True)
+        cfg.max_command_s = min(cfg.max_command_s, cfg.real.max_command_s)
         self.cfg = cfg
-        if camera is None:
-            from sorter.nav.real_oakd import RealOakD
-
-            camera = RealOakD(cfg.camera, cfg.real)
+        bridge = None
         try:
             if base is None:
-                from sorter.nav.real_leo import LeoBase
+                from sorter.nav.real_leo import LeoBase, Rosbridge
 
-                base = LeoBase(cfg)
+                bridge = Rosbridge(cfg.real.rosbridge_url)
+                base = LeoBase(cfg, bridge)
+            if camera is None:
+                from sorter.nav.real_camera import open_camera
+
+                camera = open_camera(cfg, getattr(base, "bridge", bridge))
         except Exception:
-            camera.close()
+            if base is not None:
+                base.close()
+            elif bridge is not None:
+                bridge.close()
             raise
         self.sim = base  # the name the commands and the live panel use for "the rover"
         self.camera = camera
+        self.camera_kind = type(camera).__name__
         self.rover = Rover(base, camera)
         self.commands = 0
         self.spec = None

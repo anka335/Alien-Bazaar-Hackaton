@@ -19,7 +19,9 @@ from sorter.nav.real_leo import LeoBase, Rosbridge, RosbridgeError
 class FakeLeo:
     """A rosbridge server with a kinematic rover behind it."""
 
-    def __init__(self, turn_gain: float = 1.0):
+    def __init__(self, turn_gain: float = 1.0, merged: bool = True, wheel_sign: float = 1.0):
+        self.merged = merged  # publish merged_odom; else only wheel states and the IMU
+        self.wheel_sign = wheel_sign
         self.x = self.y = self.yaw = 0.0
         self.v = self.w = 0.0
         self.turn_gain = turn_gain
@@ -77,13 +79,41 @@ class FakeLeo:
 
         for raw in ws:
             m = json.loads(raw)
-            if m["op"] == "subscribe" and m["topic"] == "/merged_odom":
+            topic = m.get("topic", "").lstrip("/")
+            if m["op"] == "subscribe" and topic == "merged_odom" and self.merged:
                 threading.Thread(target=publish_odom, daemon=True).start()
-            elif m["op"] == "publish" and m["topic"] == "/cmd_vel":
+            elif m["op"] == "subscribe" and topic in ("firmware/wheel_states", "imu/data"):
+                threading.Thread(
+                    target=self._publish_raw, args=(ws, topic, stop), daemon=True
+                ).start()
+            elif m["op"] == "publish" and topic == "cmd_vel":
                 self.v, self.w = m["msg"]["linear"]["x"], m["msg"]["angular"]["z"]
                 self.last_cmd_t = time.monotonic()
                 self.cmds.append((self.v, self.w))
         stop.set()
+
+    def _publish_raw(self, ws, topic, stop):
+        """The encoder and gyro topics (the kinematics run in the merged_odom thread or here)."""
+        t = time.monotonic()
+        while not stop.is_set():
+            now = time.monotonic()
+            dt, t = now - t, now
+            if not self.merged and topic == "imu/data":  # integrate the truth here instead
+                if now - self.last_cmd_t > 0.5:
+                    self.v = self.w = 0.0
+                self.yaw += self.w * self.turn_gain * dt
+                self.x += self.v * math.cos(self.yaw) * dt
+                self.y += self.v * math.sin(self.yaw) * dt
+            if topic == "imu/data":
+                msg = {"angular_velocity": {"x": 0.0, "y": 0.0, "z": self.w * self.turn_gain}}
+            else:
+                wv = self.wheel_sign * self.v / 0.0625
+                msg = {"velocity": [wv] * 4, "position": [0.0] * 4}
+            try:
+                ws.send(json.dumps({"op": "publish", "topic": topic, "msg": msg}))
+            except Exception:  # noqa: BLE001 - client gone
+                return
+            time.sleep(0.02)
 
     def close(self):
         self.server.shutdown()
@@ -213,3 +243,87 @@ def test_rover_tab_backend_drives_the_real_rover(fake, monkeypatch):
         live.stop()
         if live.episode is not None:
             live.episode.close()
+
+
+def test_odometry_from_wheels_and_imu_when_merged_odom_is_silent():
+    fake = FakeLeo(merged=False)
+    cfg = _cfg(fake.url)
+    s = RealSession(cfg, camera=FakeCamera(cfg))
+    try:
+        assert s.sim.odom_source == "wheels+imu"
+        s.rover.forward(0.3, 0.2)
+        assert fake.x == pytest.approx(0.3, abs=0.04)
+        s.rover.turn(30)
+        assert math.degrees(fake.yaw) == pytest.approx(30, abs=4)
+    finally:
+        s.close()
+        fake.close()
+
+
+def test_odometry_going_the_wrong_way_stops_the_rover():
+    fake = FakeLeo(merged=False, wheel_sign=-1.0)  # encoders report backwards
+    cfg = _cfg(fake.url)
+    s = RealSession(cfg, camera=FakeCamera(cfg))
+    try:
+        with pytest.raises(RosbridgeError, match="odometry"):
+            s.rover.forward(0.5, 0.2)
+        assert abs(fake.x) < 0.25  # stopped early, not run away
+    finally:
+        s.close()
+        fake.close()
+
+
+def test_camera_over_rosbridge():
+    import base64
+
+    import cv2
+    from sorter.nav.real_camera import RosCamera, decode_depth
+
+    rgb = np.zeros((720, 1280, 3), np.uint8)
+    rgb[300:400, 600:700] = (0, 0, 255)
+    depth = np.full((720, 1280), 1500, np.uint16)
+    ok, jpg = cv2.imencode(".jpg", rgb)
+    ok2, png = cv2.imencode(".png", depth)
+    depth_msg = {
+        "format": "16UC1; compressedDepth png",
+        "data": base64.b64encode(b"\0" * 12 + png.tobytes()).decode(),
+    }
+    assert decode_depth(depth_msg)[0, 0] == 1500
+
+    class Bridge:
+        def subscribe(self, topic, _type, handler):
+            if topic.endswith("image_raw/compressed"):
+                threading.Thread(
+                    target=lambda: [
+                        (
+                            handler(
+                                {"format": "jpeg", "data": base64.b64encode(jpg.tobytes()).decode()}
+                            ),
+                            time.sleep(0.05),
+                        )
+                        for _ in range(40)
+                    ],
+                    daemon=True,
+                ).start()
+            elif "compressedDepth" in topic:
+                handler(depth_msg)
+            elif topic.endswith("camera_info"):
+                handler({"width": 1280, "height": 720, "k": [900, 0, 640, 0, 900, 360, 0, 0, 1]})
+
+    cam = RosCamera(NavConfig(), Bridge(), wait_s=2.0)
+    f = cam.capture()
+    assert f.rgb.shape == (360, 640, 3) and f.depth_mm.shape == (360, 640)
+    assert f.K.fx == pytest.approx(450) and f.K.cy == pytest.approx(180)
+    assert f.depth_mm[180, 320] == 1500
+
+
+def test_no_camera_still_drives(fake):
+    from sorter.nav.real_camera import NoCamera
+
+    cfg = _cfg(fake.url)
+    s = RealSession(cfg, camera=NoCamera(cfg, "test"))
+    try:
+        s.rover.forward(0.2, 0.2)
+        assert fake.x == pytest.approx(0.2, abs=0.03)
+    finally:
+        s.close()

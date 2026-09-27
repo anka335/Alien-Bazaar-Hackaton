@@ -22,7 +22,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 ## What exists ([D-040](../decisions.md))
 
 - `src/sorter/nav/`: the Leo Rover 1.9 in its own MuJoCo world (not the arm scene), its firmware emulated, an OAK-D with stereo-like depth, seeded scenarios (`python -m sorter.nav scenarios`), the command set (`python -m sorter.nav commands`), sock detectors (`classic`, `sam3`, `seg` = sim oracle), the approach algorithm (`controller.py`), a CLI for one-command-per-process episodes and a benchmark. How to run: [README → Rover navigation sim](../../README.md#rover-navigation-sim).
-- The real rover and camera behind the same commands: `real_leo.py` (rosbridge), `real_oakd.py` (depthai v3), `real.py` (session, `hw-check`, `real do|look|detect|auto`, `serve --real`). Tested against a fake rosbridge only; not yet on the hardware.
+- The real rover and camera behind the same commands: `real_leo.py` (rosbridge; odometry from `merged_odom` or wheels + IMU), `real_camera.py` (the OAK-D's ROS driver over rosbridge, or none), `real_oakd.py` (a local OAK-D, depthai v3), `real.py` (session, `hw-check`, `real do|look|detect|auto`, `serve --real`). Connected to our Leo (ROS 2, namespace `/leo/`, `merged_odom` silent, so wheels + IMU): odometry at rest verified; driving by the buttons not yet verified by us.
 - N3's goal zone is `nav.goal`: the sock's center 0.33–0.53 m ahead of the rover's center, ±0.10 m sideways (a placeholder for the stop requirement from `sim.layout` until the arm sits on the Leo). Any sock counts.
 - The Rover tab (`/rover`) runs a live episode, or the real rover with `serve --real`.
 

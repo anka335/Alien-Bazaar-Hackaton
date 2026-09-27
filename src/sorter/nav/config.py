@@ -74,19 +74,36 @@ class GoalConfig(BaseModel):
 
 
 class RealConfig(BaseModel):
-    """`nav.real`: the real Leo Rover (rosbridge) and the real OAK-D (depthai)."""
+    """`nav.real`: the real Leo Rover and its OAK-D, over rosbridge (or depthai for a local OAK-D).
+
+    Topic names without a leading `/` are resolved by rosbridge in the rover's namespace (LeoOS
+    puts everything under `/leo/` on some rovers, `/` on others), as the Leo web UI does.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    # on the rover: ws://127.0.0.1:9090; from a laptop on the rover's Wi-Fi: ws://10.0.0.1:9090
-    rosbridge_url: str = "ws://127.0.0.1:9090"
-    cmd_vel_topic: str = "/cmd_vel"
-    odom_topic: str = "/merged_odom"
+    # from a laptop on the rover's Wi-Fi: ws://10.0.0.1:9090; on the rover: ws://127.0.0.1:9090
+    rosbridge_url: str = "ws://10.0.0.1:9090"
+    cmd_vel_topic: str = "cmd_vel"
+    # the rover's fused odometry; if it doesn't publish, the wheel encoders + the IMU's gyro
+    # are integrated here instead (what merged_odom does on the rover)
+    odom_topic: str = "merged_odom"
+    wheel_states_topic: str = "firmware/wheel_states"
+    imu_topic: str = "imu/data"
     connect_timeout_s: float = 5.0
     # below the rover's 0.4 m/s and 1 rad/s until the commands are trusted on the real floor
     max_linear_mps: float = 0.25
     max_angular_rps: float = 0.8
-    oakd_device: str = ""  # MxID or IP of the OAK-D; empty = the first one found
+    max_command_s: float = 10.0  # a single command on the real rover stops after this
+    # where the frames come from: `rosbridge` (the OAK-D's ROS driver on the rover), `depthai`
+    # (an OAK-D plugged into this machine), `none` (drive blind: no obstacle guard), `auto` =
+    # the first that gives a frame
+    camera: Literal["auto", "rosbridge", "depthai", "none"] = "auto"
+    rgb_topic: str = "/oak/rgb/image_raw/compressed"
+    depth_topic: str = "/oak/stereo/image_raw/compressedDepth"
+    camera_info_topic: str = "/oak/rgb/camera_info"
+    camera_timeout_s: float = 4.0
+    oakd_device: str = ""  # depthai: MxID or IP of the OAK-D; empty = the first one found
     oakd_fps: float = 15.0
 
 
