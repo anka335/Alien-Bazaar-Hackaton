@@ -26,7 +26,7 @@ import threading
 import numpy as np
 import rclpy
 from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
+from rclpy.executors import ExternalShutdownException, SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from sensor_msgs.msg import JointState
@@ -141,7 +141,7 @@ class SpectaclesBridge(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = SpectaclesBridge()
-    executor = MultiThreadedExecutor()
+    executor = SingleThreadedExecutor()
     executor.add_node(node)
     spin = threading.Thread(target=executor.spin, daemon=True)
     spin.start()
