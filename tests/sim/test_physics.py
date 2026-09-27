@@ -60,7 +60,7 @@ def test_scenes_put_the_socks_in_place(sim_config):
         assert where == [
             (ColorClass.LIGHT, ("floor", None)),
             (ColorClass.DARK, ("floor", None)),
-            (ColorClass.LIGHT, ("cargo", None)),  # one box, not split by color (D-035)
+            (ColorClass.LIGHT, ("cargo", None)),  # one box, not split by color (D-040)
             (ColorClass.COLORED, ("cargo", None)),
         ]
     finally:

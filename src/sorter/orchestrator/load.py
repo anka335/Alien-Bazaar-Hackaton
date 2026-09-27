@@ -1,4 +1,4 @@
-"""The load loop (stage A): socks from the floor all around the rover into the cargo box (D-035).
+"""The load loop (stage A): socks from the floor all around the rover into the cargo box (D-040).
 
 The rover stands still; only the arm moves. The loop looks at the floor from the scan poses
 (`scan_1` … `scan_N`, a ring around the arm) one after another, turns every sock the floor

@@ -29,13 +29,13 @@ sim:
   focal_px: 615                   # D435i color at 640x480
   camera_mount_mm: [-140, 0, 55]  # wrist camera in the TCP frame (x = approach), looks along x
   layout:            # the rover, arm base at the origin on the deck (z = 0), +x forward, +y left, mm
-    # measured on the rover (D-037); the equipment behind the arm is still a photo estimate
+    # measured on the rover (D-042); the equipment behind the arm is still a photo estimate
     floor_z_mm: -200                                          # the deck is 200 mm above the floor
     body: {center_mm: [-90, 0], size_mm: [420, 420]}         # chassis + wheels, from above
     wheel_width_mm: 130
     deck: {center_mm: [-90, 0], size_mm: [300, 185]}         # the plate; the arm at its front edge
     cargo:                                                    # one cardboard box, left of the arm
-      center_mm: [-50, 200]                                   # not measured: as in D-035
+      center_mm: [-50, 200]                                   # not measured: as in D-040
       size_mm: [182, 182]                                     # inside (190 outside)
       floor_z_mm: -41                                         # inside floor; its underside 45 below the deck
       wall_mm: 75                                             # the rim is 34 above the deck

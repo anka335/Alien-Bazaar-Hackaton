@@ -30,7 +30,7 @@ class RectConfig(BaseModel):
 class CargoLayout(RectConfig):
     """The cargo box on the rover: `size_mm` is the inside. With `compartments` it is split
     along x into one compartment per color, in that order (from −x to +x); without, it is one
-    box every sock goes into (D-035)."""
+    box every sock goes into (D-040)."""
 
     floor_z_mm: float = -35.0  # the inside floor (the deck top is z = 0)
     wall_mm: float = 60.0  # wall height above the inside floor (the gripper held down reaches

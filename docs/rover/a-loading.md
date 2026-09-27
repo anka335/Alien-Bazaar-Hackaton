@@ -5,13 +5,13 @@
 
 ## Goal
 
-The rover has stopped next to socks on the floor. The arm finds them, classifies each sock's color on the spot, picks it up and drops it into the cargo box (one box, [D-035](../decisions.md)), until no sock is left in reach. The rover stands still; we don't talk to it ([D-032](../decisions.md), [D-034](../decisions.md)).
+The rover has stopped next to socks on the floor. The arm finds them, classifies each sock's color on the spot, picks it up and drops it into the cargo box (one box, [D-040](../decisions.md)), until no sock is left in reach. The rover stands still; we don't talk to it ([D-032](../decisions.md), [D-034](../decisions.md)).
 
 **Make it work perfectly in the simulator, as close to reality as you can get it:** a realistic scene (socks, floor, light, camera noise), a robust loop, and a benchmark that proves it. Hardware comes later.
 
 ## Where it stands
 
-- **Loop** (`orchestrator/load.py`, [D-036](../decisions.md)): scans a ring of 7 poses around the arm, picks the nearest sock (a closer, aimed look if cut off), drops it after it stops swinging, counts it only if its spot is empty and the box's surface rose where it landed. Retries up to `load.max_attempts`, then leaves the sock.
+- **Loop** (`orchestrator/load.py`, [D-041](../decisions.md)): scans a ring of 7 poses around the arm, picks the nearest sock (a closer, aimed look if cut off), drops it after it stops swinging, counts it only if its spot is empty and the box's surface rose where it landed. Retries up to `load.max_attempts`, then leaves the sock.
 - **Detector** (`floor_detector/`): `SockDetector`, masks sized in mm from depth, grasp at the widest part, yaw across the sock there.
 - **Sim**: the camera where the real one was calibrated; the rover, box and parquet from photos; sock-shaped socks over the reachable ring; cloth lies on cloth.
 - **See it**: `uv run mjpython -m sorter.sim.scenes.load.watch` (live in the MuJoCo viewer) or `uv run python -m sorter.sim.scenes.load.watch --no-viewer --record run.mp4` (a video of one run); `uv run python -m sorter.sim.scenes.load.bench -n 50 --workers 3` (the numbers).
@@ -94,7 +94,7 @@ A0–A7 done on the sim.
 ## Open questions
 
 - Several socks at one stop: collect all in reach (planned) or only the one the rover stopped for?
-- With one box ([D-035](../decisions.md)): does loading still need the color (for the dashboard, or to hand it to unloading), or does sorting happen at unload?
+- With one box ([D-040](../decisions.md)): does loading still need the color (for the dashboard, or to hand it to unloading), or does sorting happen at unload?
 
 ## Requests from other blocks
 
@@ -104,6 +104,6 @@ A0–A7 done on the sim.
 
 - 2026-09-27: stage defined ([D-032](../decisions.md)).
 - 2026-09-27: stage 0 done; the brief rewritten for what it delivered ([D-034](../decisions.md)).
-- 2026-09-27: A0 started: the rover, the one cargo box and the parquet floor from photos, sock-shaped socks over the reachable ring ([D-035](../decisions.md)); the shared layout, keep-out and base scene changed (noted in B's Log).
-- 2026-09-27: the load loop scanning a ring around the arm, the sock detector, the camera from the hand-eye result, the benchmark and the watch tool ([D-036](../decisions.md)); shared: `ArmController.go_to` / `aim_camera`, `Observer.observe(zone, pose)` / `observe_point`, `plan_move`, `arm.link5_points_mm`, `arm.drop_settle_s`, phases `AIM` / `CHECK_LOAD`, scan poses in `rig.yaml`, `sim.cloth_collisions` (noted in B's Log).
-- 2026-09-27: the rover measured ([D-037](../decisions.md)): deck 200 mm high, arm at the front edge, the box 190 mm outside; `rig.yaml` recomputed. The benchmark numbers above are from the old layout.
+- 2026-09-27: A0 started: the rover, the one cargo box and the parquet floor from photos, sock-shaped socks over the reachable ring ([D-040](../decisions.md)); the shared layout, keep-out and base scene changed (noted in B's Log).
+- 2026-09-27: the load loop scanning a ring around the arm, the sock detector, the camera from the hand-eye result, the benchmark and the watch tool ([D-041](../decisions.md)); shared: `ArmController.go_to` / `aim_camera`, `Observer.observe(zone, pose)` / `observe_point`, `plan_move`, `arm.link5_points_mm`, `arm.drop_settle_s`, phases `AIM` / `CHECK_LOAD`, scan poses in `rig.yaml`, `sim.cloth_collisions` (noted in B's Log).
+- 2026-09-27: the rover measured ([D-042](../decisions.md)): deck 200 mm high, arm at the front edge, the box 190 mm outside; `rig.yaml` recomputed. The benchmark numbers above are from the old layout.

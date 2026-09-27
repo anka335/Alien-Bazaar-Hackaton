@@ -4,13 +4,13 @@ Single source of truth for the contracts between the stages. The shared types ar
 
 ## Physical setup
 
-- **Rover** ([D-032](decisions.md)): built and driven by others. The arm is bolted to its deck plate, **200 mm above the floor** (measured, [D-037](decisions.md)). For our code the rover stands still: in load mode it has stopped next to socks, in unload mode it is parked at the station. There is no rover interface yet.
+- **Rover** ([D-032](decisions.md)): built and driven by others. The arm is bolted to its deck plate, **200 mm above the floor** (measured, [D-042](decisions.md)). For our code the rover stands still: in load mode it has stopped next to socks, in unload mode it is parked at the station. There is no rover interface yet.
 - **Arm:** Seeed reBot Arm B601-RS (6 DoF + parallel gripper, [D-011](decisions.md)), driven through `rebot_b601/` ([D-019](decisions.md)). Joint 1 turns ±145°, so nothing right behind the arm is reachable; with the gripper pointing down the TCP reaches ~100 mm above the deck at most, and the floor from ~140 to ~450 mm out.
 - **Camera:** Intel RealSense D435i RGB-D on the wrist, fixed to link5, looking along the gripper ([D-006](decisions.md), [D-027](decisions.md)).
-- **Cargo box:** one cardboard box, 190 × 190 mm outside and 75 deep, to the arm's left and a bit behind, its underside 45 mm below the deck; every sock goes into it, not split by color ([D-035](decisions.md)). `sim.layout.cargo.compartments` can still split it along x.
+- **Cargo box:** one cardboard box, 190 × 190 mm outside and 75 deep, to the arm's left and a bit behind, its underside 45 mm below the deck; every sock goes into it, not split by color ([D-040](decisions.md)). `sim.layout.cargo.compartments` can still split it along x.
 - **Behind the arm** on the rover: the electronics case, the power supply and a power strip (keep-out).
 - **Unload station:** 3 laundry bins on the floor to the rover's right, one per color.
-- The layout is `sim.layout` (arm base frame, mm), measured on the rover except the equipment and the box's position ([D-037](decisions.md)):
+- The layout is `sim.layout` (arm base frame, mm), measured on the rover except the equipment and the box's position ([D-042](decisions.md)):
 
 | Part | Where |
 | --- | --- |
@@ -60,7 +60,7 @@ Single source of truth for the contracts between the stages. The shared types ar
 
 `sorter.orchestrator.state_machine.StateMachine` is the part both loops share: commands, hold, errors, status, run log. At `START` it takes the loop of the operator mode (`LOAD` → `LoadLoop`, `UNLOAD` → `UnloadLoop`). `STARTING` (arm on, home) and `DONE` (home, idle) are shared; every other phase is a method `_<phase>` of the loop that returns the next phase. A loop keeps its own memory (`reset()` at the start of a run) and uses the shared run state on `sm`: `counters`, `failures`, `obs`, `cycle`, `new_cycle()`, `decide(result, overlay, summary, next_phase)` (publishes the decision frame and writes the run log).
 
-**Load (stage A)** ([D-036](decisions.md)): the arm looks at the floor from the scan poses `scan_1` … `scan_7` (a ring around it) one after another and picks the nearest sock as soon as a view has one. A sock cut off by the frame or far off-center gets a closer look first (`AIM`: the camera aimed at it). After the drop, `CHECK_LOAD` looks at the spot (the sock must be gone) and into the box from `look_cargo` (its surface must have risen where the sock landed, or one more sock is told apart there): only then is it counted. A sock that fails `load.max_attempts` times is left and its spot avoided. A whole round of views without a sock (`load.empty_rounds`) → `DONE`.
+**Load (stage A)** ([D-041](decisions.md)): the arm looks at the floor from the scan poses `scan_1` … `scan_7` (a ring around it) one after another and picks the nearest sock as soon as a view has one. A sock cut off by the frame or far off-center gets a closer look first (`AIM`: the camera aimed at it). After the drop, `CHECK_LOAD` looks at the spot (the sock must be gone) and into the box from `look_cargo` (its surface must have risen where the sock landed, or one more sock is told apart there): only then is it counted. A sock that fails `load.max_attempts` times is left and its spot avoided. A whole round of views without a sock (`load.empty_rounds`) → `DONE`.
 
 ```text
 STARTING → SCAN(k) → SENSE_FLOOR ─sock─► [AIM] → PICK_FROM_FLOOR → DROP_TO_CARGO → CHECK_LOAD → SCAN(k) …
@@ -74,7 +74,7 @@ STARTING → LOOK_CARGO → SENSE_CARGO ─grasp in c─► PICK_FROM_CARGO → 
                              └─all empty × empty_confirmations─► DONE
 ```
 
-The unload loop is still the stage 0 baseline: it walks the compartments, and with the one box of [D-035](decisions.md) it finds none.
+The unload loop is still the stage 0 baseline: it walks the compartments, and with the one box of [D-040](decisions.md) it finds none.
 
 **Shared rules for both loops:**
 
@@ -120,7 +120,7 @@ class WrongMode(SorterError): ...  # needs another operator mode, or the mode ca
 ```python
 class Zone(StrEnum):
     FLOOR = "floor"      # in front of the rover: socks to load
-    CARGO = "cargo"      # the cargo box on the rover (one box, D-035)
+    CARGO = "cargo"      # the cargo box on the rover (one box, D-040)
     LAUNDRY = "laundry"  # the station's bins, one per ColorClass (drops only, no look pose)
 
 class ColorClass(StrEnum):
@@ -335,7 +335,7 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 - **Grip:** when a close stalls the fingers on cloth touching both pads, the vertices between them are attached to the gripper until an open (a stand-in for friction). `sim.miss_prob` makes a close catch nothing.
 - `PhysicsWorld`: `step`, `teleport_arm`, `joints`, `tcp`, `looking_at`, `vertices(item)`, `location(item)` → `gripper` / `cargo` + color (None: one box) / `laundry` + color / `floor` / `other`, `at(location, color=None)`.
 - The arm: `rebot_b601.arm.Arm` runs unchanged on `MujocoBackend`; `PhysicsCamera` renders the D435i (depth noise, no depth under 175 mm) and `segment()` gives MuJoCo's segmentation as SAM3-style instances.
-- **The camera sits where the real one was calibrated:** `sim.camera_T_link5_cam`, filled by the config loader from `config/hand_eye.yaml` ([D-036](decisions.md)); the nominal `camera_mount_mm` only without a hand-eye result. So the look poses, ROIs and pixel → arm math the sim runs are the rig's.
+- **The camera sits where the real one was calibrated:** `sim.camera_T_link5_cam`, filled by the config loader from `config/hand_eye.yaml` ([D-041](decisions.md)); the nominal `camera_mount_mm` only without a hand-eye result. So the look poses, ROIs and pixel → arm math the sim runs are the rig's.
 - **The load benchmark:** `uv run python -m sorter.sim.scenes.load.bench -n 50 [--socks 1-4] [--workers 3]`: seeded scenes through the real load loop, headless, `realtime: 0`; `data/bench/<run_id>/` gets `scenes.jsonl` and `summary.json` (socks in the box / on the floor / elsewhere, counted vs in the box, sim time per sock).
 - `sorter.sim.layout` computes the rig (poses, zones, views, keep-out) with the arm's IK and checks it; `sorter.sim.rig` has the sim camera mount.
 
