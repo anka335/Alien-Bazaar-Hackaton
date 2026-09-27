@@ -365,6 +365,7 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 - **Names:** the arm owns the plain names (`base_link`, `/joint_states`, `/robot_description`). The rover runs with LeoOS's `ROBOT_NAMESPACE=leo`: frames `leo/…`, topics `/leo/…` (`rover_nav/scripts/setup_rover.sh`). TF tree: `map` → `leo/odom` → `leo/base_footprint` → `leo/base_link` → `base_link` (arm) → … → camera.
 - With `nav_camera:=wrist`, the arm stays in `drive` while the rover moves: moving it breaks mapping and localization. With `oak` the arm is free.
 - **Sim** (`rover_nav/sim`, [D-039](decisions.md)): a standalone MuJoCo Leo Rover from the official `leo_description` (uv project, no ROS): `cmd_vel` with the firmware's timeout, wheel + gyro odometry, the rover and OAK-D cameras. Not wired to ROS yet; the jevomir VLM drives it through its scoring API.
+- **Patrol** ([D-046](decisions.md)): `patrol` node, no map: a 1 m square or circle from where the rover stands, on `/leo/merged_odom`, driving `/leo/cmd_vel`; a look-around at every stop. Out: `/patrol/phase` (`std_msgs/String`, latched), `/patrol/scanning` (`std_msgs/Bool`, true while it pauses to look). Services `/patrol/start`, `/patrol/stop` (`std_srvs/Trigger`, `patrol_ctl`). `fake_rover` stands in for the rover without hardware.
 
 ## Repo layout
 

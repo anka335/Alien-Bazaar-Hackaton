@@ -107,10 +107,28 @@ RViz: wait until the rover appears on the map (RTAB-Map has to recognise a place
 
 Stop: Ctrl+C the launch; the rover stops 0.5 s after `/leo/cmd_vel` goes quiet (firmware `controller.input_timeout`). Keep a hand near the rover's power switch on the first runs.
 
+## Hard-coded patrol: a 1 m square or circle ([D-046](../../../docs/decisions.md))
+
+From where the rover stands, counter-clockwise, back to the start: a **square** (side 1 m, stops at the corners) or a **circle** (1 m across, 8 stops). At every stop, and once at the start, it turns once all the way around in 90° steps, pausing 2 s at each. On the rover's odometry, no map.
+
+```bash
+ros2 launch rover_nav patrol.launch.py                    # terminal 1: rover on; nothing moves yet
+ros2 launch rover_nav patrol.launch.py shape:=circle      # or: size_m:=0.8 laps:=2 dwell_s:=3 ...
+ros2 run rover_nav patrol_ctl start                       # terminal 2: go
+ros2 run rover_nav patrol_ctl stop                        # any time: stop and end
+ros2 run rover_nav patrol_ctl status                      # what it's doing now
+```
+
+- Try it without the rover: `patrol.launch.py fake_rover:=true`. On the real rover, `dry_run:=true` computes everything but sends no drive commands.
+- `/patrol/scanning` (`std_msgs/Bool`) is true while it pauses during a look-around: the moment for a detector (not connected yet). `/patrol/phase` says what it's doing.
+- Settings: `config/patrol.yaml` (shape, size, stops, laps, pause, speeds).
+- Nothing avoids obstacles: keep the area clear (about 1.3 × 1.3 m incl. the rover). A look-around takes ~20 s; the square ~2.5 min, the circle ~4 min.
+
 ## Config
 
 | File | What |
 | --- | --- |
+| `config/patrol.yaml` | The hard-coded patrol: shape, size, stops, laps, look-around pauses, speeds |
 | `config/mounts.yaml` | OAK-D and arm on the rover; wrist camera in the drive pose. Placeholders |
 | `config/oak.yaml` | DepthAI driver: color 640×360 at 15 fps, 400p stereo with extended disparity, depth aligned to color, synced, no IMU / NN |
 | `config/nav2.yaml` | Nav2: speeds (0.2 m/s, 0.6 rad/s), footprint (placeholder), costmaps (obstacles from depth 5–90 cm above the floor), keepout filter |

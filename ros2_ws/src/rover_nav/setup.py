@@ -26,6 +26,9 @@ setup(
     entry_points={
         "console_scripts": [
             "make_keepout = rover_nav.keepout:main",
+            "patrol = rover_nav.patrol_node:main",
+            "patrol_ctl = rover_nav.patrol_ctl:main",
+            "fake_rover = rover_nav.fake_rover:main",
         ],
     },
 )

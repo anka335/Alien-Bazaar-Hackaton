@@ -1,0 +1,23 @@
+# The hard-coded patrol (patrol node, D-046). From where the rover stands, counter-clockwise.
+patrol:
+  ros__parameters:
+    shape: square             # square | circle
+    size_m: 1.0               # square: side; circle: diameter
+    circle_stops: 8           # circle: stops around it (driven as straight pieces)
+    laps: 1                   # 0 = until stopped
+    scan_at_start: true       # look around before driving off
+    scan_step_deg: 90.0       # at every stop: once around in steps of this ...
+    dwell_s: 2.0              # ... pausing this long at each step
+    speed: 0.15               # m/s on the straight pieces
+    min_speed: 0.04
+    slow_down_m: 0.25
+    turn_speed: 0.5           # rad/s max
+    min_turn_speed: 0.15      # rad/s; slower and the skid-steer rover doesn't turn
+    turn_tolerance_deg: 2.0
+    distance_tolerance_m: 0.01
+    heading_kp: 1.5           # on the straight pieces: heading hold ...
+    cross_track_kp: 2.0       # ... and back onto the line
+    max_heading_correction: 0.3
+    odom_timeout_s: 0.5       # stale odometry → stand still
+    rate_hz: 20.0
+    dry_run: false            # true: compute everything, send no drive commands

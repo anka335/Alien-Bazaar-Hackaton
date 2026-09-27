@@ -11,6 +11,10 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
   <exec_depend>rtabmap_sync</exec_depend>
   <exec_depend>rtabmap_slam</exec_depend>
   <exec_depend>rtabmap_util</exec_depend>

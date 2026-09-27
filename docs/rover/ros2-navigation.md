@@ -27,6 +27,10 @@ The Leo Rover carries the laptop and the arm, and drives autonomously inside one
 - [x] `rover_nav/README.md`: install, map once, make the mask, navigate. (`ros2_ws/README.md` belongs to the ROS track: a pointer there is requested, not edited.)
 - [x] **MuJoCo sim** (`sim/`, plain Python + uv, no ROS, [D-039](../decisions.md)): the Leo Rover from the official `leo_description` 3.2.0 in a furnished room, `cmd_vel` / odometry / closed-loop moves like the real rover, the rover's camera and the OAK-D rendered, web UI. The jevomir VLM (scoring API) drives it from the camera alone (`guided` / `direct` policies); an oracle scorer runs the same loop without a GPU; `bench` scores seeded rooms, `tools/eval_direct.py` scores prompts on labelled frames, `--memory` uses the rover's path. 62 tests. Usage: [sim/README.md](../../ros2_ws/src/rover_nav/sim/README.md).
 
+## Hard-coded patrol ([D-046](../decisions.md))
+
+Without the map: from where the rover stands, a 1 m square (stops at the corners) or a 1 m circle (8 stops, straight pieces), counter-clockwise, back to the start; at every stop a full look-around in 90° steps with a pause at each (`/patrol/scanning`), for a detector later. `patrol.launch.py` + `patrol_ctl start / stop / status`, `config/patrol.yaml`; `fake_rover:=true` without hardware. `patrol_logic.py`, 11 tests with a simulated rover incl. drift; end to end with the fake rover both shapes came back within 1 cm / 2° of the start. Not yet run on the rover. Nothing avoids obstacles.
+
 ## Out of scope
 
 - Waypoints / patrols (later, with laundry search; Nav2's waypoint follower).
@@ -84,3 +88,4 @@ _None yet._
 - 2026-09-27: jevomir on the real API (Brev H100 over an SSH tunnel): `guided` 5/12 rooms, `direct` 7/12 after a new prompt (asks where the target is; 82% right moves on 50 labelled frames against 20% for the first prompt). Oracle: 9/12 and 10/12. `bench` command and `tools/eval_direct.py` added.
 - 2026-09-27: path memory (`leo_sim/memory.py`, `--memory`): told to jevomir before each question it made things worse (direct 7/12 → 2/12; 82% → 40–64% on the labelled frames, even with true hints); used by the agent instead (search where last seen, halve back-and-forth turns, explore after a full circle) 6/12. Default stays off.
 - 2026-09-27: merged with main: brief moved from `docs/tasks/09-rover-navigation.md`, decisions renumbered D-019/D-020/D-034 → D-037/D-038/D-039.
+- 2026-09-27: hard-coded patrol on odometry (D-046): 1 m square or circle, a look-around at every stop; `patrol`, `patrol_ctl`, `fake_rover`, `patrol.launch.py`.
