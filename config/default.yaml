@@ -34,8 +34,8 @@ sim:
     body: {center_mm: [-90, 0], size_mm: [420, 420]}         # chassis + wheels, from above
     wheel_width_mm: 130
     deck: {center_mm: [-90, 0], size_mm: [300, 185]}         # the plate; the arm at its front edge
-    cargo:                                                    # one cardboard box, left of the arm
-      center_mm: [-50, 200]                                   # not measured: as in D-040
+    cargo:                                                    # one cardboard box, right of the arm (D-045)
+      center_mm: [-50, -200]                                  # not measured: D-040's spot mirrored
       size_mm: [182, 182]                                     # inside (190 outside)
       floor_z_mm: -41                                         # inside floor; its underside 45 below the deck
       wall_mm: 75                                             # the rim is 34 above the deck

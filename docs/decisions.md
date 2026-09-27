@@ -278,6 +278,12 @@ Template:
 **Decision:** `ItemSpec` takes the cloth's `young` and `thickness_m` (the base's defaults unchanged, so stage A's scene is the same); the unload scene's socks are limp (`sim.unload.sock_young` 1e4 Pa, `sock_thickness_mm` 1): pinched in the middle a 200 × 90 mm sheet hangs ~100 mm, at an end ~150 mm. When the held sock still isn't seen, the color is the box's best match instead of a put-back: the one sock gone from the box; of several gone, the one nearest the grasp; none gone, the grasp's target. Socks of different colors seen hanging still go back.
 **Consequences:** The held sock hangs in view (82–167 mm on the checked picks) and its side-lit class matched the sim's truth. The best match can be wrong (the pinched sock isn't always the target), so a sock may land in a wrong bin instead of going back into the box.
 
+## D-045: The cargo box on the arm's right (2026-09-27)
+
+**Context:** On the rover the cardboard box was moved to the other side: it now sits mirrored, to the arm's right and a bit behind (photos), not to its left as in D-040 / D-042.
+**Decision:** `sim.layout.cargo.center_mm` (−50, −200): D-042's spot mirrored across the arm's x axis (still not measured). Everything else in the layout stays (the station, the equipment behind the arm). The sim's tape strips go on the box's outer wall, whichever side it is on. `rig.yaml` recomputed.
+**Consequences:** `look_cargo`, `cargo_*`, the scan ring, `zones.floor` (its gap under the box is now on the right), `zones.cargo`, `views` and the keep-out changed; the laundry bin `colored` at (290, −220) is now on the box's side. Sim numbers from before are on the old side. Measure the box's center on the rover, then recompute.
+
 ## D-046: A hard-coded patrol on odometry: a 1 m square or circle, looking around at every stop (2026-09-27)
 
 **Context:** On the real Leo Rover, RTAB-Map never confirmed its position by itself (the low OAK-D sees mostly floor), so navigating on the map was unreliable. For now the rover should just move around a small area and stop regularly to look in every direction, so a detector can later search from there; nothing is connected to it yet.

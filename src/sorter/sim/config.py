@@ -123,10 +123,10 @@ class RoverLayout(BaseModel):
         default_factory=lambda: RectConfig(center_mm=(15.0, 0.0), size_mm=(210.0, 190.0))
     )
     equipment: dict[str, Block] = Field(default_factory=_equipment)
-    # to the arm's left and a bit behind, over the rear left wheel: joint 1 turns ±145°, so
-    # nothing right behind the arm is reachable
+    # to the arm's right and a bit behind (D-045): joint 1 turns ±145°, so nothing right behind
+    # the arm is reachable
     cargo: CargoLayout = Field(
-        default_factory=lambda: CargoLayout(center_mm=(-50.0, 200.0), size_mm=(150.0, 150.0))
+        default_factory=lambda: CargoLayout(center_mm=(-50.0, -200.0), size_mm=(150.0, 150.0))
     )
     # the patch of floor in front of the rover that `look_floor` frames; the calibration marks
     # and board lie here too
