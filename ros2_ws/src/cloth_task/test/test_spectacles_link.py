@@ -10,7 +10,7 @@ import pytest
 websockets = pytest.importorskip("websockets")
 
 from cloth_task.spectacles_link import REFUSED_CODE, LensLink  # noqa: E402
-from cloth_task.spectacles_session import Session  # noqa: E402
+from cloth_task.spectacles_session import TIMEOUT_S, Session  # noqa: E402
 
 
 def _rebot():
@@ -112,12 +112,10 @@ def test_silence_pushes_a_timeout_status():
         async with websockets.connect(rig.url) as ws:
             await ws.send(teleop(0))
             await recv_status(ws)
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(TIMEOUT_S + 0.1)
             st = None
-            for _ in range(5):
+            while st is None or not st["fault"]:  # skip the pushes queued while asleep
                 st = await recv_status(ws)
-                if st["fault"]:
-                    break
             assert st == {
                 "v": 1,
                 "type": "status",

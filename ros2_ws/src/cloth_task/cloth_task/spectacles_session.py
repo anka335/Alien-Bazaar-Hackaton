@@ -39,8 +39,10 @@ PROTOCOL_VERSION = 1
 TOL_POS_M = 1e-3
 TOL_ANG_DEG = 3.0
 MIN_QUAT_NORM = 1e-6
-TIMEOUT_S = 0.2
-MEAS_TIMEOUT_S = 0.1
+# Through ngrok, teleop round trips stall 300 ms to 1.2 s; the lens itself allows 3 s of silence
+TIMEOUT_S = 2.0
+# Generous: the driver itself faults after 0.3 s of failed motor reads
+MEAS_TIMEOUT_S = 0.5
 HANDS = frozenset({"arm", "base"})
 
 
@@ -136,7 +138,9 @@ def solve_pose(
     R_target: np.ndarray,
     limits: np.ndarray,
     *,
-    max_iter: int = 100,
+    # 30 converges on the same frames as 100; a miss then costs ~15 ms instead of ~50 ms,
+    # under the lock that the status replies wait on
+    max_iter: int = 30,
     w_ang: float = 0.5,
 ) -> Solve:
     """Full-pose (position and orientation) damped least squares from q_seed only, within

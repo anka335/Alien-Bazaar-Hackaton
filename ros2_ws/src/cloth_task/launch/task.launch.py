@@ -95,6 +95,9 @@ def _setup(context):
                         # the task starts right away, and Spectacles teleop refuses MoveIt
                         # goals: unfold out of home first
                         "unfold_on_start": arg("run_task") == "true" or spectacles,
+                        # no MoveIt goals while Spectacles teleop is on: the single-threaded
+                        # executor keeps /joint_states on time
+                        "single_threaded": spectacles,
                     }
                 ],
                 output="screen",

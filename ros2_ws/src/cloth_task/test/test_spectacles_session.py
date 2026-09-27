@@ -5,7 +5,7 @@ import sys
 import numpy as np
 import pytest
 
-from cloth_task.spectacles_session import Session, quat_to_R, rotvec
+from cloth_task.spectacles_session import MEAS_TIMEOUT_S, TIMEOUT_S, Session, quat_to_R, rotvec
 
 
 def _rebot():
@@ -196,7 +196,7 @@ def link(s):
 
 def test_silence_after_accept_times_out(rig, clock):
     s, _ = rig
-    clock.t += 0.19
+    clock.t += TIMEOUT_S - 0.01
     s.tick()
     assert s.status()["fault"] is None
     clock.t += 0.02
@@ -207,7 +207,7 @@ def test_silence_after_accept_times_out(rig, clock):
 def test_timeout_while_tracking_stops_publishing(rig, clock):
     s, motor = rig
     s.on_teleop(teleop(0, arm=True))
-    clock.t += 0.25
+    clock.t += TIMEOUT_S + 0.05
     s.tick()
     sent = len(motor.joints)
     s.tick()
@@ -219,7 +219,7 @@ def test_timeout_while_tracking_stops_publishing(rig, clock):
 def test_open_clutches_refresh_the_timer_and_hold(rig, clock):
     s, motor = rig
     for seq in range(5):
-        clock.t += 0.15
+        clock.t += 0.75 * TIMEOUT_S
         s.on_teleop(teleop(seq))
     s.tick()
 
@@ -230,12 +230,12 @@ def test_open_clutches_refresh_the_timer_and_hold(rig, clock):
 def test_malformed_teleop_does_not_refresh_the_timer_or_echo_seq(rig, clock):
     s, _ = rig
     s.on_teleop(teleop(4))
-    clock.t += 0.15
+    clock.t += 0.75 * TIMEOUT_S
     bad = teleop(5)
     bad["arm"]["position"] = [0.0, 0.0]
     s.on_teleop(bad)
     assert s.status()["echoSeq"] == 4
-    clock.t += 0.1
+    clock.t += 0.3 * TIMEOUT_S
     s.tick()
     assert link(s) == TIMED_OUT
     assert s.status()["echoSeq"] == 4
@@ -258,7 +258,7 @@ def test_timeout_clearing_frame_with_clutch_held_does_not_track(rig, clock):
     s, motor = rig
     s.on_teleop(teleop(0, arm=True))
     sent = len(motor.joints)
-    clock.t += 0.3
+    clock.t += TIMEOUT_S + 0.1
     s.on_teleop(teleop(1, arm=True))
 
     assert link(s) == {"base": "idle", "arm": "holding", "fault": None}
@@ -268,7 +268,7 @@ def test_timeout_clearing_frame_with_clutch_held_does_not_track(rig, clock):
 
 def test_after_timeout_both_hands_must_release(rig, clock):
     s, motor = rig
-    clock.t += 0.3
+    clock.t += TIMEOUT_S + 0.1
     s.tick()
     s.on_joint_state(Q0)
     s.on_teleop(teleop(0, arm=True, base=True))  # clears the fault, both still held
@@ -299,7 +299,7 @@ def test_first_socket_accepts_the_first_right_clutch(clock):
 def test_replacement_socket_stops_the_arm_and_needs_each_hand_open(rig, clock):
     s, motor = rig
     s.on_teleop(teleop(0, arm=True))
-    clock.t += 0.3
+    clock.t += TIMEOUT_S + 0.1
     s.tick()
     s.on_joint_state(Q0)
     s.on_connect()
@@ -318,12 +318,12 @@ def test_replacement_socket_stops_the_arm_and_needs_each_hand_open(rig, clock):
 
 def test_replacement_socket_restarts_the_timer(rig, clock):
     s, _ = rig
-    clock.t += 0.15
+    clock.t += 0.75 * TIMEOUT_S
     s.on_connect()
-    clock.t += 0.15
+    clock.t += 0.75 * TIMEOUT_S
     s.tick()
     assert s.status()["fault"] is None
-    clock.t += 0.1
+    clock.t += 0.3 * TIMEOUT_S
     s.tick()
     assert link(s) == TIMED_OUT
 
@@ -375,7 +375,7 @@ def test_after_the_driver_recovers_a_fresh_clutch_tracks(rig, clock):
 def test_stale_measurement_stops_publishing_and_reports_holding(rig, clock):
     s, motor = rig
     s.on_teleop(teleop(0, arm=True))
-    clock.t += 0.09
+    clock.t += MEAS_TIMEOUT_S - 0.01
     s.on_teleop(teleop(1, arm=True))
     assert len(motor.joints) == 2
     clock.t += 0.02
@@ -388,9 +388,33 @@ def test_stale_measurement_stops_publishing_and_reports_holding(rig, clock):
 def test_stale_measurement_is_noticed_by_tick_alone(rig, clock):
     s, _ = rig
     s.on_teleop(teleop(0, arm=True))
-    clock.t += 0.11
+    clock.t += MEAS_TIMEOUT_S + 0.01
     s.tick()
     assert link(s) == HOLDING
+
+
+def test_a_half_second_network_stall_keeps_tracking(rig, clock):
+    # ngrok round trips measured up to 1.2 s; 500 ms stalls were common
+    s, motor = rig
+    s.on_teleop(teleop(0, arm=True))
+    clock.t += 0.5
+    s.on_joint_state(Q0)
+    s.on_teleop(teleop(1, arm=True, position=[0.01, 0.0, 0.0]))
+
+    assert len(motor.joints) == 2
+    assert s.status()["arm"] == "tracking"
+
+
+def test_joint_states_150_ms_apart_keep_tracking(rig, clock):
+    # arm_bridge on a busy MultiThreadedExecutor published /joint_states up to 150 ms apart
+    s, motor = rig
+    s.on_teleop(teleop(0, arm=True))
+    clock.t += 0.15
+    s.tick()
+    s.on_teleop(teleop(1, arm=True, position=[0.01, 0.0, 0.0]))
+
+    assert len(motor.joints) == 2
+    assert s.status()["arm"] == "tracking"
 
 
 def fresh_session(clock):

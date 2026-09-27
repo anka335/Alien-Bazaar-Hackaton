@@ -41,7 +41,7 @@ import rclpy
 from control_msgs.action import FollowJointTrajectory, GripperCommand
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
+from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor, SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from sensor_msgs.msg import JointState
@@ -169,6 +169,10 @@ class ArmBridge(Node):
         # planner (its path check applies), the reverse of the parking move. MoveIt's box
         # collision shapes flag the folded home pose, so it would refuse to plan out of it.
         self.declare_parameter("unfold_on_start", False)
+        # teleop-only runs (spectacles): rclpy's MultiThreadedExecutor busy-waits while teleop
+        # commands stream and published /joint_states up to 150 ms late. Single-threaded blocks
+        # on a running trajectory, so only where no MoveIt goal is accepted.
+        self.declare_parameter("single_threaded", False)
         p = lambda n: self.get_parameter(n).value  # noqa: E731
 
         self.rebot, self.C, self.K = _import_rebot(p("rebot_dir"))
@@ -182,6 +186,11 @@ class ArmBridge(Node):
 
         self.arm = make_ros_arm(self.rebot, self.C)(hz=control_hz)
         sim = bool(p("driver_sim"))
+        if sim:
+            # SimBackend moves each joint at 1.2 × JOINT_SPEED_DPS (36°/s for joints 2 and 3):
+            # the 80°/s teleop cap outran it and tripped the tracking-error fault within 2 s
+            sim_rad_s = 1.2 * np.radians(np.asarray(self.C.JOINT_SPEED_DPS, dtype=float))
+            self.teleop_max_rad_s = np.minimum(self.teleop_max_rad_s, 0.9 * sim_rad_s)
         mode = "motors ON" if self.enabled else "READ-ONLY (motors limp)"
         where = "the driver's SIMULATED arm" if sim else f"the arm on {self.C.CAN_CHANNEL}"
         self.get_logger().info(f"connecting to {where}: {mode}")
@@ -458,7 +467,8 @@ def main(args=None):
         rclpy.logging.get_logger("arm_bridge").fatal(f"cannot start: {e}")
         rclpy.try_shutdown()
         raise SystemExit(1) from e
-    executor = MultiThreadedExecutor()
+    single = bool(node.get_parameter("single_threaded").value)
+    executor = SingleThreadedExecutor() if single else MultiThreadedExecutor()
     executor.add_node(node)
     try:
         executor.spin()
