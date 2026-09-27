@@ -38,7 +38,7 @@ GRIP_RELEASE_NM = 0.5  # and "opening"
 GRIP_MAX_M = 0.035  # a finger further out than this pinches nothing
 # a sock squeezed between the fingers keeps them this far apart (both together): the flex gives
 # way to ~1 mm under the fingers' force, a real sock doesn't. On the rig closed on nothing reads
-# ≤ 0.012 and `arm.gripper.empty_below` is 0.02 (D-048): 2.5 mm reads 0.025. Measure it.
+# ≤ 0.012 and `arm.gripper.empty_below` is 0.02 (D-050): 2.5 mm reads 0.025. Measure it.
 PINCHED_SOCK_M = 0.0025
 GRIP_STALL_M_S = 0.004  # fingers slower than this have stopped on something
 GRIP_SETTLE_S = 0.3  # after a close command starts (the fingers are at rest at first too)
