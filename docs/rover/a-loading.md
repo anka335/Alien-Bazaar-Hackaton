@@ -121,4 +121,5 @@ A0–A7 done on the sim.
 - 2026-09-27 (shared, [D-050](../decisions.md)): the cargo box is at (−185, −225) (the wrist camera saw its corner); the Leo's raised top cover is a keep-out block (`sim.layout.equipment.leo_top`); `kinematics.camera_look` refuses a view with a keep-out box in its line of sight, and `look_cargo` looks from straight above; `rig.yaml` recomputed.
 - 2026-09-27 (from C, [D-052](../decisions.md)): `sim.load.placed`: socks at given spots (arm frame) instead of random ones; the mission hands over the socks the rover stopped next to.
 - 2026-09-27 (from the rig): an empty gripper reading after a pick is checked with the camera (`_still_on_floor`): a squeezed sock reads like nothing, and the loop went on scanning with the sock in the gripper.
+- 2026-09-27 (from B, [D-053](../decisions.md)): while the sim's grip holds an item the palm and the pads touch only that cloth, and for 0.5 s after a release none (a sock wedged between the pads rode along; a released one stayed hooked on a pad). `sim.layout.laundry`: the middle bin is 270 mm (`sizes_mm`), the bins at (290, ±260) and (310, 0); `rig.yaml` laundry poses follow the centers.
 

@@ -56,7 +56,9 @@ def _top(world, item) -> ArmPoint:
 
 def test_scenes_put_the_socks_in_place(sim_config):
     sim_config.sim.load.socks = [ColorClass.LIGHT, ColorClass.DARK]
-    sim_config.sim.load.area = "view"  # clear of the station's bins
+    sim_config.sim.load.area = "view"
+    laundry = sim_config.sim.layout.laundry  # the station out of the floor view's way
+    laundry.centers_mm = {c: (x + 600.0, y) for c, (x, y) in laundry.centers_mm.items()}
     sim_config.sim.unload.cargo = {ColorClass.LIGHT: 1, ColorClass.COLORED: 1}
     world = _system(sim_config, ["load", "unload"]).world
     try:

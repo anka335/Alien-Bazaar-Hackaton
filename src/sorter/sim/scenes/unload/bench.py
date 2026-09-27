@@ -84,8 +84,8 @@ def _where(world, item: int, bins) -> tuple[str, str | None]:
             return "gripper", None
     v = world.vertices(item)
     x, y, z = v.mean(axis=0)
-    half = lay.laundry.size_mm / 2
     for c, (bx, by, yaw) in bins.items():
+        half = lay.laundry.size(c) / 2
         cs, sn = math.cos(-yaw), math.sin(-yaw)
         u, w = cs * (x - bx) - sn * (y - by), sn * (x - bx) + cs * (y - by)
         if abs(u) < half and abs(w) < half and z < lay.floor_z_mm + lay.laundry.height_mm:

@@ -26,7 +26,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | --- | --- | --- | --- | --- |
 | [0: Preparation](rover/0-preparation.md) | done | Softjey + Claude | `stage/0-preparation` | contracts, base scene, rig on the rover, wiring; known issues handed to A and B |
 | [A: Loading](rover/a-loading.md) | in progress | Softjey + Claude | `claude/pensive-banach-a6b5d1` | scene, scan-all-around loop, detector, benchmark ([D-040](decisions.md), [D-041](decisions.md)); known issues in the brief |
-| [B: Unloading](rover/b-unloading.md) | in progress | Softjey + Claude | `claude/b-unloading-stage-d746d4` | vision-only loop and benchmark on the measured rover, station in front; tuning ([D-043](decisions.md)) |
+| [B: Unloading](rover/b-unloading.md) | in progress | Softjey + Claude | `claude/b-unload-2` | sim: 36/36 socks into their bins on the bench (12 × 3), 18/18 with 6 socks; next the rig ([D-053](decisions.md)) |
 | [F: Far detection](rover/f-far-detection.md) | todo | — | — | socks seen 0.5–3 m away from a search pose, as targets on the floor |
 | [N: Navigation](rover/n-navigation.md) | in progress | Viacheslav + Claude | `feat/rover-nav` | Leo Rover + OAK-D sim (`sorter.nav`), camera-only commands, sock approach, Rover tab (D-046) |
 | [C: Full mission](rover/c-mission.md) | in progress | Softjey + Claude | `main` | `sorter.mission`: drive → load → … → station on the sim (two worlds in turn, D-052); unload not called yet |

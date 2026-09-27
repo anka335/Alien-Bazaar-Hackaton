@@ -77,6 +77,12 @@ class LaundryLayout(BaseModel):
         }
     )
     size_mm: float = 190.0  # square, outside
+    sizes_mm: dict[ColorClass, float] = Field(default_factory=dict)  # bins not `size_mm`
+
+    def size(self, color: ColorClass) -> float:
+        """The outside side of the bin of `color` (mm)."""
+        return self.sizes_mm.get(color, self.size_mm)
+
     height_mm: float = 75.0  # rim above the floor
     wall_t_mm: float = 4.0
 
