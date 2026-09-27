@@ -6,6 +6,8 @@ from sorter.core.types import ColorClass
 from sorter.sim.scenes.load.config import LoadSceneConfig
 from sorter.sim.scenes.unload.config import UnloadSceneConfig
 
+RAIL_INSET_MM = 20.0  # the rover's rails and crossbars end this far inside the wheels' outer edges
+
 
 class RectConfig(BaseModel):
     """An axis-aligned rectangle in the arm frame, mm."""
@@ -26,24 +28,34 @@ class RectConfig(BaseModel):
 
 
 class CargoLayout(RectConfig):
-    """The cargo box on the rover deck: `size_mm` is the inside, split along x into one
-    compartment per color, in the order of `compartments` (from −x to +x)."""
+    """The cargo box on the rover: `size_mm` is the inside. With `compartments` it is split
+    along x into one compartment per color, in that order (from −x to +x); without, it is one
+    box every sock goes into (D-040)."""
 
-    floor_z_mm: float = 5.0  # the inside floor, above the deck
-    wall_mm: float = 50.0  # wall height above the inside floor (the gripper held down reaches
+    floor_z_mm: float = -35.0  # the inside floor (the deck top is z = 0)
+    wall_mm: float = 60.0  # wall height above the inside floor (the gripper held down reaches
     # ~100 mm above the deck at most)
-    wall_t_mm: float = 6.0  # wall and divider thickness
-    compartments: list[ColorClass] = Field(
-        default_factory=lambda: [ColorClass.LIGHT, ColorClass.DARK, ColorClass.COLORED]
-    )
+    wall_t_mm: float = 4.0  # wall, bottom and divider thickness
+    compartments: list[ColorClass] = Field(default_factory=list)
 
     @property
     def rim_z_mm(self) -> float:
         return self.floor_z_mm + self.wall_mm
 
+    @property
+    def base_z_mm(self) -> float:
+        """The underside of the box."""
+        return self.floor_z_mm - self.wall_t_mm
+
+    def insides(self) -> list[RectConfig]:
+        """The compartments from −x to +x, or the whole inside if the box isn't split."""
+        return [self.compartment(c) for c in self.compartments or [ColorClass.LIGHT]]
+
     def compartment(self, color: ColorClass) -> RectConfig:
-        """The inside of the compartment for `color`."""
+        """The inside of the compartment for `color`: the whole box if it isn't split."""
         n = len(self.compartments)
+        if n == 0:
+            return RectConfig(center_mm=self.center_mm, size_mm=self.size_mm)
         (cx, cy), (w, h) = self.center_mm, self.size_mm
         inner = (w - (n - 1) * self.wall_t_mm) / n
         k = self.compartments.index(color)
@@ -68,6 +80,25 @@ class LaundryLayout(BaseModel):
     wall_t_mm: float = 10.0
 
 
+class Block(BaseModel):
+    """A solid box on the rover, arm frame, mm: [x0, x1, y0, y1, z0, z1]."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    box_mm: tuple[float, float, float, float, float, float]
+    rgba: tuple[float, float, float, float] = (0.6, 0.6, 0.62, 1.0)
+
+
+def _equipment() -> dict[str, Block]:
+    # what stands behind the arm (estimated from photos of the rover): the electronics case,
+    # the power supply and the power strip on it
+    return {
+        "electronics": Block(box_mm=(-200, -55, -100, 95, -75, -5), rgba=(0.72, 0.73, 0.75, 1)),
+        "psu": Block(box_mm=(-190, -70, -95, -30, -5, 30), rgba=(0.08, 0.08, 0.09, 1)),
+        "power_strip": Block(box_mm=(-150, -65, 0, 50, -5, 35), rgba=(0.1, 0.1, 0.11, 1)),
+    }
+
+
 class RoverLayout(BaseModel):
     """The rover around the arm, arm base frame (+x forward, +y left, z up), mm.
 
@@ -78,24 +109,28 @@ class RoverLayout(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    floor_z_mm: float = -200.0  # the deck is 200 mm above the floor
+    floor_z_mm: float = -160.0  # the deck is 160 mm above the floor
     # the whole rover seen from above (chassis + wheels): nothing of the arm goes in there below
-    # the deck
+    # the deck; the wheels stand at its corners
     body: RectConfig = Field(
-        default_factory=lambda: RectConfig(center_mm=(-150.0, 80.0), size_mm=(500.0, 480.0))
+        default_factory=lambda: RectConfig(center_mm=(-10.0, 0.0), size_mm=(360.0, 350.0))
     )
-    # the deck plate the arm is bolted to (its top is z = 0)
+    wheel_radius_mm: float = 60.0
+    wheel_width_mm: float = 50.0
+    # the plate the arm is bolted to (its top is z = 0)
     deck: RectConfig = Field(
-        default_factory=lambda: RectConfig(center_mm=(-150.0, 80.0), size_mm=(480.0, 470.0))
+        default_factory=lambda: RectConfig(center_mm=(15.0, 0.0), size_mm=(210.0, 190.0))
     )
-    # to the arm's left: joint 1 turns ±145°, so nothing right behind the arm is reachable
+    equipment: dict[str, Block] = Field(default_factory=_equipment)
+    # to the arm's left and a bit behind, over the rear left wheel: joint 1 turns ±145°, so
+    # nothing right behind the arm is reachable
     cargo: CargoLayout = Field(
-        default_factory=lambda: CargoLayout(center_mm=(-100.0, 220.0), size_mm=(320.0, 180.0))
+        default_factory=lambda: CargoLayout(center_mm=(-50.0, 200.0), size_mm=(150.0, 150.0))
     )
     # the patch of floor in front of the rover that `look_floor` frames; the calibration marks
     # and board lie here too
     floor_view: RectConfig = Field(
-        default_factory=lambda: RectConfig(center_mm=(300.0, 0.0), size_mm=(280.0, 240.0))
+        default_factory=lambda: RectConfig(center_mm=(310.0, 0.0), size_mm=(280.0, 240.0))
     )
     laundry: LaundryLayout = Field(default_factory=LaundryLayout)
 
@@ -115,9 +150,15 @@ class SimConfig(BaseModel):
     load: LoadSceneConfig = Field(default_factory=LoadSceneConfig)  # stage A's scene
     unload: UnloadSceneConfig = Field(default_factory=UnloadSceneConfig)  # stage B's scene
     miss_prob: float = 0.0  # a closing gripper catches nothing although cloth is between the pads
+    # cloth collides with cloth: a sock dropped on others lies on top (a pile costs ~5x the step)
+    cloth_collisions: bool = True
     width: int = 640
     height: int = 480
     focal_px: float = 615.0  # RealSense D435i color at 640x480
     # the wrist camera in the TCP frame (x = approach); it looks along the approach axis
     camera_mount_mm: tuple[float, float, float] = (-140.0, 0.0, 55.0)
+    # the simulated camera's mount, T_link5_cam (4x4, mm). None: where the real camera was
+    # calibrated (config/hand_eye.yaml, filled in by the config loader), else the nominal mount
+    # from `camera_mount_mm`
+    camera_T_link5_cam: list[list[float]] | None = None
     layout: RoverLayout = Field(default_factory=RoverLayout)

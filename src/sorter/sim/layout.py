@@ -22,18 +22,24 @@ import numpy as np
 import yaml
 
 from sorter.arm import kinematics as kin
-from sorter.arm.config import LOOK_POSES, POSE_NAMES, ArmConfig, ZoneConfig
+from sorter.arm.config import LOOK_POSES, POSE_NAMES, SCAN_POSES, ArmConfig, ZoneConfig
 from sorter.core.config import DEFAULT_CONFIG_DIR, Config, load_config
 from sorter.core.errors import SorterError
 from sorter.core.types import ArmPoint, ColorClass, Zone
-from sorter.sim.config import RectConfig, SimConfig
-from sorter.sim.rig import camera_mount, camera_pose
+from sorter.sim.config import RAIL_INSET_MM, RectConfig, SimConfig
+from sorter.sim.rig import camera_body_points, camera_mount, camera_pose
 
-LOOK_TCP_Z_MM = (100, -120)  # the highest TCP height tried for a look pose, then lower by 5 mm
+LOOK_TCP_Z_MM = (100, -120)  # camera_over: the highest TCP height tried, then lower by 5 mm
+LOOK_HEIGHTS_MM = tuple(range(400, 174, -10))  # the camera above what it looks at, tried in turn
+REACH_EXTENT_MM = (-360.0, 540.0, -540.0, 540.0)  # x0, x1, y0, y1 of the floor reach map
+REACH_STEP_MM = 30.0
+REACH_CHECK_MM = 20.0  # the finer grid the floor zone is checked on (as `check` does)
+REACH_RING_MM = (120.0, 560.0)  # the arm's floor reach lies within this ring
+SCAN_VIEW_MM = 270.0  # the floor a scan view covers across (the camera ~350 mm up)
 FLOOR_MARGIN_MM = 20.0
 # the grasp stays this far from a compartment's walls: across the fingers, and along them (the
 # open gripper is ~60 mm wide, + the keep-out margin)
-CARGO_MARGIN_MM = (30.0, 45.0)
+CARGO_MARGIN_MM = (30.0, 50.0)
 FLOOR_CLEARANCE_MM = 3.0  # arm.z_min_mm: this far above the floor
 HOME_TCP_MM = (220.0, 0.0, 200.0)
 HOME_APPROACH = (1.0, 0.0, -1.0)  # 45° down, forward
@@ -105,18 +111,192 @@ def camera_over(
 
 
 def look_pose(
-    sim: SimConfig, arm: ArmConfig, center: tuple[float, float], surface_z: float
+    sim: SimConfig,
+    arm: ArmConfig,
+    center: Sequence[float],
+    surface_z: float,
+    seed: Sequence[float] | None = None,
+    home: Sequence[float] | None = None,
 ) -> np.ndarray:
-    """Joints that put the camera straight down over `center`, as high as possible; if no height
-    centers it exactly, the highest pose that comes closest."""
-    T_link5_cam = camera_mount(sim)
-    heights = range(LOOK_TCP_Z_MM[0], LOOK_TCP_Z_MM[1] - 1, -5)
-    for exact in (True, False):
-        for tcp_z in heights:
-            q = camera_over(arm, center, tcp_z, T_link5_cam, surface_z, exact=exact)
-            if q is not None:
-                return q
-    raise SystemExit(f"no look pose puts the camera down over {center}")
+    """Joints that point the camera at `center` on the surface at `surface_z` from as high as
+    the arm safely reaches (up to LOOK_HEIGHTS_MM[0] above it), leaning up to 30° off vertical,
+    and (with `home`) that a straight joint move from `home` reaches. The camera is on link5
+    (D-027): joint 6 doesn't turn the image."""
+    x, y = center[0], center[1]
+
+    def from_home(q: np.ndarray) -> bool:
+        from sorter.arm.controller import Controller
+
+        poses = {n: home for n in POSE_NAMES}
+        zones = compute_zones(sim, arm)
+        ctl = Controller(_PlanOnly(), arm, poses, zones)  # type: ignore[arg-type]
+        try:
+            ctl.plan_move(home, q)
+            ctl.plan_move(q, home)
+        except SorterError:
+            return False
+        return True
+
+    found = kin.camera_look(
+        camera_mount(sim),
+        (x, y, surface_z),
+        _seed(x, y) if seed is None else seed,
+        heights_mm=LOOK_HEIGHTS_MM,
+        z_min_mm=arm.z_min_mm,
+        keep_out=arm.keep_out_mm,
+        keep_out_margin_mm=arm.keep_out_margin_mm,
+        link5_points=arm.link5_points_mm,
+        accept=None if home is None else from_home,
+    )
+    if found is None:
+        raise SystemExit(f"no look pose points the camera at {tuple(center)}")
+    return found[0]
+
+
+def floor_workspace(
+    sim: SimConfig, arm: ArmConfig, zones: dict[Zone, ZoneConfig]
+) -> list[tuple[float, float]]:
+    """The floor pick zone: the region where a pick plans with the fingers at any yaw and goes
+    on to a drop via home. A map of reachable cells (REACH_STEP_MM), its largest region one
+    cell in as a polygon, then points on a finer grid inside it that fail take their cell out
+    until none fails. Cached in data/cache by the layout and the arm's limits (it takes
+    minutes)."""
+    import hashlib
+    import json
+
+    from sorter.calibration.board import CACHE
+
+    base = [
+        sim.layout.model_dump(mode="json"),
+        arm.model_dump(mode="json"),
+        zones[Zone.FLOOR].model_dump(mode="json"),
+        REACH_EXTENT_MM,
+        REACH_STEP_MM,
+        REACH_RING_MM,
+        2,  # the arm's planning: bump it when it changes
+    ]
+
+    def cached(name: str, extra: list) -> Path:
+        key = json.dumps([*base, *extra], sort_keys=True)
+        return CACHE / f"{name}_{hashlib.sha1(key.encode()).hexdigest()[:12]}"
+
+    path = cached("floor_workspace", [REACH_CHECK_MM, 8]).with_suffix(".json")
+    if path.is_file():
+        return [tuple(p) for p in json.loads(path.read_text())]
+    x0, x1, y0, y1 = REACH_EXTENT_MM
+    xs = np.arange(x0, x1 + 1, REACH_STEP_MM)
+    ys = np.arange(y0, y1 + 1, REACH_STEP_MM)
+    reach_path = cached("floor_reach", []).with_suffix(".npy")
+    if reach_path.is_file():
+        ok = np.load(reach_path)
+    else:
+        from concurrent.futures import ProcessPoolExecutor
+
+        with ProcessPoolExecutor() as pool:  # minutes on one core
+            args = zip(*((sim, arm, zones, y, xs) for y in ys), strict=True)
+            ok = np.array(list(pool.map(_reach_row, *args)), dtype=bool)
+        reach_path.parent.mkdir(parents=True, exist_ok=True)
+        np.save(reach_path, ok)
+    cx, cy = np.meshgrid(xs, ys)  # the cells' centers
+    pick = _floor_pick(sim, arm, zones)
+    tried: dict[tuple[float, float], bool] = {}  # the grid is fixed: each point once
+
+    def fine(x: float, y: float) -> bool:
+        if (x, y) not in tried:
+            tried[x, y] = pick(x, y, (None, 0.0, math.pi / 2))
+        return tried[x, y]
+
+    for _ in range(30):
+        poly = reach_polygon(ok)
+        failed = [(x, y) for x, y in grid(poly, REACH_CHECK_MM) if not fine(x, y)]
+        if not failed:
+            break
+        # the reachable cells near a failed point go: the polygon's edge moves in past it
+        for x, y in failed:
+            ok[np.hypot(cx - x, cy - y) <= 1.5 * REACH_STEP_MM] = False
+    else:
+        raise SystemExit("the floor zone keeps failing picks")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(poly))
+    return poly
+
+
+def _reach_row(
+    sim: SimConfig, arm: ArmConfig, zones: dict[Zone, ZoneConfig], y: float, xs: np.ndarray
+) -> list[bool]:
+    """One row of the reach map: a pick at (x, y) plans with the fingers at any of 4 yaws."""
+    pick = _floor_pick(sim, arm, zones)
+    yaws = (0.0, math.pi / 4, math.pi / 2, 3 * math.pi / 4)
+    return [
+        REACH_RING_MM[0] <= math.hypot(x, y) <= REACH_RING_MM[1] and pick(x, y, yaws) for x in xs
+    ]
+
+
+def _floor_pick(sim: SimConfig, arm: ArmConfig, zones: dict[Zone, ZoneConfig]):
+    """f(x, y, yaws): a pick at (x, y) on the floor plans at each of `yaws` and goes on home."""
+    from sorter.arm.controller import Controller
+
+    x0, x1, y0, y1 = REACH_EXTENT_MM
+    big = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    zones = {**zones, Zone.FLOOR: zones[Zone.FLOOR].model_copy(update={"workspace_mm": big})}
+    home = kin.solve(HOME_TCP_MM, HOME_APPROACH, _seed(*HOME_TCP_MM[:2]), arm.z_min_mm)
+    poses = {n: list(home) for n in POSE_NAMES}
+    ctl = Controller(_PlanOnly(), arm, poses, zones)  # type: ignore[arg-type]
+    z = sim.layout.floor_z_mm + 15.0
+
+    def pick(x: float, y: float, yaws: Sequence[float]) -> bool:
+        try:
+            for yaw in yaws:
+                _, _, up = ctl.plan_pick(ArmPoint(float(x), float(y), z), Zone.FLOOR, yaw, q0=home)
+                ctl._plan_joints(up[-1], home)
+        except SorterError:
+            return False
+        return True
+
+    return pick
+
+
+def grid(poly: Sequence[tuple[float, float]], step_mm: float) -> list[tuple[float, float]]:
+    """The points of a fixed grid (`step_mm` apart, offset half a step from 0) inside `poly`."""
+    from sorter.arm.controller import in_polygon
+
+    xs = [p[0] for p in poly]
+    ys = [p[1] for p in poly]
+    h = step_mm / 2
+    gx = np.arange(math.floor((min(xs) - h) / step_mm), math.ceil((max(xs) - h) / step_mm) + 1)
+    gy = np.arange(math.floor((min(ys) - h) / step_mm), math.ceil((max(ys) - h) / step_mm) + 1)
+    pts = ((float(i * step_mm + h), float(j * step_mm + h)) for i, j in itertools.product(gx, gy))
+    return [(x, y) for x, y in pts if in_polygon(x, y, poly)]
+
+
+def reach_polygon(ok: np.ndarray) -> list[tuple[float, float]]:
+    """The largest region of reachable cells as a polygon through the centers of its edge cells
+    (mm): half a cell in from where the reach ends."""
+    import cv2
+
+    x0, _, y0, _ = REACH_EXTENT_MM
+    # an isolated cell or a one-cell spur is noise, not reach
+    m = cv2.morphologyEx(ok.astype(np.uint8), cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
+    contours, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        raise SystemExit("the arm reaches no floor at all")
+    c = max(contours, key=cv2.contourArea)[:, 0, :]
+    return [(float(x0 + j * REACH_STEP_MM), float(y0 + i * REACH_STEP_MM)) for j, i in c]
+
+
+def scan_targets(workspace: Sequence[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Where the scan poses point the camera: evenly along the ring of the floor workspace,
+    from its right end to its left, halfway out."""
+    pts = np.asarray(workspace, dtype=float)
+    ang = np.arctan2(pts[:, 1], pts[:, 0])
+    r = np.hypot(pts[:, 0], pts[:, 1])
+    a0, a1 = ang.min(), ang.max()
+    rm = (np.percentile(r, 10) + np.percentile(r, 90)) / 2
+    n = len(SCAN_POSES)
+    # the end views sit half a view in from the ends of the ring
+    half = SCAN_VIEW_MM / 2 / rm
+    a = np.linspace(a0 + half, a1 - half, n) if a1 - a0 > 2 * half else np.full(n, (a0 + a1) / 2)
+    return [(float(rm * math.cos(t)), float(rm * math.sin(t))) for t in a]
 
 
 def zone_surfaces(sim: SimConfig) -> dict[Zone, tuple[RectConfig, float]]:
@@ -164,33 +344,51 @@ def zone_rois(cfg: Config, poses: dict[str, list[float]]) -> dict[str, dict]:
 
 
 def keep_out(sim: SimConfig, margin_mm: float) -> list[list[float]]:
-    """`arm.keep_out_mm`: the rover body up to the deck top (the margin grows it to z = 0, so a
-    grasp may reach the cargo floor), and the cargo box's walls and dividers."""
+    """`arm.keep_out_mm`: the rover's middle (as wide as the deck, as long as the rails) up to
+    the deck top (the margin grows it to z = 0), the wheels (not the one under the cargo box:
+    the box's floor covers it), the equipment behind the arm, and the cargo box's walls and
+    dividers."""
     lay = sim.layout
+    fz = lay.floor_z_mm
     x0, x1, y0, y1 = lay.body.bounds()
-    boxes = [[x0, x1, y0, y1, lay.floor_z_mm - 100.0, -margin_mm]]
+    _, _, dy0, dy1 = lay.deck.bounds()
+    boxes = [[x0 + RAIL_INSET_MM, x1 - RAIL_INSET_MM, dy0, dy1, fz - 100.0, -margin_mm]]
     cargo = lay.cargo
+    r, w = lay.wheel_radius_mm, lay.wheel_width_mm
+    for wx, wy in itertools.product((x0 + r, x1 - r), (y0 + w / 2, y1 - w / 2)):
+        wheel = RectConfig(center_mm=(wx, wy), size_mm=(2 * r, w))
+        if not _overlap(wheel, cargo, cargo.wall_t_mm):
+            boxes.append([*wheel.bounds(), fz - 100.0, fz + 2 * r])
+    boxes += [list(b.box_mm) for b in lay.equipment.values()]
     t = cargo.wall_t_mm
     cx0, cx1, cy0, cy1 = cargo.bounds()
-    rim = cargo.rim_z_mm
+    base, rim = cargo.base_z_mm, cargo.rim_z_mm
     boxes += [
-        [cx0 - t, cx0, cy0 - t, cy1 + t, 0.0, rim],
-        [cx1, cx1 + t, cy0 - t, cy1 + t, 0.0, rim],
-        [cx0, cx1, cy0 - t, cy0, 0.0, rim],
-        [cx0, cx1, cy1, cy1 + t, 0.0, rim],
+        [cx0 - t, cx0, cy0 - t, cy1 + t, base, rim],
+        [cx1, cx1 + t, cy0 - t, cy1 + t, base, rim],
+        [cx0, cx1, cy0 - t, cy0, base, rim],
+        [cx0, cx1, cy1, cy1 + t, base, rim],
     ]
-    rects = [cargo.compartment(c) for c in cargo.compartments]
+    rects = cargo.insides()
     for a, b in zip(rects, rects[1:], strict=False):
-        boxes.append([a.bounds()[1], b.bounds()[0], cy0, cy1, 0.0, rim])
+        boxes.append([a.bounds()[1], b.bounds()[0], cy0, cy1, base, rim])
     return [[round(v, 1) for v in b] for b in boxes]
 
 
+def _overlap(a: RectConfig, b: RectConfig, grow_b: float = 0.0) -> bool:
+    ax0, ax1, ay0, ay1 = a.bounds()
+    bx0, bx1, by0, by1 = b.bounds(grow_b)
+    return ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1
+
+
 def arm_for(sim: SimConfig, arm: ArmConfig) -> ArmConfig:
-    """`arm` with the floor clearance and keep-out of the layout."""
+    """`arm` with the floor clearance and keep-out of the layout, and the camera body's points
+    for the collision checks."""
     return arm.model_copy(
         update={
             "z_min_mm": sim.layout.floor_z_mm + FLOOR_CLEARANCE_MM,
             "keep_out_mm": [tuple(b) for b in keep_out(sim, arm.keep_out_margin_mm)],
+            "link5_points_mm": camera_body_points(sim),
         }
     )
 
@@ -202,12 +400,17 @@ def _drop_pose(arm: ArmConfig, xyz: tuple[float, float, float], name: str) -> np
     r = math.hypot(x, y)
     for approach in ("down", (x / r, y / r, -1.0), None):
         q = kin.solve(xyz, approach, _seed(x, y), arm.z_min_mm)
-        if q is not None and kin.keep_out_hit(q, arm.keep_out_mm, arm.keep_out_margin_mm) is None:
+        if q is None:
+            continue
+        pts = arm.link5_points_mm
+        if kin.keep_out_hit(q, arm.keep_out_mm, arm.keep_out_margin_mm, pts, arm.z_min_mm) is None:
             return q
     raise SystemExit(f"{name} ({x:.0f}, {y:.0f}, {xyz[2]:.0f}) is not reachable")
 
 
-def compute_poses(sim: SimConfig, arm: ArmConfig) -> dict[str, list[float]]:
+def compute_poses(
+    sim: SimConfig, arm: ArmConfig, floor_workspace: Sequence[tuple[float, float]]
+) -> dict[str, list[float]]:
     lay = sim.layout
     poses: dict[str, np.ndarray] = {"rest": np.zeros(kin.N_JOINTS)}
     home = kin.solve(HOME_TCP_MM, HOME_APPROACH, _seed(*HOME_TCP_MM[:2]), arm.z_min_mm)
@@ -215,7 +418,20 @@ def compute_poses(sim: SimConfig, arm: ArmConfig) -> dict[str, list[float]]:
         raise SystemExit(f"home {HOME_TCP_MM} is not reachable")
     poses["home"] = home
     for zone, (rect, z) in zone_surfaces(sim).items():
-        poses[LOOK_POSES[zone]] = look_pose(sim, arm, rect.center_mm, z)
+        poses[LOOK_POSES[zone]] = look_pose(sim, arm, rect.center_mm, z, home=home)
+    # from the middle of the ring outwards, each seeded by its neighbour: the IK stays on one
+    # branch (a fresh seed at the ends finds the arm upright, its tool by the base column)
+    targets = scan_targets(floor_workspace)
+    mid = len(targets) // 2
+    poses[SCAN_POSES[mid]] = look_pose(
+        sim, arm, targets[mid], lay.floor_z_mm, poses[LOOK_POSES[Zone.FLOOR]], home=home
+    )
+    for side in (range(mid - 1, -1, -1), range(mid + 1, len(targets))):
+        seed = poses[SCAN_POSES[mid]]
+        for k in side:
+            seed = poses[SCAN_POSES[k]] = look_pose(
+                sim, arm, targets[k], lay.floor_z_mm, seed, home=home
+            )
     cargo = lay.cargo
     for color in ColorClass:
         x, y = cargo.compartment(color).center_mm
@@ -229,12 +445,18 @@ def compute_poses(sim: SimConfig, arm: ArmConfig) -> dict[str, list[float]]:
     return {name: [round(float(v), 4) for v in poses[name]] for name in POSE_NAMES}
 
 
-def compute_zones(sim: SimConfig, arm: ArmConfig) -> dict[Zone, ZoneConfig]:
+def compute_zones(
+    sim: SimConfig, arm: ArmConfig, floor_workspace: Sequence[tuple[float, float]] | None = None
+) -> dict[Zone, ZoneConfig]:
+    """The pick zones. The floor: `floor_workspace` (from `reach_polygon`), else the floor
+    view."""
     lay = sim.layout
     cargo = lay.cargo
+    if floor_workspace is None:
+        floor_workspace = rect_polygon(lay.floor_view, FLOOR_MARGIN_MM)
     return {
         Zone.FLOOR: ZoneConfig(
-            workspace_mm=rect_polygon(lay.floor_view, FLOOR_MARGIN_MM),
+            workspace_mm=list(floor_workspace),
             z_floor_mm=lay.floor_z_mm + 8.0,  # the fingertips stop just above the floor
             lift_z_mm=lay.floor_z_mm + 150.0,
         ),
@@ -265,36 +487,32 @@ def check(cfg: Config, step_mm: float = 20.0) -> list[str]:
     arm = Controller(_PlanOnly(), cfg.arm, cfg.poses, cfg.zones)  # type: ignore[arg-type]
     q = {n: np.asarray(v) for n, v in cfg.poses.items()}
     moves = [("rest", "home"), *((p, "home") for p in POSE_NAMES if p not in ("rest", "home"))]
-    moves += [("look_floor", "look_cargo")]
+    moves += list(zip(SCAN_POSES, SCAN_POSES[1:], strict=False))  # the scan sweeps along the ring
     for a, b in moves:
         try:
-            arm._plan_joints(q[a], q[b])
-            arm._plan_joints(q[b], q[a])
+            arm.plan_move(q[a], q[b])
+            arm.plan_move(q[b], q[a])
         except SorterError as e:
             problems.append(f"move {a} ↔ {b}: {e}")
     lay = cfg.sim.layout
     cargo = lay.cargo
-    # where picks must work: the floor zone with any yaw; each compartment (less the margin),
-    # the fingers opening along the compartment's long side
-    along_y = cargo.size_mm[1] >= cargo.compartment(cargo.compartments[0]).size_mm[0]
+    # where picks must work: the floor zone with any yaw; the box or each compartment (less the
+    # margin), the fingers opening along its long side
+    along_y = cargo.size_mm[1] >= cargo.insides()[0].size_mm[0]
     across, along = CARGO_MARGIN_MM
     regions = [(Zone.FLOOR, cfg.zones[Zone.FLOOR].workspace_mm, [lay.floor_z_mm + 15.0], None)]
     regions += [
         (
             Zone.CARGO,
-            rect_polygon(cargo.compartment(c), *((across, along) if along_y else (along, across))),
+            rect_polygon(r, *((across, along) if along_y else (along, across))),
             [cargo.floor_z_mm + h for h in (15, 35)],
             math.pi / 2 if along_y else 0.0,
         )
-        for c in cargo.compartments
+        for r in cargo.insides()
     ]
     for zone, poly, heights, yaw in regions:
-        xs = [p[0] for p in poly]
-        ys = [p[1] for p in poly]
-        gx = np.linspace(min(xs) + 1, max(xs) - 1, max(2, round((max(xs) - min(xs)) / step_mm) + 1))
-        gy = np.linspace(min(ys) + 1, max(ys) - 1, max(2, round((max(ys) - min(ys)) / step_mm) + 1))
         look = q[LOOK_POSES[zone]]
-        for x, y, h in itertools.product(gx, gy, heights):
+        for (x, y), h in itertools.product(grid(poly, step_mm), heights):
             try:
                 _, _, up = arm.plan_pick(ArmPoint(float(x), float(y), h), zone, yaw, q0=look)
                 arm._plan_joints(up[-1], q["home"])  # and on to a drop, via home
@@ -308,6 +526,7 @@ def _yaml(poses, zones: dict[Zone, ZoneConfig], views: dict, arm: ArmConfig) -> 
         "arm": {
             "z_min_mm": arm.z_min_mm,
             "keep_out_mm": [list(b) for b in arm.keep_out_mm],
+            "link5_points_mm": [list(p) for p in arm.link5_points_mm],
         },
         "views": views,
         "poses": poses,
@@ -341,8 +560,10 @@ def main(argv: list[str] | None = None) -> None:
 
     cfg = load_config(args.config_dir)
     arm = arm_for(cfg.sim, cfg.arm)
-    poses = compute_poses(cfg.sim, arm)
-    zones = compute_zones(cfg.sim, arm)
+    print("# mapping where the arm reaches the floor …", file=sys.stderr, flush=True)
+    workspace = floor_workspace(cfg.sim, arm, compute_zones(cfg.sim, arm))
+    poses = compute_poses(cfg.sim, arm, workspace)
+    zones = compute_zones(cfg.sim, arm, workspace)
     rig = Path(args.config_dir) / "rig.yaml"
     views = zone_rois(cfg, poses)
     text = _yaml(poses, zones, views, arm)

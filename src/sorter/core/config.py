@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from sorter.arm.config import ArmConfig, ZoneConfig
 from sorter.box_detector.config import BoxDetectorConfig
@@ -19,7 +19,8 @@ from sorter.camera.config import CameraConfig, ViewConfig
 from sorter.color_classifier.config import ColorClassifierConfig
 from sorter.core.types import Zone
 from sorter.dashboard.config import DashboardConfig
-from sorter.orchestrator.config import StateMachineConfig
+from sorter.floor_detector.config import FloorDetectorConfig
+from sorter.orchestrator.config import LoadConfig, StateMachineConfig
 from sorter.sim.config import SimConfig
 
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[3] / "config"
@@ -53,11 +54,22 @@ class Config(BaseModel):
     calibration: CalibrationConfig = Field(default_factory=CalibrationConfig)
     box_detector: BoxDetectorConfig = Field(default_factory=BoxDetectorConfig)
     color_classifier: ColorClassifierConfig = Field(default_factory=ColorClassifierConfig)
+    floor_detector: FloorDetectorConfig = Field(default_factory=FloorDetectorConfig)
     arm: ArmConfig = Field(default_factory=ArmConfig)
     poses: dict[str, list[float]] = Field(default_factory=dict)  # joint angles, rad
     zones: dict[Zone, ZoneConfig] = Field(default_factory=dict)
     state_machine: StateMachineConfig = Field(default_factory=StateMachineConfig)
+    load: LoadConfig = Field(default_factory=LoadConfig)
     dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
+
+    @model_validator(mode="after")
+    def _sim_camera_where_calibrated(self) -> Config:
+        """The simulated camera sits where the real one was calibrated, so the rig's look
+        poses, ROIs and pixel → arm math are the ones the simulator runs."""
+        he = self.calibration.hand_eye
+        if self.sim.camera_T_link5_cam is None and he is not None and he.method != "nominal":
+            self.sim.camera_T_link5_cam = he.T_link5_cam
+        return self
 
 
 def deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:

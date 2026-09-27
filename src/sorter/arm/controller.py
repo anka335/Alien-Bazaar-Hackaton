@@ -94,7 +94,38 @@ class Controller:
             z_min_mm=c.z_min_mm,
             keep_out=c.keep_out_mm,
             keep_out_margin_mm=c.keep_out_margin_mm,
+            link5_points=c.link5_points_mm,
         )
+
+    def plan_move(
+        self, q0: Sequence[float], q1: Sequence[float], via_home: bool = True
+    ) -> np.ndarray:
+        """Joint waypoints from `q0` to `q1`: straight if that's clear, else turning joint 1
+        first (the arm swings round as it is, then reaches) or last, else (`via_home`) the same
+        way to home and on from there. ArmError if nothing is clear."""
+        q0, q1 = np.asarray(q0, dtype=float), np.asarray(q1, dtype=float)
+        try:
+            return self._plan_direct(q0, q1)
+        except ArmError:
+            home = self.poses["home"]
+            if not via_home or np.allclose(q0, home) or np.allclose(q1, home):
+                raise
+        return np.vstack([self._plan_direct(q0, home), self._plan_direct(home, q1)[1:]])
+
+    def _plan_direct(self, q0: np.ndarray, q1: np.ndarray) -> np.ndarray:
+        swing_first, swing_last = q0.copy(), q1.copy()
+        swing_first[0], swing_last[0] = q1[0], q0[0]
+        err: ArmError | None = None
+        for wps in ([q0, q1], [q0, swing_first, q1], [q0, swing_last, q1]):
+            try:
+                for a, b in zip(wps, wps[1:], strict=False):
+                    self._plan_joints(a, b)
+            except ArmError as e:
+                err = err or e
+                continue
+            return np.array(wps)
+        assert err is not None
+        raise err
 
     def _plan_to(
         self, q0: Sequence[float], xyz_mm: Sequence[float], approach, linear: bool = False
@@ -108,6 +139,7 @@ class Controller:
             z_min_mm=c.z_min_mm,
             keep_out=c.keep_out_mm,
             keep_out_margin_mm=c.keep_out_margin_mm,
+            link5_points=c.link5_points_mm,
         )
 
     def _go(self, name: str) -> None:
@@ -115,14 +147,14 @@ class Controller:
         rest, say, the gripper sweeps past the base)."""
         self._check_held()
         try:
-            wps = self._plan_joints(self.driver.joints(), self.poses[name])
+            wps = self.plan_move(self.driver.joints(), self.poses[name])
         except ArmError:
             if "home" in (name, self._at):
                 raise
             log.info("no straight move to %s: via home", name)
-            self._run(self._plan_joints(self.driver.joints(), self.poses["home"]))
+            self._run(self.plan_move(self.driver.joints(), self.poses["home"]))
             self._at = "home"
-            wps = self._plan_joints(self.driver.joints(), self.poses[name])
+            wps = self.plan_move(self.driver.joints(), self.poses[name])
         self._run(wps)
         self._at = name
 
@@ -174,6 +206,42 @@ class Controller:
         if self._at != LOOK_POSES[zone]:
             self._go(LOOK_POSES[zone])
 
+    def aim_camera(
+        self,
+        T_link5_cam: Pose,
+        target: Sequence[float],
+        heights_mm: Sequence[float],
+        tilts_deg: Sequence[float] = (0.0, 10.0, 20.0, 30.0),
+    ) -> float | None:
+        """Point the camera (fixed to link5 by `T_link5_cam`, the hand-eye result) at `target`
+        (mm) from the first of `heights_mm` the arm reaches safely; the camera leans up to
+        `tilts_deg` off vertical. The camera's height above the target, or None (no motion) if
+        no pose works."""
+        self._check_held()
+        q0 = self.driver.joints()
+        c = self.cfg
+        found = kin.camera_look(
+            T_link5_cam,
+            target,
+            q0,
+            heights_mm=heights_mm,
+            tilts_deg=tilts_deg,
+            z_min_mm=c.z_min_mm,
+            keep_out=c.keep_out_mm,
+            keep_out_margin_mm=c.keep_out_margin_mm,
+            link5_points=c.link5_points_mm,
+        )
+        if found is None:
+            return None
+        q, h, _ = found
+        try:
+            wps = self.plan_move(q0, q)
+        except ArmError:  # a straight move would hit something: via home
+            self._go("home")
+            wps = self.plan_move(self.driver.joints(), q)
+        self._run(wps)
+        return h
+
     def plan_pick(
         self,
         target: ArmPoint,
@@ -193,17 +261,32 @@ class Controller:
         above = (target.x, target.y, target.z + z.approach_mm)
         grasp = (target.x, target.y, max(target.z - z.grasp_depth_mm, z.z_floor_mm))
         lift = (target.x, target.y, max(z.lift_z_mm, above[2]))
+        q0 = np.asarray(self.driver.joints() if q0 is None else q0, dtype=float)
+        # the IK's answer depends on its seed: from where the arm is, else elbow up towards the
+        # target (the arm's usual shape over the floor)
+        canonical = np.array([-math.atan2(target.y, target.x), 1.2, 1.5, 0.0, 0.0, 0.0])
+        err: TargetRejected | None = None
+        for seed in (q0, canonical):
+            try:
+                return self._plan_pick_from(q0, seed, above, grasp, lift, yaw_rad)
+            except TargetRejected as e:
+                err = err or e
+        assert err is not None
+        raise err
+
+    def _plan_pick_from(self, q0, seed, above, grasp, lift, yaw_rad):
         a = self.cfg.approach
-        q0 = self.driver.joints() if q0 is None else q0
-        to_above = self._plan_to(q0, above, a)
+        q_above = kin.solve(above, a, seed, self.cfg.z_min_mm)
+        if q_above is None:
+            raise TargetRejected(f"no IK solution above ({above[0]:.0f}, {above[1]:.0f})")
         if yaw_rad is not None:
-            q_above = kin.with_yaw(to_above[-1], yaw_rad)
+            q_above = kin.with_yaw(q_above, yaw_rad)
             if q_above is None:
                 raise TargetRejected(f"joint 6 can't turn the gripper to {yaw_rad:.2f} rad")
-            try:
-                to_above = self._plan_joints(q0, q_above)
-            except ArmError as e:
-                raise TargetRejected(str(e)) from None
+        try:  # a joint move, swinging joint 1 first or last if a straight one would hit something
+            to_above = self.plan_move(q0, q_above)
+        except ArmError as e:
+            raise TargetRejected(str(e)) from None
         down = self._plan_to(to_above[-1], grasp, a, linear=True)
         up = self._plan_to(down[-1], lift, a, linear=True)
         return to_above, down, up
@@ -224,11 +307,47 @@ class Controller:
         # via home: a straight joint move from a pick would sweep the gripper through walls
         self._go("home")
         self._go(pose)
+        self._check_held()
+        self.driver.wait(self.cfg.drop_settle_s)  # the hanging sock stops swinging first
         self._gripper(self.cfg.gripper.open)
         self._go("home")  # and back the same way, clear of the walls
 
     def drop_to_cargo(self, color: ColorClass) -> None:
-        self._drop(f"cargo_{color.value}")
+        """Over the box high up, then straight down to `cargo_<color>` and back up. A move in at
+        the drop height drags the sock hanging from the fingers across the wall, and it stays
+        there, half out. Without that path (IK, keep-out): the plain drop."""
+        pose = f"cargo_{color.value}"
+        self._go("home")
+        try:
+            in_, down, up = self._plan_drop_from_above(pose)
+        except TargetRejected as e:
+            log.warning("no drop into %s from above (%s): the plain drop", pose, e)
+            self._drop(pose)
+            return
+        self._run(in_)
+        self._run(down)
+        self._check_held()
+        self.driver.wait(self.cfg.drop_settle_s)  # the hanging sock stops swinging first
+        self._gripper(self.cfg.gripper.open)
+        self._run(up)  # out of the cloth, then straight up: the fingers don't drag the sock out
+        self._go("home")
+
+    def _plan_drop_from_above(self, pose: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(home → above, above → drop, drop → back along the tool → above it) with the gripper
+        tilted outwards."""
+        c = self.cfg
+        x, y, z = kin.fk_tcp(self.poses[pose])[:3, 3]
+        r = math.hypot(x, y)
+        t = math.radians(c.cargo_drop_tilt_deg)
+        approach = np.array((x / r * math.sin(t), y / r * math.sin(t), -math.cos(t)))
+        z_above = z + c.cargo_drop_above_mm
+        in_ = self._plan_to(self.driver.joints(), (x, y, z_above), approach)
+        release = np.array((x, y, z - c.cargo_drop_depth_mm))
+        down = self._plan_to(in_[-1], release, approach, linear=True)
+        back = release - c.cargo_drop_back_mm * approach
+        out = self._plan_to(down[-1], back, approach, linear=True)
+        up = self._plan_to(out[-1], (*back[:2], z_above), approach, linear=True)
+        return in_, down, np.vstack([out, up[1:]])
 
     def drop_to_laundry(self, color: ColorClass) -> None:
         self._drop(f"laundry_{color.value}")
