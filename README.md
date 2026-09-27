@@ -13,7 +13,7 @@ Everything is built and accepted on a MuJoCo simulator first ([D-032](docs/decis
 | Rover | built and driven by others; four wheels, the arm stands on its deck, 200 mm above the floor |
 | Robot arm | Seeed reBot Arm B601-RS (RobStride motors): 6 DoF + parallel gripper, driven through [`rebot_b601/`](rebot_b601/README.md) |
 | Camera | Intel RealSense D435i RGB-D on the arm's wrist (eye-in-hand), USB 3 |
-| Cargo box | one cardboard box, 150 × 150 × 60 mm, left of the arm and a bit behind, over the rear left wheel |
+| Cargo box | one cardboard box, 190 × 190 × 75 mm (outside), right of the arm and a bit behind |
 | Unload station | 3 laundry bins (boxes like the cargo box) on the floor in front of the rover |
 
 ## Project plan
@@ -59,7 +59,7 @@ uv run python -m sorter.sim.scenes.unload.preview     # render the scene (--view
 uv run python -m sorter.sim.scenes.unload.bench -n 20 # seeded scenarios, judged by the sim; report in data/bench/
 ```
 
-**Rover layout** (`sim.layout` in `config/default.yaml`, arm base at the origin on the deck, +x forward, +y left, mm; measured, [D-042](docs/decisions.md), except the equipment, the box's center and the station): the floor at z −200; the deck 300 × 185 with the arm at its front edge; the body 420 × 420 with wheels 130 wide at its corners; the electronics, power supply and power strip behind the arm; the cargo box inside 182 × 182 around (−50, 200), rim 34 above the deck; the floor view 280 × 240 around (310, 0); the laundry bins (190 mm, 75 high) at (290, 220) light, (290, 0) dark, (290, −220) colored. The arm's joint 1 turns ±145° and the gripper held down reaches ~100 mm above the deck, which is why the box is beside the arm, not behind it, and the bins are low. After changing the layout recompute the rig: `uv run python -m sorter.sim.layout --write` writes the poses, zones, ROIs and the arm's keep-out into `config/rig.yaml` and checks every pick and move (it must report 0 problems).
+**Rover layout** (`sim.layout` in `config/default.yaml`, arm base at the origin on the deck, +x forward, +y left, mm; measured, [D-042](docs/decisions.md), except the equipment, the box's center and the station): the floor at z −200; the deck 300 × 185 with the arm at its front edge; the body 420 × 420 with wheels 130 wide at its corners; the electronics, power supply and power strip behind the arm; the cargo box inside 182 × 182 around (−50, −200) (right of the arm, [D-045](docs/decisions.md)), rim 34 above the deck; the floor view 280 × 240 around (310, 0); the laundry bins (190 mm, 75 high) at (290, 220) light, (290, 0) dark, (290, −220) colored. The arm's joint 1 turns ±145° and the gripper held down reaches ~100 mm above the deck, which is why the box is beside the arm, not behind it, and the bins are low. After changing the layout recompute the rig: `uv run python -m sorter.sim.layout --write` writes the poses, zones, ROIs and the arm's keep-out into `config/rig.yaml` and checks every pick and move (it must report 0 problems).
 
 ## Setup on the rig
 

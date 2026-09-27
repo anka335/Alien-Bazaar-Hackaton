@@ -437,7 +437,7 @@ def _cloth(
 def _rover(world: ET.Element, cfg: SimConfig) -> None:
     """The rover under the arm, as on the photos of the real one: wheels at the corners of
     `body`, side rails, the battery under the deck plate (top at z = 0), the equipment behind
-    the arm, and the cardboard cargo box to its left."""
+    the arm, and the cardboard cargo box beside it (to its right, D-045)."""
     lay = cfg.layout
     fz = lay.floor_z_mm / 1000
     x0, x1, y0, y1 = (v / 1000 for v in lay.body.bounds())
@@ -524,14 +524,16 @@ def _rover(world: ET.Element, cfg: SimConfig) -> None:
         CARDBOARD_RGBA,
         dividers,
     )
-    # black tape strips down from the rim of the box's outer (+y) wall, as on the real one
+    # black tape strips down from the rim of the box's outer wall (away from the arm), as on
+    # the real one
+    ty = cy1 + t if cargo.center_mm[1] > 0 else cy0 - t - 0.0005
     for k in range(6):
         x = cx0 + (k + 0.5) * (cx1 - cx0) / 6
         box(
             world,
             f"cargo_tape{k}",
-            (x - 0.007, cy1 + t, rim - 0.022),
-            (x + 0.007, cy1 + t + 0.0005, rim),
+            (x - 0.007, ty, rim - 0.022),
+            (x + 0.007, ty + 0.0005, rim),
             "0.05 0.05 0.05 1",
             contype="0",
             conaffinity="0",
