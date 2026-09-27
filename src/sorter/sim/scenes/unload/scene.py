@@ -1,5 +1,5 @@
 """The unload scene (stage B): the laundry bins of the station beside the rover, and socks in
-the cargo compartments.
+the cargo box.
 
 `add` is called by `sorter.sim.physics.model.build` after the base (floor, rover, cargo box, arm)
 is in place. It may add geoms and assets, and returns the cloth items to add.
@@ -20,7 +20,7 @@ BIN_RGBA = {
     ColorClass.DARK: "0.22 0.23 0.24 1",
     ColorClass.COLORED: "0.14 0.55 0.67 1",
 }
-SOCK_SHEET_M = (0.12, 0.12)  # smaller than the default cloth: it fits a compartment
+PILE_STEP_MM = 35.0  # socks in one box start this much above each other
 
 
 def add(world: ET.Element, asset: ET.Element, cfg: SimConfig, rng: np.random.Generator):
@@ -43,11 +43,22 @@ def add(world: ET.Element, asset: ET.Element, cfg: SimConfig, rng: np.random.Gen
         )
     items = []
     cargo = lay.cargo
+    sheet = tuple(v / 1000 for v in cfg.unload.sock_mm)
+    in_rect: dict[str, int] = {}  # socks so far per compartment (or the whole box)
     for color, n in cfg.unload.cargo.items():
-        (cx, cy) = cargo.compartment(color).center_mm
-        for i in range(n):
-            z = (cargo.floor_z_mm + 8) / 1000 + 0.035 * i
-            pos = (cx / 1000 + rng.uniform(-0.005, 0.005), cy / 1000 + rng.uniform(-0.02, 0.02), z)
-            yaw = rng.choice([0.0, np.pi / 2]) + rng.uniform(-0.1, 0.1)  # square to the walls
-            items.append(ItemSpec(color, palette_rgb(color, rng), pos, float(yaw), SOCK_SHEET_M))
+        own = color in cargo.compartments
+        rect = cargo.compartment(color) if own else cargo
+        key = color.value if own else "box"
+        (cx, cy), (w, h) = rect.center_mm, rect.size_mm
+        for _ in range(n):
+            k = in_rect[key] = in_rect.get(key, 0) + 1
+            z = cargo.floor_z_mm + 8 + PILE_STEP_MM * (k - 1)
+            if own:  # a narrow compartment: in the middle, square to the walls
+                dx, dy = rng.uniform(-5, 5), rng.uniform(-20, 20)
+                yaw = rng.choice([0.0, np.pi / 2]) + rng.uniform(-0.1, 0.1)
+            else:  # near the middle: the gathered sheet still has to fit between the walls
+                dx, dy = rng.uniform(-0.15, 0.15) * w, rng.uniform(-0.15, 0.15) * h
+                yaw = rng.uniform(0, np.pi)
+            pos = ((cx + dx) / 1000, (cy + dy) / 1000, z / 1000)
+            items.append(ItemSpec(color, palette_rgb(color, rng), pos, float(yaw), sheet))
     return items

@@ -40,6 +40,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 ### B0: Realistic unload scene
 
 - Socks as A makes them (share the sock model with A), `n` per compartment, dropped in and settled. Bins of real laundry-basket size where the arm still reaches them (the gripper held down reaches ~100 mm above the deck; the layout tool checks the drop poses).
+- The real rover (photos, 2026-09-27) differs from the base: one undivided cardboard box 150 × 150 × 60 mm to the arm's left and a bit behind it (its rim about at deck level), the color classified at unload, three boxes of the same size on the floor in front of the rover, a compact rover (~380 × 300 mm, deck ~160 mm up, electronics behind the arm). `uv run python -m sorter.sim.scenes.unload.preview [--view]` renders the scene on that geometry (`REAL_ROVER` there, estimates to be measured); it is not the committed layout: the cargo box and the load flow are shared with A, agree first.
 - Parking tolerance: in the sim the rover doesn't move, so shift the station (bins) by a seeded (x, y, yaw) noise. If the fixed drop poses can't absorb it, add a correction (e.g. a marker on the station seen from a look pose) and record the choice in `decisions.md`.
 
 ### B1: Looking into each compartment
@@ -83,3 +84,4 @@ B0–B6 done on the sim.
 
 - 2026-09-27: stage defined ([D-032](../decisions.md)).
 - 2026-09-27: stage 0 done; the brief rewritten for what it delivered ([D-034](../decisions.md)).
+- 2026-09-27: B0 started: unload scene supports an undivided box; preview of the real rover's geometry.
