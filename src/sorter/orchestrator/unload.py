@@ -23,7 +23,7 @@ import numpy as np
 
 from sorter.box_detector.cargo import CargoView, SockSeen, SockTarget, find_sock, taken
 from sorter.box_detector.geometry import points
-from sorter.box_detector.held import SHOW_POSE, HeldView, find_held, show_pose
+from sorter.box_detector.held import SHOW_POSE, HeldView, find_held, show_pose, side_class
 from sorter.box_detector.station import BinFit, find_bin
 from sorter.core.errors import ArmError, SorterError, TargetRejected
 from sorter.core.types import ArmPoint, ColorClass, Observation, Overlay, Phase, Zone
@@ -32,6 +32,7 @@ from sorter.orchestrator.state_machine import Loop
 log = logging.getLogger(__name__)
 
 FINGER_TRAVEL_MM = 50.0  # each finger from the middle, the gripper all open (rebot_b601)
+SHAKE_MM = 12.0  # sideways, twice, right after a pick
 MAX_PUT_BACKS = 6  # in a row before each more counts as a failure
 RELOCATE_MM = 20.0  # a bin found this far from where the look was centered: look again there
 DROP_IN_MM = 20.0  # the TCP this far below the bin's rim to let go (the bin is 140 mm inside)
@@ -144,22 +145,30 @@ class UnloadLoop(Loop):
     def _find_bin(
         self, color: ColorClass, guess: tuple[float, float]
     ) -> tuple[Bin, BinFit, Observation]:
+        """Look at the bin's layout place; if the bin was cut by the image edge or is off the
+        middle, look again centered on it. The best of the looks counts: a later one may see
+        less (a look pose the arm can't center)."""
         bins = self.s.cfg.sim.layout.laundry
         floor = self.s.cfg.sim.layout.floor_z_mm
         center, look = guess, self._look_pose(guess)
+        best: tuple[float, BinFit, Observation, np.ndarray] | None = None
         for _ in range(3):
             obs = self._observe(look, Zone.LAUNDRY)
             fit = find_bin(obs, center, floor, bins.size_mm, bins.height_mm, bins.wall_t_mm)
             self._publish(obs, fit, fit.overlay, f"{color} bin: " + fit.overlay.text[-1])
             if fit.center is None:
                 break
-            moved = math.dist(fit.center, center)
-            if fit.complete and moved < RELOCATE_MM:
+            quality = fit.score * fit.seen + (1.0 if fit.complete else 0.0)
+            if best is None or quality > best[0]:
+                best = (quality, fit, obs, look)
+            if fit.complete and math.dist(fit.center, center) < RELOCATE_MM:
                 break
             center, look = fit.center, self._look_pose(fit.center)  # look again, centered
-        if fit.center is None:
+        if best is None:
             log.warning("%s bin not found: using its place in the layout", color)
             return Bin(guess, 0.0, self._look_pose(guess), False), fit, obs
+        _, fit, obs, look = best
+        assert fit.center is not None
         return Bin(fit.center, fit.yaw, look, True), fit, obs
 
     def _locate_bins(self) -> dict[ColorClass, Bin]:
@@ -260,10 +269,18 @@ class UnloadLoop(Loop):
             self.avoid.append(target)
             sm.failures += 1
             return Phase.SENSE_CARGO  # same observation
-        # out over the middle of the box first: what hangs from the fingers (and a neighbor
-        # stuck to them) would drag over the near wall on the way out
         cargo = self.s.cfg.sim.layout.cargo
         lift = self.s.cfg.zones[Zone.CARGO].lift_z_mm
+        # a shake over the box: a neighbor only stuck to a finger falls back in; what is
+        # pinched stays
+        x, y = target.x, target.y
+        for dx in (SHAKE_MM, -SHAKE_MM, 0.0):
+            try:
+                self.s.arm.move_tcp((x + dx, y, lift), linear=True)  # type: ignore[attr-defined]
+            except TargetRejected:
+                break
+        # out over the middle of the box first: what hangs from the fingers (and a neighbor
+        # stuck to them) would drag over the near wall on the way out
         self.s.arm.move_tcp((*cargo.center_mm, lift), linear=True)  # type: ignore[attr-defined]
         # which sock left the box? The box lit from above shows colors best; this look is
         # also the next cycle's
@@ -299,6 +316,17 @@ class UnloadLoop(Loop):
             self._put_back()
             self.put_backs += 1
             if self.put_backs > MAX_PUT_BACKS:  # not getting anywhere with this pile
+                sm.failures += 1
+            return Phase.LOOK_CARGO
+        hanging = side_class(held.stats) if held.count == 1 else None
+        if hanging is not None and hanging is not gone[0].color:
+            # the held sock was hidden, the one gone from the box was dragged out of it
+            summary = f"a {gone[0].color} sock went, a {hanging} one hangs: back into the box"
+            log.warning(summary)
+            self._publish(obs, held, held.overlay, summary)
+            self._put_back()
+            self.put_backs += 1
+            if self.put_backs > MAX_PUT_BACKS:
                 sm.failures += 1
             return Phase.LOOK_CARGO
         self.color = gone[0].color

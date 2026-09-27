@@ -195,3 +195,12 @@ def test_a_sock_shown_more_once_the_one_on_it_is_gone_is_still_there():
     shown = SockSeen(ColorClass.DARK, 1.0, (20.0, 0.0, 0.0), (-80.0, 200.0), 15000, mask(150, 400))
     before = CargoView(None, 9000, [top, under], Overlay())
     assert taken(before, CargoView(None, 15000, [shown], Overlay())) == [top]
+
+
+def test_a_hanging_sock_is_told_by_its_side_lit_color():
+    from sorter.box_detector.held import side_class
+
+    assert side_class({"L": 19.0, "chroma": 38.0}) is ColorClass.COLORED
+    assert side_class({"L": 40.0, "chroma": 1.0}) is ColorClass.LIGHT
+    assert side_class({"L": 6.0, "chroma": 2.0}) is ColorClass.DARK
+    assert side_class({"L": 23.0, "chroma": 3.0}) is None

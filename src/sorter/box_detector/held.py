@@ -28,7 +28,13 @@ HANG_MM = (
 )  # below the fingers: the rig camera sees no closer (it is off to the side)
 NEAR_MM = 330.0  # held cloth is closer than this (or too close for depth)
 MIN_HELD_PX = 1200
-HELD_ABOVE_FLOOR_MM = 90.0  # cloth higher than this over the floor hangs from the gripper
+HELD_ABOVE_FLOOR_MM = 90.0
+# a sock hanging from the gripper is seen from the side, in its own shade: the box's thresholds
+# don't hold. What does, on the sim (to check on the rig): colored socks keep their chroma
+# (31–39, the others ≤ 11); light ones stay at L* 34–45, dark ones at 5–8
+SIDE_CHROMA_COLORED = 20.0
+SIDE_L_LIGHT = 28.0
+SIDE_L_DARK = 18.0  # cloth higher than this over the floor hangs from the gripper
 
 
 @dataclass
@@ -38,6 +44,7 @@ class HeldView:
     area_px: int
     overlay: Overlay
     count: int = 0  # socks seen hanging: more than one, a neighbor came along
+    stats: dict[str, float] | None = None  # color statistics of the held sock (side-lit)
 
 
 def find_held(
@@ -67,7 +74,20 @@ def find_held(
     stats = color_stats(frame.color, m, classifier.erode_px)
     color, conf = decide(stats, classifier)
     text = f"holding a {color} sock ({conf:.2f}), {area} px, {count} in view"
-    return HeldView(color, conf, area, Overlay(mask=m, text=[text]), count)
+    return HeldView(color, conf, area, Overlay(mask=m, text=[text]), count, stats)
+
+
+def side_class(stats: dict[str, float] | None) -> ColorClass | None:
+    """The class of a sock seen hanging (side-lit), if clear; None in between."""
+    if not stats:
+        return None
+    if stats["chroma"] >= SIDE_CHROMA_COLORED:
+        return ColorClass.COLORED
+    if stats["L"] >= SIDE_L_LIGHT:
+        return ColorClass.LIGHT
+    if stats["L"] <= SIDE_L_DARK:
+        return ColorClass.DARK
+    return None
 
 
 def show_pose(
