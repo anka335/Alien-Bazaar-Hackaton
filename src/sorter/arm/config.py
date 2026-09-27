@@ -30,7 +30,9 @@ class ArmConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dry_run: bool = False  # real backend: rebot_b601's simulated motors instead of the CAN bus
-    speed_scale: float = 0.5  # of rebot_b601's joint speeds; the driver caps it at 0.6
+    speed_scale: float = Field(1.0, gt=0)  # of rebot_b601's joint speeds, at start
+    # the dashboard's speed control goes up to this, at most speed_ceiling() (the motors' limit)
+    max_speed_scale: float = Field(1.4, gt=0)
     approach: Literal["down"] = "down"  # tool orientation for a pick
     safe_z_mm: float = 100.0  # recover() / shutdown() lift the TCP to this height first
     z_min_mm: float = 3.0  # floor clearance: no point of the arm goes lower

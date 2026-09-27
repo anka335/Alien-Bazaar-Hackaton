@@ -45,7 +45,7 @@ uv run pytest                                   # tests
 
 `--sim` simulates the hardware only (the arm's motors and the wrist camera) in a MuJoCo scene ([D-021](docs/decisions.md)); calibration, the detectors and the loops run their real code on the rendered RGB-D frames, and the arm runs the real `rebot_b601` control loop. So `run` without `--sim` runs the same code on the rig.
 
-- The scene is a shared base (floor, rover, deck, cargo box, arm) plus one scene file per stage: `src/sorter/sim/scenes/load/` (socks on the floor) and `.../unload/` (the laundry bins, socks in the compartments); `sim.scenes` picks which ([D-033](docs/decisions.md)).
+- The scene is a shared base (floor, rover, deck, cargo box, arm) plus one scene file per stage: `src/sorter/sim/scenes/load/` (socks on the floor) and `.../unload/` (the laundry bins, socks in the compartments); `sim.scenes` picks which ([D-034](docs/decisions.md)).
 - Socks are cloth that falls, folds and hangs from the gripper. Cloth is expensive: `sim.realtime: 0` runs as fast as the CPU allows (3 socks ≈ 2.6× real time).
 - The floor detector uses the render's segmentation instead of SAM3 (`sim.use_sam3: true` to call the service). `sim.miss_prob` makes grasps miss on purpose.
 
@@ -63,7 +63,7 @@ uv run pytest                                   # tests
 
 **SAM3 segmentation** ([D-013](docs/decisions.md)): the floor detector's real backend calls the SAM3 service; put the API key in `config/local.yaml` (`color_classifier: {sam: {api_key: ...}}`) or the `SAM3_API_KEY` env var. Tuning tool: `uv run python -m sorter.color_classifier.stats <observation.npz ...>` or `--sim 3`.
 
-**Real arm** ([D-019](docs/decisions.md)): `uv sync --extra hardware` adds `motorbridge`; `arm.dry_run: true` first runs `rebot_b601`'s simulated motors. CAN setup: [rebot_b601/README.md](rebot_b601/README.md). Speed: `arm.speed_scale` (capped at 0.6), or the Speed slider at runtime ([D-030](docs/decisions.md)).
+**Real arm** ([D-019](docs/decisions.md)): `uv sync --extra hardware` adds `motorbridge`; `arm.dry_run: true` first runs `rebot_b601`'s simulated motors. CAN setup: [rebot_b601/README.md](rebot_b601/README.md). Speed: `arm.speed_scale` (1.0 at start) up to `arm.max_speed_scale` (1.4, at most ~1.43: the motors' velocity limit), also from the Speed slider at runtime ([D-030](docs/decisions.md), [D-033](docs/decisions.md)); start it low on the rig: the acceleration is higher than the arm has run so far.
 
 **Config** is in `config/`: `default.yaml` (all sections), `rig.yaml` (computed: poses, zones, ROIs, the arm's floor limit and keep-out), `hand_eye.yaml` (the camera mount), and your own `local.yaml` (gitignored), e.g. `backends: {camera: real}`.
 

@@ -1,6 +1,6 @@
 # Plan
 
-The arm rides on a rover and works in two modes, load and unload ([D-032](decisions.md)). The work is three stages: a thin shared base first (stage 0), then loading and unloading in parallel, one agent each ([D-033](decisions.md)). Every stage is accepted on the simulator; hardware is a later stage 3, planned when A and B pass.
+The arm rides on a rover and works in two modes, load and unload ([D-032](decisions.md)). The work is three stages: a thin shared base first (stage 0), then loading and unloading in parallel, one agent each ([D-034](decisions.md)). Every stage is accepted on the simulator; hardware is a later stage 3, planned when A and B pass.
 
 ```mermaid
 graph LR

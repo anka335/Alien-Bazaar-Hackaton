@@ -17,7 +17,7 @@ A robotic arm on a rover sorts socks by color. **Load:** the rover stops next to
 
 - Vision uses **classic CV plus depth**, not trained models, unless a stage brief says otherwise. Exception: masks come from a remote SAM3 service ([D-013](docs/decisions.md)); in the sim from the render's segmentation.
 - Vision outputs **pixel coordinates**. Only the calibration module converts pixels to arm coordinates.
-- The simulator stands in for the hardware (camera, arm): develop and test on `--sim` ([D-021](docs/decisions.md), [D-033](docs/decisions.md)).
+- The simulator stands in for the hardware (camera, arm): develop and test on `--sim` ([D-021](docs/decisions.md), [D-034](docs/decisions.md)).
 - Safety comes first: every arm path is checked against the floor and the rover's keep-out boxes, every pick target against its zone, and a stop (hold) is always available. Never disable the motors except at the rest pose: the arm falls.
 
 ## Parallel workflow

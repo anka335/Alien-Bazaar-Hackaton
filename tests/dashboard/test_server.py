@@ -89,12 +89,12 @@ def test_run_commands_need_the_auto_mode(client, system):
 
 def test_speed(client, system):
     s = client.get("/api/speed").json()
-    assert s == {"speed_scale": system.cfg.arm.speed_scale, "max_speed_scale": 0.6}
+    assert s == {"speed_scale": system.cfg.arm.speed_scale, "max_speed_scale": 1.4}
     r = client.post("/api/speed", json={"speed_scale": 0.3})
     assert r.status_code == 200 and r.json()["speed_scale"] == 0.3
     assert system.arm.speed_scale == 0.3
-    assert client.post("/api/speed", json={"speed_scale": 9}).json()["speed_scale"] == 0.6
-    assert client.get("/api/status").json()["speed"]["speed_scale"] == 0.6
+    assert client.post("/api/speed", json={"speed_scale": 9}).json()["speed_scale"] == 1.4
+    assert client.get("/api/status").json()["speed"]["speed_scale"] == 1.4
     assert client.post("/api/speed", json={"speed_scale": "fast"}).status_code == 422
 
 

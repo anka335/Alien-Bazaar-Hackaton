@@ -6,7 +6,8 @@ import time
 import numpy as np
 import pytest
 
-from rebot_b601.arm import Arm, ArmError, path_duration
+from rebot_b601 import config as C
+from rebot_b601.arm import Arm, ArmError, Trajectory, path_duration, path_timing
 
 
 @pytest.fixture
@@ -78,6 +79,29 @@ def test_speed_is_capped(arm):
     assert path_duration(wps, 0.5) > path_duration(wps, 1.0)
 
 
+def test_profile_keeps_joint_speed_and_acceleration_limits():
+    wps = np.vstack([np.zeros(6), np.radians([60, 40, 30, 50, 0, 0])])
+    for scale, move in (
+        (1.0, wps),
+        (1.0, wps / 20),
+        (0.3, wps),
+    ):  # long, short (no cruise), slow
+        duration, ramp = path_timing(move, scale)
+        traj = Trajectory(move, duration, ramp=ramp)
+        dt = 0.002
+        q = np.array([traj.sample(t) for t in np.arange(0.0, duration + dt, dt)])
+        v = np.diff(q, axis=0) / dt
+        a = np.diff(v, axis=0) / dt
+        vmax = np.radians(C.JOINT_SPEED_DPS)
+        assert np.allclose(q[0], move[0]) and np.allclose(q[-1], move[-1])
+        assert np.all(np.abs(v).max(axis=0) <= vmax * scale * 1.01)
+        assert np.all(np.abs(a).max(axis=0) <= vmax * C.JOINT_ACCEL * 1.02)
+    # a long move is faster than min-jerk's 1.875 x the time at peak speed
+    assert path_duration(wps, 1.0) < 1.875 * np.max(
+        np.abs(wps[1]) / np.radians(C.JOINT_SPEED_DPS)
+    )
+
+
 def test_joint_move_and_home(arm):
     arm.move_joints([20, 30, 40, 0, 0, 0], speed_scale=1.0)
     assert arm.status()["joints_deg"][:3] == pytest.approx([20, 30, 40], abs=1.0)
@@ -102,9 +126,11 @@ def test_stop_cancels_move(arm):
     assert "stopped" in err.get("e", "")
     q_after = arm.status()["joints_deg"]
     time.sleep(0.3)
-    assert arm.status()["joints_deg"] == pytest.approx(q_after, abs=0.6)   # holding, not moving on
+    assert arm.status()["joints_deg"] == pytest.approx(
+        q_after, abs=0.6
+    )  # holding, not moving on
     assert 0 < q_after[0] < 60
-    arm.move_joints([0, 0, 0, 0, 0, 0], speed_scale=1.0)                   # still usable after stop
+    arm.move_joints([0, 0, 0, 0, 0, 0], speed_scale=1.0)  # still usable after stop
 
 
 def test_busy_is_refused(arm):
@@ -122,7 +148,7 @@ def test_busy_is_refused(arm):
 
 
 def test_blocked_joint_triggers_fault(arm):
-    arm.backend.blocked = {0}                       # joint1 refuses to move (collision)
+    arm.backend.blocked = {0}  # joint1 refuses to move (collision)
     with pytest.raises(ArmError, match="joint1"):
         arm.move_joints([60, 0, 0, 0, 0, 0], speed_scale=1.0)
     assert "joint1" in arm.status()["fault"]

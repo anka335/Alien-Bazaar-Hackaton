@@ -5,7 +5,7 @@
 
 ## Goal
 
-The rover is parked at the unload station. The arm empties the cargo box compartment by compartment: every sock from compartment *c* goes into laundry bin *c*. The color is known from loading, so there is no color classification. The rover stands still; we don't talk to it ([D-032](../decisions.md), [D-033](../decisions.md)).
+The rover is parked at the unload station. The arm empties the cargo box compartment by compartment: every sock from compartment *c* goes into laundry bin *c*. The color is known from loading, so there is no color classification. The rover stands still; we don't talk to it ([D-032](../decisions.md), [D-034](../decisions.md)).
 
 **Make it work perfectly in the simulator, as close to reality as you can get it:** a realistic scene (cargo box, socks in it, the station), a robust loop, and a benchmark that proves it. Hardware comes later.
 
@@ -82,4 +82,4 @@ B0–B6 done on the sim.
 ## Log
 
 - 2026-09-27: stage defined ([D-032](../decisions.md)).
-- 2026-09-27: stage 0 done; the brief rewritten for what it delivered ([D-033](../decisions.md)).
+- 2026-09-27: stage 0 done; the brief rewritten for what it delivered ([D-034](../decisions.md)).

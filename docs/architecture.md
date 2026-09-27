@@ -9,7 +9,7 @@ Single source of truth for the contracts between the stages. The shared types ar
 - **Camera:** Intel RealSense D435i RGB-D on the wrist, fixed to link5, looking along the gripper ([D-006](decisions.md), [D-027](decisions.md)).
 - **Cargo box** on the deck, to the arm's left: 3 compartments in a row along x (light, dark, colored).
 - **Unload station:** 3 laundry bins on the floor to the rover's right, one per color.
-- The layout is `sim.layout` (arm base frame, mm), placeholders until the real rover is measured ([D-033](decisions.md)):
+- The layout is `sim.layout` (arm base frame, mm), placeholders until the real rover is measured ([D-034](decisions.md)):
 
 | Part | Where |
 | --- | --- |
@@ -301,7 +301,7 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 | `calibration` | shared | `hand_eye`, the board tool's `poses`, `tilt_deg`, `shift_mm`, `board_z_mm`; `marks_z_mm` (the floor) |
 | `box_detector` | B | depth thresholds and margins |
 | `color_classifier` | A | the SAM3 service (`sam`, API key in `local.yaml` or `SAM3_API_KEY`) and the color thresholds |
-| `arm` | shared | `speed_scale`, `approach`, `safe_z_mm`, `z_min_mm`, `drop_height_mm`, `keep_out_mm`, `keep_out_margin_mm`, gripper |
+| `arm` | shared | `speed_scale` (at start; `POST /api/speed` changes it), `max_speed_scale` (at most `speed_ceiling()` ≈ 1.43, the motors' velocity limit, [D-033](decisions.md)), `approach`, `safe_z_mm`, `z_min_mm`, `drop_height_mm`, `keep_out_mm`, `keep_out_margin_mm`, gripper |
 | `poses` | layout tool | `rest`, `home`, `look_floor`, `look_cargo`, `cargo_<color>`, `laundry_<color>` (`rig.yaml`) |
 | `zones.<zone>` | layout tool | `floor`, `cargo`: `workspace_mm`, `z_floor_mm`, `grasp_depth_mm`, `approach_mm`, `lift_z_mm` (`rig.yaml`) |
 | `state_machine` | shared | `empty_confirmations`, `max_consecutive_failures`, `low_confidence`, `save_runs`, `runs_dir` |

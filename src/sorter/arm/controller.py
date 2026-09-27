@@ -25,6 +25,12 @@ log = logging.getLogger(__name__)
 MIN_SPEED_SCALE = 0.05
 
 
+def speed_ceiling() -> float:
+    """The speed_scale at which the fastest joint's peak speed reaches the velocity limit
+    programmed into the motors (`REBOT_MOTOR_VLIM`, 1.5 rad/s): ~1.43."""
+    return rc.MOTOR_VLIM_RAD_S / float(np.radians(rc.JOINT_SPEED_DPS).max())
+
+
 def in_polygon(x: float, y: float, poly: Sequence[tuple[float, float]]) -> bool:
     """Even-odd rule; points on the edge count as inside only by chance."""
     inside = False
@@ -59,7 +65,14 @@ class Controller:
         self.zones = zones
         self._held = threading.Event()
         self._at: str | None = None  # the named pose the arm is at, if any
-        self._speed = min(max(cfg.speed_scale, MIN_SPEED_SCALE), rc.MAX_SPEED_SCALE)
+        self._max_speed = min(cfg.max_speed_scale, speed_ceiling())
+        if self._max_speed < cfg.max_speed_scale:
+            log.warning(
+                "arm.max_speed_scale %.2f is above what the motors follow; using %.2f",
+                cfg.max_speed_scale,
+                self._max_speed,
+            )
+        self._speed = min(max(cfg.speed_scale, MIN_SPEED_SCALE), self._max_speed)
 
     # --- helpers ---
 
@@ -245,15 +258,15 @@ class Controller:
 
     @property
     def max_speed_scale(self) -> float:
-        """rebot_b601's hard cap (`REBOT_MAX_SPEED`, 0.6 by default)."""
-        return rc.MAX_SPEED_SCALE
+        """`arm.max_speed_scale`, at most `speed_ceiling()`."""
+        return self._max_speed
 
     def set_speed_scale(self, scale: float) -> float:
         """From the next motion on (one under way keeps its speed), clamped to
         [MIN_SPEED_SCALE, max_speed_scale]. Returns the speed set."""
         if not math.isfinite(scale):
             raise ValueError(f"speed_scale must be a number, not {scale}")
-        self._speed = min(max(float(scale), MIN_SPEED_SCALE), rc.MAX_SPEED_SCALE)
+        self._speed = min(max(float(scale), MIN_SPEED_SCALE), self._max_speed)
         log.info("arm speed_scale %.2f", self._speed)
         return self._speed
 

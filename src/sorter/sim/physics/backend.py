@@ -33,7 +33,12 @@ def create(name: str, cfg: Config, world: PhysicsWorld) -> Any:
 
             arm = Arm(clock=world.time)
             world.attach(arm.tick, arm.hz)
-            driver = RebotDriver(arm=arm, backend=MujocoBackend(world), own_loop=False)
+            driver = RebotDriver(
+                max_speed_scale=cfg.arm.max_speed_scale,
+                arm=arm,
+                backend=MujocoBackend(world),
+                own_loop=False,
+            )
             return Controller(driver, cfg.arm, cfg.poses, cfg.zones)
         case "calibration":  # the real calibration with the sim's exact camera mount
             return HandEyeCalibration(hand_eye(cfg))

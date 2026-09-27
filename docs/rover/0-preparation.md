@@ -5,7 +5,7 @@
 
 ## Goal
 
-A thin shared base so that A and B can work in parallel without touching each other's code: the contracts, a base simulator scene with one scene file per stage, the arm's limits on the rover, the rig computed for the rover, and the wiring of the two modes ([D-033](../decisions.md)). Tuning the scenes, vision, loops, benchmarks and panels belongs to A and B.
+A thin shared base so that A and B can work in parallel without touching each other's code: the contracts, a base simulator scene with one scene file per stage, the arm's limits on the rover, the rig computed for the rover, and the wiring of the two modes ([D-034](../decisions.md)). Tuning the scenes, vision, loops, benchmarks and panels belongs to A and B.
 
 ## What it delivered
 
@@ -36,4 +36,4 @@ Checked: `uv run pytest` passes; `python -m sorter.sim.layout` reports 0 problem
 ## Log
 
 - 2026-09-27: stage defined ([D-032](../decisions.md)).
-- 2026-09-27: done, scope cut to a thin base ([D-033](../decisions.md)).
+- 2026-09-27: done, scope cut to a thin base ([D-034](../decisions.md)).

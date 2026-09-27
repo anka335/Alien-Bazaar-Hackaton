@@ -13,7 +13,7 @@ def sim_config() -> Config:
         overrides={
             "sim": {"realtime": 0, "scenes": []},
             "backends": dict.fromkeys(("camera", "arm"), "sim"),
-            "arm": {"speed_scale": 0.6},
+            "arm": {"speed_scale": 1.4},
             "state_machine": {"save_runs": False},
         }
     )

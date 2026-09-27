@@ -5,7 +5,7 @@
 
 ## Goal
 
-The rover has stopped next to socks on the floor. The arm finds them, classifies each sock's color on the spot, picks it up and drops it into the cargo compartment of that color, until no sock is left in reach. The rover stands still; we don't talk to it ([D-032](../decisions.md), [D-033](../decisions.md)).
+The rover has stopped next to socks on the floor. The arm finds them, classifies each sock's color on the spot, picks it up and drops it into the cargo compartment of that color, until no sock is left in reach. The rover stands still; we don't talk to it ([D-032](../decisions.md), [D-034](../decisions.md)).
 
 **Make it work perfectly in the simulator, as close to reality as you can get it:** a realistic scene (socks, floor, light, camera noise), a robust loop, and a benchmark that proves it. Hardware comes later.
 
@@ -94,4 +94,4 @@ A0–A7 done on the sim.
 ## Log
 
 - 2026-09-27: stage defined ([D-032](../decisions.md)).
-- 2026-09-27: stage 0 done; the brief rewritten for what it delivered ([D-033](../decisions.md)).
+- 2026-09-27: stage 0 done; the brief rewritten for what it delivered ([D-034](../decisions.md)).
