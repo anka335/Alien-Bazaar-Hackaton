@@ -51,6 +51,26 @@ uv run pytest                                   # tests
 
 **Rover layout** (`sim.layout` in `config/default.yaml`, arm base at the origin on the deck, +x forward, +y left, mm; placeholders until the rover is measured): the floor at z −200; the cargo box inside x −260..60, y 130..310, walls 50 mm; the floor view (the floor pick zone) 280 × 240 around (300, 0); the laundry bins (220 mm, 150 high) at (−140, −330), (100, −330), (340, −300). The arm's joint 1 turns ±145° and the gripper held down reaches ~100 mm above the deck, which is why the box is beside the arm and the bins are low. After changing the layout recompute the rig: `uv run python -m sorter.sim.layout --write` writes the poses, zones, ROIs and the arm's keep-out into `config/rig.yaml` and checks every pick and move (it must report 0 problems).
 
+## Rover navigation sim
+
+The Leo Rover 1.9 with an OAK-D in its own MuJoCo world, steered by camera-only commands ([D-037](docs/decisions.md), stage N).
+
+- The Rover tab: `/rover` in the dashboard, or on its own `uv run python -m sorter.nav serve` → http://127.0.0.1:8010/rover (build the front end first). Click a pixel of the OAK-D view, then Face / Go to pixel; Forward, Turn, Scan, Seek sock, Clearance, arrow keys nudge, Esc stops; Approach sock runs the algorithm (`classic`, `sam3`, `seg` = sim oracle).
+- One command per process, an episode in a directory: `uv run python -m sorter.nav new runs/e1 --scenario easy --seed 0`, then `... do runs/e1 go_to_pixel 220 109`, `... detect runs/e1 --detector classic|sam3|seg`, `... depth runs/e1 U V`, `... finish runs/e1` (the ground-truth score). Frames land in `runs/e1/frames/` (`NNN_grid.png` has a pixel grid and the goal zone).
+- The approach algorithm: `uv run python -m sorter.nav auto --scenario clutter --seed 3 --detector classic`; the benchmark: `uv run python -m sorter.nav bench --scenarios easy,side,behind --seeds 0-9 --jobs 4` (a worker needs ~0.3 GB; `bench` caps the workers by free memory).
+- `python -m sorter.nav commands` lists the commands, `scenarios` the presets. Config: `nav` (`leo`, `camera`, `goal`, `real`, …; `--set camera.pitch_deg=30` on the CLI). `sam3` needs the SAM3 key (below).
+
+### Rover navigation on the real Leo
+
+The same commands drive the real rover: `sorter.nav.real_leo` talks to the Leo over rosbridge (`/cmd_vel` out, `/merged_odom` in; no ROS install needed), `sorter.nav.real_oakd` reads the OAK-D through depthai v3 (RGB 640×480 + stereo depth aligned to it, extended disparity).
+
+1. On the machine the OAK-D is plugged into (the rover's Raspberry Pi, USB 3): `uv sync --extra nav-hw` (installs depthai).
+2. rosbridge on the rover: LeoOS runs it for its web UI (port 9090); if not, `ros2 launch rosbridge_server rosbridge_websocket_launch.xml` there.
+3. Check: `uv run python -m sorter.nav hw-check` (on the rover; from a laptop add `--rosbridge ws://10.0.0.1:9090`). It saves `data/nav_hw/hw_rgb.png` and `hw_depth.png`, compares the depth of the floor with the mount in `nav.camera` (fix `mount_xyz_m` / `pitch_deg` if they disagree) and checks `/merged_odom`. `--move` also turns 10° and back: clear space first.
+4. Drive: `uv run python -m sorter.nav serve --real --host 0.0.0.0` on the rover and open `http://<rover-ip>:8010/rover` from a laptop (the rover's Wi-Fi: `http://10.0.0.1:8010/rover`), or one command per process: `... real look runs/r1`, `... real do runs/r1 go_to_pixel 320 300`, `... real detect runs/r1 --detector sam3`, `... real auto --detector sam3 --out runs/r2`.
+5. Safety: speeds are capped by `nav.real.max_linear_mps` (0.25) and `max_angular_rps` (0.8); a twist is sent every control tick, so if the process dies the firmware stops the rover within 0.5 s; `forward` stops for obstacles in the depth image (the Leo has no bumper). Stop: Esc / Stop in the tab, Ctrl+C on the CLI.
+6. The mount: OAK-D on the front of the top plate, 25° down (`nav.camera.mount_xyz_m`, `pitch_deg`); keep depth mode `extended` (normal mode has no depth closer than ~0.7 m). Measure the real mount and put it in `config/local.yaml` → `nav.camera`.
+
 ## Setup on the rig
 
 **Manual mode** (`uv run python -m sorter manual`, or the Manual tab): the wrist camera, the 3D view, named poses and a tour through them (`look_floor`, `look_cargo`, the cargo and laundry drop poses, home), joint jog, gripper, Hold / Release, **Clear fault** after a blocked joint, and **Save current** to re-teach a pose into `config/rig.yaml` (commit it). Moves to and from a drop pose go via `home`. Without `config/hand_eye.yaml` it uses the nominal camera mount (`sim.camera_mount_mm`).

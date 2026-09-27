@@ -28,7 +28,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | [A: Loading](rover/a-loading.md) | todo | — | — | socks from the floor into the cargo compartments |
 | [B: Unloading](rover/b-unloading.md) | todo | — | — | cargo compartments into the laundry bins |
 | [F: Far detection](rover/f-far-detection.md) | todo | — | — | socks seen 0.5–3 m away from a search pose, as targets on the floor |
-| [N: Navigation](rover/n-navigation.md) | todo | — | — | driving rover: to F's targets, stop within reach, dock at the station |
+| [N: Navigation](rover/n-navigation.md) | in progress | Viacheslav + Claude | `feat/rover-nav` | Leo Rover + OAK-D sim (`sorter.nav`), camera-only commands, sock approach, Rover tab (D-037) |
 | [C: Full mission](rover/c-mission.md) | todo | — | — | needs A, B, F, N: rover interface, stow, mission loop, benchmark |
 | [D: Sim-to-real](rover/d-sim-to-real.md) | todo | — | — | needs C: the benchmarks under rig-like errors |
 | Hardware | todo | — | — | not planned in detail yet: measure the rover, calibrate, the real interface, real socks |

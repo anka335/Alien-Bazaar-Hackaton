@@ -34,7 +34,7 @@ Single source of truth for the contracts between the stages. The shared types ar
 | Floor detector | A | Socks on the floor: color, grasp point (pixels), grasp angle, mask |
 | Box detector | B | Grasp point in a cargo compartment (pixels), or "empty" |
 | Color classifier | A | Block 4's library: SAM3 masks ([D-013](decisions.md)) + color statistics. The floor detector's baseline uses it |
-| Dashboard | shared (panels: A, B) | Web UI: decision frame, live wrist feed, 3D view, state, counters, controls |
+| Dashboard | shared (panels: A, B; Rover tab: N) | Web UI: decision frame, live wrist feed, 3D view, state, counters, controls; the Rover tab drives the nav sim or the real Leo |
 | Simulator | base shared, scenes A / B | MuJoCo: the arm's motors, the wrist RGB-D camera, the rover, cloth socks |
 
 ## Coordinate frames and units
@@ -263,7 +263,7 @@ Decision(phase, obs, overlay, summary)
 
 | Endpoint | Content |
 | --- | --- |
-| `GET /`, `/load`, `/unload`, `/manual`, `/calibrate`, `/3d` | The admin panel (React, `frontend/`, built into `src/sorter/dashboard/web/`) |
+| `GET /`, `/load`, `/unload`, `/manual`, `/calibrate`, `/3d`, `/rover` | The admin panel (React, `frontend/`, built into `src/sorter/dashboard/web/`) |
 | `GET /api/meta` | `{"phase_labels", "modes", "calibrate"}` |
 | `GET` / `POST /api/mode` | `{"mode": "load" \| "unload" \| "manual" \| "calibrate", "busy"}`; 409 if a run is going or a manual motion runs |
 | `GET /api/status`, `WS /ws` | `Status` as JSON + `now`, `speed`, `operator` |
@@ -274,7 +274,20 @@ Decision(phase, obs, overlay, summary)
 | `GET` / `POST /api/manual` | manual control: named poses, a tour `look_floor → look_cargo → cargo_* → laundry_* → home`, jog, gripper, save a pose into `rig.yaml`, release, clear fault |
 | `GET` / `POST /api/calibrate` | the calibration page: marks on the floor view, clicks, the mount fit, look poses (`look_floor`, `look_cargo`) |
 
-**The front end is not updated yet**: it still has an "Auto" tab and draws the table from the old layout JSON. Updating it (tabs Load / Unload, the 3D view from `parts`) is task A6; B adds its panel on top (B5).
+**The front end is not updated yet**: it still has an "Auto" tab and draws the table from the old layout JSON. Updating it (tabs Load / Unload, the 3D view from `parts`) is task A6; B adds its panel on top (B5). The Rover tab (`/rover`, `RoverPage.tsx`) is stage N's and works already.
+
+### Rover navigation API (stage N)
+
+The Rover tab talks to `sorter.nav.server` (mounted by `create_app(..., nav=)`, also standalone with `python -m sorter.nav serve`). One thread owns the nav sim and its renderer and runs one command at a time in real time.
+
+| Route | What |
+| --- | --- |
+| `GET /api/nav/state` | episode, busy, last results, detections, odometry, ground truth (debug), score |
+| `GET /api/nav/view/{rgb,depth,chase,overview}.jpg`, `/api/nav/stream/{…}.mjpg` | the OAK-D's RGB (goal zone drawn) and depth; chase and overview are debug views |
+| `POST /api/nav/reset` `{scenario, seed, overrides}` | a new episode (with `serve --real`: reconnect the real rover) |
+| `POST /api/nav/command` `{name, args}` | one command of `sorter.nav.commands.Rover.COMMANDS` |
+| `POST /api/nav/auto` / `detect` `{detector}` | the approach algorithm / detections on the last frame (`classic`, `sam3`, `seg`) |
+| `POST /api/nav/stop` | stops the running command or algorithm |
 
 ## Threads and process
 
@@ -306,6 +319,7 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 | `zones.<zone>` | layout tool | `floor`, `cargo`: `workspace_mm`, `z_floor_mm`, `grasp_depth_mm`, `approach_mm`, `lift_z_mm` (`rig.yaml`) |
 | `state_machine` | shared | `empty_confirmations`, `max_consecutive_failures`, `low_confidence`, `save_runs`, `runs_dir` |
 | `dashboard` | shared | `host`, `port`, `stream_fps`, `jpeg_quality`, `status_hz` |
+| `nav` | N | the navigation world ([D-037](decisions.md)): `leo` (the rover and its firmware), `camera` (the OAK-D, its mount and depth mode), `goal` (where the sock must end up), `real` (`rosbridge_url`, topics, speed caps, the OAK-D device), `timestep_s`, `control_hz`, `realtime`, `stream_fps`, `max_command_s`, `detector`, `sam_prompt` |
 
 `rig.yaml` is computed: `uv run python -m sorter.sim.layout --write` after any change to `sim.layout` or `arm.drop_height_mm` (it prints the poses and checks every pick and move; 0 problems or it exits 1). The rig's `arm.z_min_mm` and `arm.keep_out_mm` come from there too.
 
@@ -324,6 +338,12 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 - The arm: `rebot_b601.arm.Arm` runs unchanged on `MujocoBackend`; `PhysicsCamera` renders the D435i (depth noise, no depth under 175 mm) and `segment()` gives MuJoCo's segmentation as SAM3-style instances.
 - `sorter.sim.layout` computes the rig (poses, zones, views, keep-out) with the arm's IK and checks it; `sorter.sim.rig` has the sim camera mount.
 
+## Navigation world (stage N)
+
+`sorter.nav` is a separate MuJoCo world, not the arm scene ([D-037](decisions.md)): the Leo Rover 1.9 (`model.py`, meshes from `leo_description` in `assets/leo/`), its firmware (`sim.py`: `cmd_vel` → wheel speeds, timeout, odometry from encoders + gyro), the OAK-D (`camera.py`: RGB + aligned stereo depth), scenarios (`scenario.py`), commands (`commands.py`), detectors (`detect.py`), the approach algorithm (`controller.py`), episodes and scoring (`episode.py`). The rover frame has its origin on the floor under the rover's center, x forward, y left, z up. Operators and the algorithm decide from the camera only; ground truth is used for scoring and the debug views.
+
+The commands (`sorter.nav.commands.Rover`) need a base with `set_cmd(v, w)`, `tick()`, `odom`, `t`, `dt`, `moving()`, `ref`, `cfg` and a camera with `capture() → Frame`, `K`, `T_rover_cam`: `RoverSim` + `OakD` in the sim, `real_leo.LeoBase` (rosbridge: `/cmd_vel` out every tick, `/merged_odom` in) + `real_oakd.RealOakD` (depthai v3) on the hardware. A `Frame` is RGB uint8, depth uint16 mm aligned to it (0 = none), the RGB intrinsics and the camera's pose in the rover frame.
+
 ## Repo layout
 
 | Path | Owner |
@@ -341,6 +361,7 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 | `config/rig.yaml` | the layout tool (and the setup pages on the rig) |
 | `config/hand_eye.yaml` | calibration |
 | `tests/<package>/` | same as the package; `tests/conftest.py` shared |
+| `src/sorter/nav/`, `tests/nav/`, `frontend/src/pages/RoverPage.tsx`, `config/default.yaml` → `nav` | N |
 | `ros2_ws/` | the ROS 2 track ([D-014](decisions.md)), outside these stages |
 
 "Shared" means: change it only through the contract rules in [AGENTS.md](../AGENTS.md).
