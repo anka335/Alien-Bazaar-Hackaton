@@ -21,8 +21,11 @@ def readonly(a: np.ndarray) -> np.ndarray:
 
 
 class Zone(StrEnum):
-    BOX = "box"
-    BACKGROUND = "background"
+    """Where the wrist camera looks / the arm works (D-032)."""
+
+    FLOOR = "floor"  # in front of the rover: socks to load
+    CARGO = "cargo"  # the rover's cargo box, one compartment per ColorClass
+    LAUNDRY = "laundry"  # the unload station's bins, one per ColorClass (drops only)
 
 
 class ColorClass(StrEnum):
@@ -138,13 +141,34 @@ class ItemResult:
     confidence: float  # 0..1
     grasp: GraspPoint  # re-grasp point
     area_px: int
-    touches_roi_edge: bool  # item partly outside the background ROI
+    touches_roi_edge: bool  # item partly outside the ROI
     stats: dict[str, float]  # e.g. median L, a, b, chroma
 
 
 @dataclass
 class BackgroundResult:
-    items: list[ItemResult]  # one per blob, largest first; [] = background empty
+    items: list[ItemResult]  # one per blob, largest first; [] = nothing in the ROI
+    overlay: Overlay
+
+
+# --- Floor detector (stage A) ------------------------------------------------
+
+
+@dataclass
+class Sock:
+    color: ColorClass
+    confidence: float  # 0..1, of the color
+    grasp: GraspPoint
+    grasp_angle_rad: float | None  # gripper yaw across the sock, image frame; None = any
+    area_px: int
+    touches_roi_edge: bool  # partly outside the view: look again from closer
+    mask: np.ndarray | None  # HxW bool
+    stats: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
+class FloorResult:
+    socks: list[Sock]  # best target first; [] = no sock in view
     overlay: Overlay
 
 
@@ -163,14 +187,16 @@ class PickResult:
 class Phase(StrEnum):
     IDLE = "idle"
     STARTING = "starting"
-    LOOK_BG = "look_bg"
-    SENSE_BG = "sense_bg"
-    PICK_FROM_BG = "pick_from_bg"
-    DROP_TO_BIN = "drop_to_bin"
-    LOOK_BOX = "look_box"
-    SENSE_BOX = "sense_box"
-    PICK_FROM_BOX = "pick_from_box"
-    PLACE_ON_BG = "place_on_bg"
+    # load (stage A)
+    SCAN = "scan"
+    SENSE_FLOOR = "sense_floor"
+    PICK_FROM_FLOOR = "pick_from_floor"
+    DROP_TO_CARGO = "drop_to_cargo"
+    # unload (stage B)
+    LOOK_CARGO = "look_cargo"
+    SENSE_CARGO = "sense_cargo"
+    PICK_FROM_CARGO = "pick_from_cargo"
+    DROP_TO_LAUNDRY = "drop_to_laundry"
     DONE = "done"
     HELD = "held"
     ERROR = "error"
@@ -187,6 +213,19 @@ class Command(StrEnum):
 
 
 Mode = Literal["idle", "running", "paused"]
+
+
+class OperatorMode(StrEnum):
+    """Who drives the arm (the dashboard's mode switch): a loop of the state machine, or a
+    person."""
+
+    LOAD = "load"  # the load loop (stage A); Start/Pause/… work
+    UNLOAD = "unload"  # the unload loop (stage B); Start/Pause/… work
+    MANUAL = "manual"  # the manual control tab: poses, jog, gripper
+    CALIBRATE = "calibrate"  # the camera calibration tab
+
+
+RUN_MODES = (OperatorMode.LOAD, OperatorMode.UNLOAD)  # the modes the state machine runs in
 
 
 @dataclass(frozen=True)

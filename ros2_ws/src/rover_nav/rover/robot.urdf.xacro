@@ -4,7 +4,7 @@
   scripts/setup_rover.sh. Stock LeoOS file minus the Panthera arm it shipped with. That arm is not
   on our rover, and its links (link1..link6, L_finger, R_finger) and its mount on plain base_link
   clash with the reBot arm's frames. The reBot arm hangs under leo/base_link through the mount
-  transform published by rover_nav (D-019).
+  transform published by rover_nav (D-037).
   No colon followed by a space in this comment. The rover's launch file passes the expanded model
   as a parameter string, and ROS tries to parse such a string as YAML first.
 -->

@@ -1,7 +1,7 @@
 """High level driver for the reBot Arm B601-RS.
 
 * :class:`Arm` runs a 50 Hz control thread that streams the current setpoint to
-  the motors, executes smooth (minimum-jerk) joint trajectories, drives the
+  the motors, executes smooth joint trajectories (constant speed between raised-cosine ramps), drives the
   gripper and enforces safety checks (soft limits, tracking error, temperature,
   lost feedback).
 * :class:`HardwareBackend` talks to the motors through the ``motorbridge``
@@ -18,8 +18,10 @@ All public numbers are in metres (Cartesian, base frame) and degrees (joints).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -41,17 +43,53 @@ class ArmError(RuntimeError):
 # --------------------------------------------------------------------------
 
 
-def _min_jerk(tau: float) -> float:
-    tau = min(max(tau, 0.0), 1.0)
-    return 10 * tau**3 - 15 * tau**4 + 6 * tau**5
+def _path_length(waypoints: np.ndarray) -> float:
+    """Seconds the path takes with every segment at the peak speed of its slowest joint at
+    speed_scale 1 (the path parameter of :class:`Trajectory`)."""
+    seg = np.abs(np.diff(waypoints, axis=0)) / np.radians(C.JOINT_SPEED_DPS)
+    return float(np.sum(np.max(seg, axis=1))) if len(seg) else 0.0
+
+
+def path_timing(waypoints: np.ndarray, speed_scale: float) -> tuple[float, float]:
+    """``(duration, ramp)`` [s] of ``waypoints`` (M,6 rad) at ``speed_scale``.
+
+    The path runs at the limiting joint's peak speed (``JOINT_SPEED_DPS`` x scale), reached and
+    left in a raised-cosine ramp (smooth acceleration, peak ``JOINT_ACCEL`` x ``JOINT_SPEED_DPS``
+    per second). A path too short for full speed is two ramps with a lower peak.
+    """
+    length, a = _path_length(waypoints), C.JOINT_ACCEL
+    ramp = math.pi * speed_scale / (2 * a)
+    if length >= speed_scale * ramp:
+        duration = length / speed_scale + ramp
+    else:  # peak rate p: two ramps of pi p / 2a each cover p x ramp = length
+        peak = math.sqrt(2 * a * length / math.pi)
+        ramp = math.pi * peak / (2 * a)
+        duration = 2 * ramp
+    if duration < C.MIN_MOVE_TIME_S:  # stretch the whole profile
+        ramp *= C.MIN_MOVE_TIME_S / max(duration, 1e-9)
+        duration = C.MIN_MOVE_TIME_S
+    return duration, ramp
 
 
 def path_duration(waypoints: np.ndarray, speed_scale: float) -> float:
-    """Time needed to run ``waypoints`` (M,6 rad) with a min-jerk profile at ``speed_scale``."""
-    vmax = np.radians(C.JOINT_SPEED_DPS) * speed_scale
-    seg = np.abs(np.diff(waypoints, axis=0)) / vmax
-    total = float(np.sum(np.max(seg, axis=1))) if len(seg) else 0.0
-    return max(C.MIN_MOVE_TIME_S, 1.875 * total)     # min-jerk peak speed = 1.875 x mean
+    """Time needed to run ``waypoints`` (M,6 rad) at ``speed_scale`` (see :func:`path_timing`)."""
+    return path_timing(waypoints, speed_scale)[0]
+
+
+def _progress(t: float, duration: float, ramp: float) -> float:
+    """0..1 along the path at ``t``: raised-cosine ramp up, constant speed, ramp down."""
+    t = min(max(t, 0.0), duration)
+    ramp = min(ramp, duration / 2)
+    peak = 1.0 / (duration - ramp)  # two ramps at half the peak rate + the cruise = 1
+
+    def up(x: float) -> float:
+        return peak / 2 * (x - ramp / math.pi * math.sin(math.pi * x / ramp)) if ramp > 0 else 0.0
+
+    if t < ramp:
+        return up(t)
+    if t <= duration - ramp:
+        return peak * ramp / 2 + peak * (t - ramp)
+    return 1.0 - up(duration - t)
 
 
 @dataclass
@@ -59,6 +97,7 @@ class Trajectory:
     waypoints: np.ndarray            # (M,6) rad
     duration: float
     t0: float = 0.0
+    ramp: float | None = None        # s; None: all ramp (no constant-speed part)
     _u: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self):
@@ -66,9 +105,11 @@ class Trajectory:
         d = np.max(np.abs(np.diff(self.waypoints, axis=0)) / vmax, axis=1)
         cum = np.concatenate([[0.0], np.cumsum(d)])
         self._u = cum / cum[-1] if cum[-1] > 0 else np.linspace(0.0, 1.0, len(cum))
+        if self.ramp is None:
+            self.ramp = self.duration / 2
 
     def sample(self, t: float) -> np.ndarray:
-        s = _min_jerk(t / self.duration)
+        s = _progress(t, self.duration, self.ramp)
         return np.array([np.interp(s, self._u, self.waypoints[:, j]) for j in range(6)])
 
 
@@ -144,6 +185,33 @@ class SimBackend:
         return Measurement(self.q.copy(), self.dq.copy(), np.zeros(6), np.full(7, self.temp), self.grip, self.grip_vel)
 
 
+class _Timing:
+    """Time spent per part of a control tick since the last report: calls, total, worst."""
+
+    def __init__(self):
+        self._t: dict[str, list[float]] = {}
+
+    @contextlib.contextmanager
+    def __call__(self, part: str):
+        t0 = time.perf_counter()
+        try:
+            yield
+        finally:
+            dt = time.perf_counter() - t0
+            n_total_worst = self._t.setdefault(part, [0, 0.0, 0.0])
+            n_total_worst[0] += 1
+            n_total_worst[1] += dt
+            n_total_worst[2] = max(n_total_worst[2], dt)
+
+    def report(self) -> str:
+        """The parts, slowest first, and a reset."""
+        parts = sorted(self._t.items(), key=lambda kv: -kv[1][1])
+        self._t = {}
+        return ", ".join(
+            f"{p} {n}x avg {tot / n * 1000:.1f} ms max {worst * 1000:.0f} ms" for p, (n, tot, worst) in parts
+        )
+
+
 class HardwareBackend:
     """RobStride motors 1-7 over SocketCAN through the ``motorbridge`` SDK."""
 
@@ -154,6 +222,14 @@ class HardwareBackend:
     _SPD_KP = 0x701F
     _SPD_KI = 0x7020
     _MECH_POS = 0x7019
+    _VEL_MAX = 0x7024      # the Position mode's speed limit (motorbridge's POS_VEL writes it)
+    # A USB-CAN adapter on macOS takes ~10-25 ms per frame, and motorbridge's send_pos_vel is
+    # 2-3 parameter writes per motor: a 50 Hz tick then takes ~200 ms and the arm jerks. So
+    # the mode and speed limit are set once at enable, and a tick writes only the position
+    # reference of the motors whose setpoint changed, plus one motor in turn (its reply keeps
+    # its feedback fresh). REBOT_SEND=pos_vel restores send_pos_vel for every motor, every tick.
+    _SEND_ALL = os.environ.get("REBOT_SEND", "") == "pos_vel"
+    _RESEND_S = 0.2        # the gripper torque is resent at least this often
 
     def __init__(self, channel: str = C.CAN_CHANNEL):
         self.channel = channel
@@ -161,21 +237,27 @@ class HardwareBackend:
         self.arm_motors: list = []
         self.gripper = None
         self._enabled = False
+        self.timing = _Timing()  # where the control loop's time goes (see Arm._loop)
+        self._sent_q: np.ndarray | None = None  # the position references last written
+        self._turn = 0  # the motor whose reference is written this tick regardless
+        self._sent_tau: tuple[float, float] | None = None  # gripper torque, when
 
     # -- helpers ---------------------------------------------------------
     def _all(self):
         return self.arm_motors + ([self.gripper] if self.gripper is not None else [])
 
     def _poll(self) -> None:
-        for m in self._all():
+        with self.timing("request"):
+            for m in self._all():
+                try:
+                    m.request_feedback()
+                except Exception:
+                    pass
+        with self.timing("poll"):
             try:
-                m.request_feedback()
+                self.ctrl.poll_feedback_once()
             except Exception:
                 pass
-        try:
-            self.ctrl.poll_feedback_once()
-        except Exception:
-            pass
 
     def connect(self, enable: bool) -> Measurement:
         try:
@@ -209,10 +291,13 @@ class HardwareBackend:
         st = motor.get_state()
         if st is not None:
             return st.pos, st.vel, st.torq, st.t_mos
-        try:
-            return float(motor.robstride_get_param_f32(self._MECH_POS)), 0.0, 0.0, float("nan")
-        except Exception:
-            return None
+        # no feedback frame from this motor: a blocking parameter read (up to its timeout)
+        i = self._all().index(motor) + 1
+        with self.timing(f"param read motor {i}"):
+            try:
+                return float(motor.robstride_get_param_f32(self._MECH_POS)), 0.0, 0.0, float("nan")
+            except Exception:
+                return None
 
     def _try_read(self) -> Measurement | None:
         q, dq, tau, temps = [], [], [], []
@@ -251,6 +336,7 @@ class HardwareBackend:
                 m.robstride_write_param_f32(self._SPD_KI, p["vel_ki"]); time.sleep(0.01)
                 m.robstride_write_param_f32(self._LOC_KP, p["pos_kp"]); time.sleep(0.01)
                 m.ensure_mode(Mode.POS_VEL, 1000)
+                m.robstride_write_param_f32(self._VEL_MAX, C.MOTOR_VLIM_RAD_S); time.sleep(0.01)
                 # without this the motor could slew towards a stale (or zero) reference when enabled
                 m.robstride_write_param_f32(self._LOC_REF, float(q_hold[i]))
             except Exception as e:
@@ -265,6 +351,7 @@ class HardwareBackend:
             m.enable()
             time.sleep(0.02)
         self._enabled = True
+        self._sent_q, self._sent_tau = None, None
         self.send_arm(q_hold)                 # immediately hold the current pose
         self.send_gripper_torque(0.0)
 
@@ -277,13 +364,33 @@ class HardwareBackend:
         self._enabled = False
 
     def send_arm(self, q_cmd: np.ndarray) -> None:
-        for i, m in enumerate(self.arm_motors):
-            m.send_pos_vel(float(q_cmd[i]), float(C.MOTOR_VLIM_RAD_S))
+        q_cmd = np.asarray(q_cmd, dtype=float)
+        with self.timing("send arm"):
+            if self._SEND_ALL:
+                for i, m in enumerate(self.arm_motors):
+                    m.send_pos_vel(float(q_cmd[i]), float(C.MOTOR_VLIM_RAD_S))
+                return
+            n = len(self.arm_motors)
+            if self._sent_q is None:
+                self._sent_q = np.full(n, np.nan)
+            changed = ~(np.abs(q_cmd - self._sent_q) < 1e-5)  # NaN (never sent) counts as changed
+            changed[self._turn % n] = True
+            self._turn += 1
+            for i in np.flatnonzero(changed):
+                self.arm_motors[i].robstride_write_param_f32(self._LOC_REF, float(q_cmd[i]))
+                self._sent_q[i] = q_cmd[i]
 
     def send_gripper_torque(self, tau: float) -> None:
         if self.gripper is not None:
             # like Seeed's follower: no position term, light damping, feed-forward torque
-            self.gripper.send_mit(0.0, 0.0, 0.0, 1.5, float(tau))
+            now = time.monotonic()
+            last = self._sent_tau
+            if not self._SEND_ALL and last is not None:
+                if abs(tau - last[0]) < 1e-3 and now - last[1] < self._RESEND_S:
+                    return
+            with self.timing("send gripper"):
+                self.gripper.send_mit(0.0, 0.0, 0.0, 1.5, float(tau))
+            self._sent_tau = (float(tau), now)
 
     def close(self) -> None:
         if self.ctrl is None:
@@ -308,6 +415,97 @@ class HardwareBackend:
 
 
 # --------------------------------------------------------------------------
+# Planning (shared by Arm and by simulators that execute paths their own way)
+# --------------------------------------------------------------------------
+
+
+def check_xyz(xyz) -> np.ndarray:
+    p = np.asarray(xyz, dtype=float).reshape(3)
+    if not np.all(np.isfinite(p)):
+        raise ArmError("target contains NaN/inf")
+    for name, v, (lo, hi) in zip("xyz", p, (C.WORKSPACE_X, C.WORKSPACE_Y, C.WORKSPACE_Z)):
+        if not lo <= v <= hi:
+            raise ArmError(f"{name}={v:.3f} m is outside the allowed workspace box [{lo:.2f}, {hi:.2f}] m")
+    return p
+
+
+def check_limits(q: np.ndarray, what: str = "target") -> None:
+    tol = math.radians(0.5)
+    lo, hi = C.JOINT_LIMITS_RAD[:, 0], C.JOINT_LIMITS_RAD[:, 1]
+    for j in range(6):
+        if q[j] < lo[j] - tol or q[j] > hi[j] + tol:
+            raise ArmError(
+                f"{what}: joint{j + 1} = {math.degrees(q[j]):.1f} deg is outside its limit "
+                f"[{C.JOINT_LIMITS_DEG[j, 0]:.0f}, {C.JOINT_LIMITS_DEG[j, 1]:.0f}] deg"
+            )
+
+
+def check_path(wps: np.ndarray, n_samples: int = 60, z_min: float | None = None) -> None:
+    """Sample the planned path and reject it if it dips below the table / hits the base."""
+    z_min = C.Z_MIN if z_min is None else z_min
+    traj = Trajectory(wps, 1.0)
+    for s in np.linspace(0.0, 1.0, n_samples):
+        q = np.array([np.interp(s, traj._u, wps[:, j]) for j in range(6)])
+        ok, why = K.pose_is_safe(q, z_min=z_min)
+        if not ok:
+            # the start pose may legitimately be low (e.g. resting); only reject if it gets worse
+            if s == 0.0:
+                continue
+            raise ArmError(f"path rejected: {why}")
+
+
+def plan_path(q0, target, approach=None, linear: bool = False, z_min: float | None = None):
+    """IK + checks for a move of the TCP from joints ``q0`` to ``target`` [m].
+
+    Returns ``(q_goal, waypoints (M,6) rad, IKResult)``; raises :class:`ArmError` if the
+    target or the path is not feasible.  ``linear`` = straight line in Cartesian space.
+    ``z_min`` overrides the table clearance (``REBOT_Z_MIN``).
+    """
+    z_min = C.Z_MIN if z_min is None else z_min
+    q0 = np.asarray(q0, dtype=float)
+    target = np.asarray(target, dtype=float).reshape(3)
+    lim = C.JOINT_LIMITS_RAD
+    res = K.solve_ik(target, approach, q0, lim, z_min=z_min)
+    if not res.success:
+        raise ArmError(f"target {np.round(target, 3).tolist()} is not reachable: {res.message}")
+    q_goal = res.q
+    check_limits(q_goal)
+    if not linear:
+        wps = np.vstack([q0, q_goal])
+        check_path(wps, z_min=z_min)
+        return q_goal, wps, res
+    # straight line in Cartesian space, IK continued waypoint by waypoint
+    p0, _ = K.fk(q0)
+    dist = float(np.linalg.norm(target - p0))
+    n = max(2, int(math.ceil(dist / 0.01)) + 1)
+    wps = [q0]
+    q = q0
+    # blend the approach direction from the current one to the requested one along the path,
+    # otherwise the very first waypoint would demand an instant re-orientation of the wrist
+    a_goal = K.parse_approach(approach)
+    a_start = K.approach_vector(q0)
+    for k in range(1, n):
+        s = k / (n - 1)
+        pk = p0 + (target - p0) * s
+        if a_goal is None:
+            ak = None
+        else:
+            ak = (1.0 - s) * a_start + s * a_goal
+            ak = a_goal if np.linalg.norm(ak) < 1e-6 else ak / np.linalg.norm(ak)
+        r = K.solve_ik(pk, ak, q, lim, n_random_starts=0, z_min=z_min)
+        if not r.success:
+            raise ArmError(f"straight-line path fails at {np.round(pk, 3).tolist()}: {r.message}")
+        if np.max(np.abs(r.q - q)) > math.radians(12.0):
+            raise ArmError("straight-line path needs a large joint jump (singularity or configuration change); use linear=False")
+        check_limits(r.q, "path")
+        wps.append(r.q)
+        q = r.q
+    wps = np.array(wps)
+    check_path(wps, n_samples=max(60, n), z_min=z_min)
+    return q_goal, wps, res
+
+
+# --------------------------------------------------------------------------
 # Arm
 # --------------------------------------------------------------------------
 
@@ -317,9 +515,13 @@ def _round(a, n=3):
 
 
 class Arm:
-    def __init__(self, hz: float = C.CONTROL_HZ, max_speed_scale: float = C.MAX_SPEED_SCALE):
+    """``clock``: the time source of the control loop, trajectories and timeouts (a physics
+    simulator passes its simulated time and calls :meth:`tick` itself, see :meth:`connect`)."""
+
+    def __init__(self, hz: float = C.CONTROL_HZ, max_speed_scale: float = C.MAX_SPEED_SCALE, clock=time.monotonic):
         self.hz = hz
         self.max_speed_scale = max_speed_scale
+        self._clock = clock
         self.backend = None
         self._lock = threading.RLock()
         self._move_lock = threading.Lock()
@@ -350,12 +552,18 @@ class Arm:
     def simulated(self) -> bool:
         return bool(self.backend and self.backend.simulated)
 
-    def connect(self, enable: bool = True, simulate: bool | None = None, sim_start_deg=None) -> dict:
-        """Connect to the arm.  ``enable=False`` only reads feedback (motors stay limp)."""
+    def connect(self, enable: bool = True, simulate: bool | None = None, sim_start_deg=None, backend=None, own_loop: bool = True) -> dict:
+        """Connect to the arm.  ``enable=False`` only reads feedback (motors stay limp).
+
+        ``backend``: use this backend (e.g. a physics simulator) instead of the bus or
+        :class:`SimBackend`.  ``own_loop=False``: no control thread; the caller runs
+        :meth:`tick` at ``hz`` (in the time of ``clock``).
+        """
         if self.connected:
             raise ArmError("already connected")
         simulate = C.DRY_RUN if simulate is None else simulate
-        backend = SimBackend(None if sim_start_deg is None else np.radians(sim_start_deg)) if simulate else HardwareBackend()
+        if backend is None:
+            backend = SimBackend(None if sim_start_deg is None else np.radians(sim_start_deg)) if simulate else HardwareBackend()
         meas = backend.connect(enable)
         lo, hi = C.JOINT_LIMITS_RAD[:, 0], C.JOINT_LIMITS_RAD[:, 1]
         m = math.radians(C.POSE_SANITY_MARGIN_DEG)
@@ -386,8 +594,9 @@ class Arm:
                 raise
             self._enabled = True
         self._stop_thread.clear()
-        self._thread = threading.Thread(target=self._loop, name="rebot-control", daemon=True)
-        self._thread.start()
+        if own_loop:
+            self._thread = threading.Thread(target=self._loop, name="rebot-control", daemon=True)
+            self._thread.start()
         return self.status()
 
     def disconnect(self, go_home: bool = True, speed_scale: float | None = None) -> dict:
@@ -412,6 +621,7 @@ class Arm:
         self._stop_thread.set()
         if self._thread:
             self._thread.join(timeout=2.0)
+            self._thread = None
         self.backend.close()
         self.backend = None
         self._enabled = False
@@ -420,15 +630,35 @@ class Arm:
     # ------------------------------------------------------------------
     # control loop
     # ------------------------------------------------------------------
+    def tick(self) -> None:
+        """One control cycle, for callers that drive the loop themselves (``own_loop=False``)."""
+        try:
+            self._tick(self._clock())
+        except Exception as e:      # never let the loop die silently
+            log.exception("control loop error")
+            self._raise_fault(f"control loop error: {e!r}")
+
     def _loop(self) -> None:
         period = 1.0 / self.hz
         nxt = time.monotonic()
+        last = nxt
+        late, worst, reported = 0, 0.0, nxt  # ticks over 3 periods apart since the last report
         while not self._stop_thread.is_set():
-            try:
-                self._tick(time.monotonic())
-            except Exception as e:      # never let the loop die silently
-                log.exception("control loop error")
-                self._raise_fault(f"control loop error: {e!r}")
+            now = time.monotonic()
+            gap = now - last
+            last = now
+            if gap > 3 * period:  # the setpoint jumps ahead by the gap: the arm jerks
+                late, worst = late + 1, max(worst, gap)
+            if late and now - reported > 2.0:
+                timing = getattr(self.backend, "timing", None)
+                log.warning(
+                    "control loop late %d times in %.1f s, worst gap %.0f ms (expected %.0f): "
+                    "jerky motion, tracking-error faults. Tick parts: %s",
+                    late, now - reported, worst * 1000, period * 1000,
+                    timing.report() if timing is not None else "n/a",
+                )
+                late, worst, reported = 0, 0.0, now
+            self.tick()
             nxt += period
             d = nxt - time.monotonic()
             if d > 0:
@@ -489,7 +719,8 @@ class Arm:
                 elif now - self._err_since[j] > C.TRACKING_ERR_TIME_S:
                     self._raise_fault(
                         f"joint{j + 1} is {err[j]:.1f} deg away from its commanded position "
-                        "(blocked, collision or motor fault); motion aborted and pose held"
+                        f"(commanded {math.degrees(q_cmd[j]):.1f}, measured {math.degrees(meas.q[j]):.1f} deg; "
+                        "blocked, collision or motor fault); motion aborted and pose held"
                     )
                     return
             else:
@@ -525,11 +756,16 @@ class Arm:
             if not self._enabled:
                 raise ArmError("motors are not enabled (connected read-only, or torque was disabled); reconnect with enable=True")
             if self._fault:
-                raise ArmError(f"arm is in a fault state: {self._fault}. Inspect the arm, then disconnect and connect again")
+                raise ArmError(f"arm is in a fault state: {self._fault}. Inspect the arm, then clear_fault (or disconnect and connect again)")
 
     def _q_meas(self) -> np.ndarray:
         with self._lock:
             return self._meas.q.copy()
+
+    def joints(self) -> np.ndarray:
+        """Measured joint angles [rad] (6,)."""
+        self._require(motion=False)
+        return self._q_meas()
 
     def status(self) -> dict:
         if not self.connected:
@@ -598,35 +834,13 @@ class Arm:
     # planning
     # ------------------------------------------------------------------
     def _check_xyz(self, xyz) -> np.ndarray:
-        p = np.asarray(xyz, dtype=float).reshape(3)
-        if not np.all(np.isfinite(p)):
-            raise ArmError("target contains NaN/inf")
-        for name, v, (lo, hi) in zip("xyz", p, (C.WORKSPACE_X, C.WORKSPACE_Y, C.WORKSPACE_Z)):
-            if not lo <= v <= hi:
-                raise ArmError(f"{name}={v:.3f} m is outside the allowed workspace box [{lo:.2f}, {hi:.2f}] m")
-        return p
+        return check_xyz(xyz)
 
     def _check_limits(self, q: np.ndarray, what: str = "target") -> None:
-        tol = math.radians(0.5)
-        lo, hi = C.JOINT_LIMITS_RAD[:, 0], C.JOINT_LIMITS_RAD[:, 1]
-        for j in range(6):
-            if q[j] < lo[j] - tol or q[j] > hi[j] + tol:
-                raise ArmError(
-                    f"{what}: joint{j + 1} = {math.degrees(q[j]):.1f} deg is outside its limit "
-                    f"[{C.JOINT_LIMITS_DEG[j, 0]:.0f}, {C.JOINT_LIMITS_DEG[j, 1]:.0f}] deg"
-                )
+        check_limits(q, what)
 
     def _check_path(self, wps: np.ndarray, n_samples: int = 60) -> None:
-        """Sample the planned path and reject it if it dips below the table / hits the base."""
-        traj = Trajectory(wps, 1.0)
-        for s in np.linspace(0.0, 1.0, n_samples):
-            q = np.array([np.interp(s, traj._u, wps[:, j]) for j in range(6)])
-            ok, why = K.pose_is_safe(q, z_min=C.Z_MIN)
-            if not ok:
-                # the start pose may legitimately be low (e.g. resting); only reject if it gets worse
-                if s == 0.0:
-                    continue
-                raise ArmError(f"path rejected: {why}")
+        check_path(wps, n_samples)
 
     def _speed(self, scale: float | None) -> float:
         s = C.DEFAULT_SPEED_SCALE if scale is None else float(scale)
@@ -653,45 +867,7 @@ class Arm:
         }
 
     def _plan(self, q0, target, approach, linear):
-        lim = C.JOINT_LIMITS_RAD
-        res = K.solve_ik(target, approach, q0, lim, z_min=C.Z_MIN)
-        if not res.success:
-            raise ArmError(f"target {np.round(target, 3).tolist()} is not reachable: {res.message}")
-        q_goal = res.q
-        self._check_limits(q_goal)
-        if not linear:
-            wps = np.vstack([q0, q_goal])
-            self._check_path(wps)
-            return q_goal, wps, res
-        # straight line in Cartesian space, IK continued waypoint by waypoint
-        p0, _ = K.fk(q0)
-        dist = float(np.linalg.norm(target - p0))
-        n = max(2, int(math.ceil(dist / 0.01)) + 1)
-        wps = [q0]
-        q = q0
-        # blend the approach direction from the current one to the requested one along the path,
-        # otherwise the very first waypoint would demand an instant re-orientation of the wrist
-        a_goal = K.parse_approach(approach)
-        a_start = K.approach_vector(q0)
-        for k in range(1, n):
-            s = k / (n - 1)
-            pk = p0 + (target - p0) * s
-            if a_goal is None:
-                ak = None
-            else:
-                ak = (1.0 - s) * a_start + s * a_goal
-                ak = a_goal if np.linalg.norm(ak) < 1e-6 else ak / np.linalg.norm(ak)
-            r = K.solve_ik(pk, ak, q, lim, n_random_starts=0, z_min=C.Z_MIN)
-            if not r.success:
-                raise ArmError(f"straight-line path fails at {np.round(pk, 3).tolist()}: {r.message}")
-            if np.max(np.abs(r.q - q)) > math.radians(12.0):
-                raise ArmError("straight-line path needs a large joint jump (singularity or configuration change); use linear=False")
-            self._check_limits(r.q, "path")
-            wps.append(r.q)
-            q = r.q
-        wps = np.array(wps)
-        self._check_path(wps, n_samples=max(60, n))
-        return q_goal, wps, res
+        return plan_path(q0, target, approach, linear)
 
     # ------------------------------------------------------------------
     # motion
@@ -705,14 +881,16 @@ class Arm:
                 start = self._q_cmd.copy()
                 wps = np.array(wps, dtype=float)
                 wps[0] = start                       # begin exactly where the setpoint is now
-                duration = path_duration(wps, scale)
+                duration, ramp = path_timing(wps, scale)
                 self._abort = None
                 self._done.clear()
-                self._traj = Trajectory(wps, duration, t0=time.monotonic())
+                self._traj = Trajectory(wps, duration, t0=self._clock(), ramp=ramp)
             if not wait:
                 return {"duration_s": round(duration, 2), "speed_scale": scale}
+            deadline = self._clock() + duration + 5.0
             try:
-                finished = self._done.wait(timeout=duration + 5.0)
+                while not (finished := self._done.wait(timeout=0.05)) and self._clock() < deadline:
+                    pass
             except BaseException:            # Ctrl+C etc.: never leave a trajectory running unattended
                 self.stop()
                 raise
@@ -724,6 +902,19 @@ class Arm:
             return {"duration_s": round(duration, 2), "speed_scale": scale}
         finally:
             self._move_lock.release()
+
+    def execute_path(self, waypoints, speed_scale: float | None = None) -> dict:
+        """Run a joint path (M,6 rad, e.g. from :func:`plan_path`) that starts at the current pose.
+
+        The path is checked against the joint limits only; plan it with :func:`plan_path`.
+        """
+        self._require()
+        wps = np.asarray(waypoints, dtype=float)
+        if wps.ndim != 2 or wps.shape[1] != 6 or len(wps) < 2 or not np.all(np.isfinite(wps)):
+            raise ArmError("waypoints must be an (M>=2, 6) array of finite joint angles [rad]")
+        for q in wps[1:]:
+            check_limits(q, "path")
+        return self._execute(wps, speed_scale)
 
     def move_to_xyz(self, x, y, z, approach=None, linear: bool = False, speed_scale: float | None = None) -> dict:
         """Move the TCP to (x, y, z) [m] in the base frame.
@@ -783,11 +974,11 @@ class Arm:
             raise ArmError("opening must be between 0 (closed) and 1 (open)")
         with self._lock:
             self._grip_target = o * math.radians(C.GRIPPER_OPEN_DEG)
-            self._grip_cmd_time = time.monotonic()
+            self._grip_cmd_time = self._clock()
         if wait:
-            deadline = time.monotonic() + 2.0
-            while time.monotonic() < deadline:
-                time.sleep(0.05)
+            deadline = self._clock() + 2.0
+            while self._clock() < deadline:
+                time.sleep(0.01)
                 if self._fault:
                     raise ArmError(f"fault while moving the gripper: {self._fault}")
                 if abs(self._grip_target - self._meas.grip_pos) < math.radians(3.0):
@@ -803,6 +994,26 @@ class Arm:
             self._traj = None
             self._done.set()
         return {"ok": True, "message": "motion stopped, holding position"}
+
+    def clear_fault(self) -> dict:
+        """Accept a fault without cutting torque: hold where the arm is now and allow motion again.
+
+        Only while the motors are still enabled (a tracking, feedback or temperature fault);
+        after the torque went off, disconnect and connect.  A cause that persists faults again.
+        """
+        self._require(motion=False)
+        if not self._enabled:
+            raise ArmError("torque is off; disconnect and connect again")
+        with self._lock:
+            fault = self._fault
+            self._hold = np.clip(self._meas.q, C.JOINT_LIMITS_RAD[:, 0], C.JOINT_LIMITS_RAD[:, 1])
+            self._q_cmd = self._hold.copy()
+            self._traj = None
+            self._err_since[:] = np.nan
+            self._fault = self._abort = None
+        if fault:
+            log.warning("fault cleared: %s", fault)
+        return {"ok": True, "message": "fault cleared, holding position" if fault else "no fault"}
 
     def emergency_disable(self) -> dict:
         """Cut motor torque immediately.  The arm will fall / sag under gravity!"""

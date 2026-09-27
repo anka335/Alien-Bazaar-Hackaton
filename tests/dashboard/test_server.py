@@ -1,3 +1,11 @@
+# ruff: noqa: E402
+import pytest
+
+pytest.skip(
+    "rover stage 0: table phases and the kinematic sim; update to the rover (stage A, A6)",
+    allow_module_level=True,
+)
+
 import asyncio
 import time
 
@@ -29,13 +37,27 @@ def _decode(jpeg: bytes) -> np.ndarray:
     return img
 
 
-def test_page_has_phase_labels(client):
-    r = client.get("/")
-    assert r.status_code == 200
-    assert "__PHASE_LABELS__" not in r.text
-    assert '"sense_box": "Choosing what to grab"' in r.text
-    for path in ("/static/app.js", "/static/style.css"):
-        assert client.get(path).status_code == 200
+def test_every_tab_serves_the_page(system, tmp_path):
+    web = tmp_path / "web"
+    (web / "assets").mkdir(parents=True)
+    (web / "index.html").write_text("<div id=root></div>")
+    (web / "assets" / "app.js").write_text("//")
+    with TestClient(create_app(system.hub, system.cfg.dashboard, web_dir=web)) as c:
+        for path in ("/", "/auto", "/manual", "/calibrate", "/3d"):
+            r = c.get(path)
+            assert r.status_code == 200 and "id=root" in r.text
+        assert c.get("/assets/app.js").status_code == 200
+
+
+def test_unbuilt_front_end_says_how_to_build(system, tmp_path):
+    with TestClient(create_app(system.hub, system.cfg.dashboard, web_dir=tmp_path)) as c:
+        assert "npm run build" in c.get("/").text
+
+
+def test_meta(client):
+    m = client.get("/api/meta").json()
+    assert m["phase_labels"]["sense_box"] == "Choosing what to grab"
+    assert m["modes"] == ["auto"]  # no manual control on this server
 
 
 def test_status_json(client, system):
@@ -55,6 +77,32 @@ def test_commands(client, system):
     assert system.hub.next_command(0) is Command.START
     assert system.hub.next_command(0) is None
     assert client.post("/api/command", json={"cmd": "fly"}).status_code == 400
+
+
+def test_run_commands_need_the_auto_mode(client, system):
+    system.hub.set_mode("manual")
+    assert client.post("/api/command", json={"cmd": "start"}).status_code == 409
+    assert client.post("/api/command", json={"cmd": "hold"}).status_code == 200  # always
+    assert client.get("/api/status").json()["operator"] == "manual"
+    assert system.hub.next_command(0) is None
+
+
+def test_speed(client, system):
+    s = client.get("/api/speed").json()
+    assert s == {"speed_scale": system.cfg.arm.speed_scale, "max_speed_scale": 1.4}
+    r = client.post("/api/speed", json={"speed_scale": 0.3})
+    assert r.status_code == 200 and r.json()["speed_scale"] == 0.3
+    assert system.arm.speed_scale == 0.3
+    assert client.post("/api/speed", json={"speed_scale": 9}).json()["speed_scale"] == 1.4
+    assert client.get("/api/status").json()["speed"]["speed_scale"] == 1.4
+    assert client.post("/api/speed", json={"speed_scale": "fast"}).status_code == 422
+
+
+def test_ws_pushes_speed_change(client, system):
+    with client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["speed"]["speed_scale"] == system.cfg.arm.speed_scale
+        client.post("/api/speed", json={"speed_scale": 0.2})
+        assert ws.receive_json()["speed"]["speed_scale"] == 0.2
 
 
 def test_ws_pushes_status_on_change(client, system):

@@ -40,7 +40,7 @@ class BackendsConfig(BaseModel):
     arm: Backend = Backend.SIM
     calibration: Backend = Backend.SIM
     box_detector: Backend = Backend.SIM
-    color_classifier: Backend = Backend.SIM
+    floor_detector: Backend = Backend.SIM
 
 
 class Config(BaseModel):

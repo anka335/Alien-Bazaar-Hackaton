@@ -48,8 +48,8 @@ def test_mask_of_wrong_shape_is_ignored():
 
 
 def test_decision_gets_a_caption_strip():
-    obs = Observation(_frame(), Zone.BACKGROUND, None, None)
-    d = Decision(Phase.SENSE_BG, obs, Overlay(), "colored 0.93")
+    obs = Observation(_frame(), Zone.FLOOR, None, None)
+    d = Decision(Phase.SENSE_FLOOR, obs, Overlay(), "colored 0.93")
     img = render_decision(d, {})
     assert img.shape[1] == 640 and img.shape[0] > 480
     assert (img[:480] == GRAY).all()  # no overlay, no ROI: the frame is untouched

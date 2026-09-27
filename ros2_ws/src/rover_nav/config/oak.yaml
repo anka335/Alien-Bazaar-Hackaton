@@ -1,4 +1,4 @@
-# DepthAI driver parameters for the OAK-D navigation camera (nav_camera:=oak, D-019).
+# DepthAI driver parameters for the OAK-D navigation camera (nav_camera:=oak, D-037).
 # The node runs as /rover_nav/oak. Parameter names: depthai_ros_driver 2.12.
 # Checked on our OAK-D (2026-09-26): color and depth 640x360 at ~15 Hz, identical timestamps,
 # depth from 0.34 m (the nearest thing in view; 720p stereo gave 0.67 m).

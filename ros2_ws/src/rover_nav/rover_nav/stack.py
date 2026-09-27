@@ -1,4 +1,4 @@
-"""Launch building blocks shared by mapping.launch.py and navigation.launch.py (D-019).
+"""Launch building blocks shared by mapping.launch.py and navigation.launch.py (D-037).
 
 Two navigation cameras (nav_camera):
   oak:   OAK-D on the rover's front, fixed: leo/base_link -> oak -> oak_rgb_camera_optical_frame
@@ -20,7 +20,7 @@ from launch_ros.actions import Node
 ROVER_BASE = "leo/base_footprint"
 ROVER_ODOM = "leo/odom"
 ROVER_LINK = "leo/base_link"
-ARM_BASE = "base_link"  # the arm owns the plain names (D-019)
+ARM_BASE = "base_link"  # the arm owns the plain names (D-037)
 CMD_VEL = "/leo/cmd_vel"
 ODOM_TOPIC = "/leo/merged_odom"
 

@@ -1,98 +1,79 @@
-# Alien Bazaar Hackathon — Robotic Laundry Sorter
+# Alien Bazaar Hackathon — Sock-Sorting Rover
 
-An autonomous robotic system that takes clothes from a mixed pile and sorts them by color.
+A robotic arm on a rover collects socks from the floor and sorts them by color.
 
-A robotic arm picks items one by one from a box of mixed clothing, using a depth camera mounted on its wrist to locate a grasp point. Each item is placed on a uniform background area, where a color classifier determines whether it is **light**, **dark**, or **colored**. The arm then picks the item up again and drops it into the matching bin, repeating the cycle until the box is empty. A live dashboard shows the camera feed, detected grasp points and colors, the current system state, and item counts per bin.
+**Load:** the rover stops next to socks. The arm looks at the floor with the depth camera on its wrist, classifies each sock as **light**, **dark** or **colored**, picks it up and drops it into the matching compartment of the 3-compartment cargo box on the rover. **Unload:** at a station the arm empties each compartment into its laundry bin. A live dashboard shows the camera, the decisions, a 3D view and the counters.
 
-This demo addresses the core challenge of automated laundry handling — picking and sorting deformable clothing items from a cluttered pile — as the first step toward a fully automated wash–dry–sort pipeline.
+Everything is built and accepted on a MuJoCo simulator first ([D-032](docs/decisions.md)); the real rover and arm come after.
 
 ## Hardware
 
 | Component | Details |
 | --- | --- |
-| Robot arm | Seeed reBot Arm B601-RS (RobStride motors): 6 DoF + parallel gripper, Python SDK [`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py) |
-| Camera | RGB-D (depth) camera mounted on the arm's wrist (eye-in-hand), model: _TBD_ |
-| Work area | at fixed positions: mixed-clothes box, uniform background area (mid-gray), 3 bins (light / dark / colored) |
-| Lighting | dedicated lamp for stable lighting |
-| Mobile base | Leo Rover carrying the arm, the laptop and the camera around one room (block 9, [D-019](docs/decisions.md)) |
-
-## How it works
-
-```text
- ┌──────────┐  pick   ┌────────────┐ classify ┌────────────┐  pick   ┌──────┐
- │ Mixed box├────────►│ Background ├─────────►│ color known├────────►│ Bin  │
- └──────────┘         └────────────┘          └────────────┘         └──┬───┘
-      ▲                                                                 │
-      └──────────────── verify drop, repeat until box is empty ─────────┘
-```
-
-1. **Pick from box.** The arm looks at the box from a fixed pose → depth + color frame → grasp point in pixels → arm coordinates → pick.
-2. **Place on background.** An item on the background proves the grasp worked. An empty background means a missed grasp.
-3. **Classify.** Segment the item, classify it as light, dark, or colored, and find a re-grasp point.
-4. **Pick from background → drop into bin.**
-5. **Verify.** The next look at the background must show one item fewer before the bin counter goes up.
-
-Every cycle starts by looking at the background, so missed grasps, double grasps, and failed drops are all handled by what the camera sees. Vision works in **pixel coordinates**. Conversion to arm coordinates happens in one place (calibration). This lets vision be developed on recorded frames without the arm.
+| Rover | built and driven by others; the arm stands on its deck, 200 mm above the floor |
+| Robot arm | Seeed reBot Arm B601-RS (RobStride motors): 6 DoF + parallel gripper, driven through [`rebot_b601/`](rebot_b601/README.md) |
+| Camera | Intel RealSense D435i RGB-D on the arm's wrist (eye-in-hand), USB 3 |
+| Cargo box | on the deck, left of the arm: 3 compartments (light, dark, colored) |
+| Unload station | 3 laundry bins on the floor, right of the rover |
 
 ## Project plan
 
-The work is split into blocks 0–9 that can be developed in parallel by different people or agents:
-
-| # | Block | Task file |
-| --- | --- | --- |
-| 0 | Contracts & skeleton | [docs/tasks/00-contracts.md](docs/tasks/00-contracts.md) |
-| 1 | Setup & camera | [docs/tasks/01-setup-camera.md](docs/tasks/01-setup-camera.md) |
-| 2 | Calibration | [docs/tasks/02-calibration.md](docs/tasks/02-calibration.md) |
-| 3 | Box detection | [docs/tasks/03-box-detection.md](docs/tasks/03-box-detection.md) |
-| 4 | Color classification | [docs/tasks/04-color-classification.md](docs/tasks/04-color-classification.md) |
-| 5 | Arm control | [docs/tasks/05-arm-control.md](docs/tasks/05-arm-control.md) |
-| 6 | State machine | [docs/tasks/06-state-machine.md](docs/tasks/06-state-machine.md) |
-| 7 | Dashboard | [docs/tasks/07-dashboard.md](docs/tasks/07-dashboard.md) |
-| 8 | Demo preparation | [docs/tasks/08-demo.md](docs/tasks/08-demo.md) |
-| 9 | Rover navigation (ROS 2) | [docs/tasks/09-rover-navigation.md](docs/tasks/09-rover-navigation.md) |
-
-The dependency graph and the live status board are in [docs/plan.md](docs/plan.md).
-
-## Documentation map
+Stages ([docs/plan.md](docs/plan.md)): [0 Preparation](docs/rover/0-preparation.md) (done: the shared base); then [A Loading](docs/rover/a-loading.md), [B Unloading](docs/rover/b-unloading.md), [F Far detection](docs/rover/f-far-detection.md) and [N Navigation](docs/rover/n-navigation.md) in parallel, one agent each; then [C Full mission](docs/rover/c-mission.md) and [D Sim-to-real](docs/rover/d-sim-to-real.md); then the hardware.
 
 | File | What's inside |
 | --- | --- |
-| [docs/plan.md](docs/plan.md) | Blocks, dependencies, status board (who is doing what) |
-| [docs/architecture.md](docs/architecture.md) | Components, data flow, coordinate frames, interfaces |
+| [docs/plan.md](docs/plan.md) | Stages and the status board |
+| [docs/rover/](docs/rover/) | One brief per stage: goal, lane, tasks, known issues |
+| [docs/architecture.md](docs/architecture.md) | Setup, components, loops, frames, contracts, simulator, who owns which path |
 | [docs/decisions.md](docs/decisions.md) | Log of design decisions and why they were made |
-| [docs/tasks/](docs/tasks/) | One file per block: scope, acceptance criteria, open questions |
 | [AGENTS.md](AGENTS.md) | Rules for AI coding agents (and humans) working in this repo |
 
 ## Getting started
 
-Requires [uv](https://docs.astral.sh/uv/). It installs Python 3.11 and the dependencies itself.
+Requires [uv](https://docs.astral.sh/uv/) (it installs Python 3.11 and the dependencies) and, for the dashboard, Node 20+.
 
 ```bash
-uv sync                                   # install
-uv run python -m sorter run --sim         # the whole loop on the simulator
-uv run pytest                             # tests
+uv sync                                         # install
+(cd frontend && npm install && npm run build)   # build the dashboard (again after a front-end change)
+uv run python -m sorter run --sim               # load mode on the simulator; --mode unload for the other
+uv run pytest                                   # tests
 ```
 
-`run --sim` starts the loop and the dashboard at http://127.0.0.1:8000. Press Start there, or pass `--autostart`. The red Hold button (or Space / Esc on the page) freezes the arm; Reset continues. Ctrl+C holds the arm and shuts down. To open the dashboard from another device, set `dashboard.host: 0.0.0.0` in `config/local.yaml`. The simulator is paced to be watched (about 10 s per item); lower `sim.motion_s` and `sim.vision_s` in `config/local.yaml` to speed it up. Other flags: `--no-dashboard`, `--config-dir`, `-v`. Every run is logged to `data/runs/<run_id>/` (turn off with `state_machine.save_runs: false`).
+`run --sim` starts the state machine and the dashboard at <http://127.0.0.1:8000> ([D-031](docs/decisions.md)). The operator modes are `load`, `unload` (the state machine runs that loop; Start / Pause / Step / Stop / Reset) and the setup modes `manual`, `calibrate`; `--mode` picks the one to start in, `--autostart` presses Start. The mode changes between runs. Hold (the red button, Space / Esc) freezes the arm; Reset continues; Ctrl+C holds, goes to rest and turns the motors off. Other flags: `--no-dashboard`, `--config-dir`, `-v`. Every run is logged to `data/runs/<run_id>/` (`state_machine.save_runs: false` to turn off). The front end still shows the table-era "Auto" tab and 3D table until stage A updates it (A6).
 
-**Config** is in `config/`: `default.yaml` (all sections), `rig.yaml` (poses, zones, ROIs of the physical rig), `hand_eye.yaml` (calibration result), and your own `local.yaml` (gitignored, machine overrides). `backends` chooses `real` or `sim` per component, for example in `config/local.yaml`:
+## The simulator
 
-```yaml
-backends:
-  camera: real
-```
+`--sim` simulates the hardware only (the arm's motors and the wrist camera) in a MuJoCo scene ([D-021](docs/decisions.md)); calibration, the detectors and the loops run their real code on the rendered RGB-D frames, and the arm runs the real `rebot_b601` control loop. So `run` without `--sim` runs the same code on the rig.
 
-**Color classifier** (block 4) segments the background with a remote SAM3 service ([D-013](docs/decisions.md)). To use it (`backends.color_classifier: real`), put the API key in `config/local.yaml` (`color_classifier: {sam: {api_key: ...}}`) or in the `SAM3_API_KEY` env var. On the simulator, set `sam.prompts: [blob]` and `sam.threshold: 0.3`, since SAM3 doesn't see the rendered cloth as clothing. Tuning tool: `uv run python -m sorter.color_classifier.stats <observation.npz ...>` or `--sim 3` (`--prompts a,b`, `--threshold`); it prints the color stats of every item (`--save DIR` writes overlays).
+- The scene is a shared base (floor, rover, deck, cargo box, arm) plus one scene file per stage: `src/sorter/sim/scenes/load/` (socks on the floor) and `.../unload/` (the laundry bins, socks in the compartments); `sim.scenes` picks which ([D-034](docs/decisions.md)).
+- Socks are cloth that falls, folds and hangs from the gripper. Cloth is expensive: `sim.realtime: 0` runs as fast as the CPU allows (3 socks ≈ 2.6× real time).
+- The floor detector uses the render's segmentation instead of SAM3 (`sim.use_sam3: true` to call the service). `sim.miss_prob` makes grasps miss on purpose.
 
-**Real hardware:** the arm SDK ([`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py)) is not a dependency yet. Block 5 adds it with the real arm backend ([D-010](docs/decisions.md)).
+**Rover layout** (`sim.layout` in `config/default.yaml`, arm base at the origin on the deck, +x forward, +y left, mm; placeholders until the rover is measured): the floor at z −200; the cargo box inside x −260..60, y 130..310, walls 50 mm; the floor view (the floor pick zone) 280 × 240 around (300, 0); the laundry bins (220 mm, 150 high) at (−140, −330), (100, −330), (340, −300). The arm's joint 1 turns ±145° and the gripper held down reaches ~100 mm above the deck, which is why the box is beside the arm and the bins are low. After changing the layout recompute the rig: `uv run python -m sorter.sim.layout --write` writes the poses, zones, ROIs and the arm's keep-out into `config/rig.yaml` and checks every pick and move (it must report 0 problems).
 
-**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth pick-and-place task (proposed, [D-014](docs/decisions.md)). Setup and run commands: [ros2_ws/README.md](ros2_ws/README.md). Rover navigation (block 9, [D-019](docs/decisions.md)) is part of this track: RTAB-Map + Nav2 on a Leo Rover with an OAK-D on its front ([D-020](docs/decisions.md)), in `ros2_ws/src/rover_nav` (in progress; usage in [its README](ros2_ws/src/rover_nav/README.md)). A MuJoCo sim of the rover, drivable by the jevomir VLM, is in [`rover_nav/sim`](ros2_ws/src/rover_nav/sim/README.md) ([D-034](docs/decisions.md)).
+## Setup on the rig
+
+**Manual mode** (`uv run python -m sorter manual`, or the Manual tab): the wrist camera, the 3D view, named poses and a tour through them (`look_floor`, `look_cargo`, the cargo and laundry drop poses, home), joint jog, gripper, Hold / Release, **Clear fault** after a blocked joint, and **Save current** to re-teach a pose into `config/rig.yaml` (commit it). Moves to and from a drop pose go via `home`. Without `config/hand_eye.yaml` it uses the nominal camera mount (`sim.camera_mount_mm`).
+
+**Camera calibration** (the Calibrate tab, [D-026](docs/decisions.md)), no printed board: (1) the tip points at 6 spots on the floor view; stick a small dark tape square under each; (2) from 2–3 camera views the page finds and names the marks (click any it missed); (3) **Calibrate** writes the camera mount to `config/hand_eye.yaml` and recomputes `look_floor` / `look_cargo` with their ROIs into `config/rig.yaml` (commit both); (4) check each look pose. The camera needs ~18 cm to the floor for depth.
+
+**With a printed board** ([D-028](docs/decisions.md)): `uv run python -m sorter.calibration.board` prints a ChArUco board (7 × 5 squares of 45 mm); lay it flat on the floor under `look_floor` and set `calibration.board_z_mm` to its top (floor −200 + thickness). Then `uv run python -m sorter.calibration.hand_eye` (`--sim` rehearses it) writes `config/hand_eye.yaml`.
+
+**Camera** (`uv sync --extra camera` for `pyrealsense2`): on macOS run as root with the venv's Python (`sudo .venv/bin/python -m sorter run --mode manual`); the camera pauses the system UVC driver while it runs ([D-024](docs/decisions.md)); after a crash: `sudo killall -CONT UVCAssistant`. `camera.serial` picks one D435i.
+
+**SAM3 segmentation** ([D-013](docs/decisions.md)): the floor detector's real backend calls the SAM3 service; put the API key in `config/local.yaml` (`color_classifier: {sam: {api_key: ...}}`) or the `SAM3_API_KEY` env var. Tuning tool: `uv run python -m sorter.color_classifier.stats <observation.npz ...>` or `--sim 3`.
+
+**Real arm** ([D-019](docs/decisions.md)): `uv sync --extra hardware` adds `motorbridge`; `arm.dry_run: true` first runs `rebot_b601`'s simulated motors. CAN setup: [rebot_b601/README.md](rebot_b601/README.md). Speed: `arm.speed_scale` (1.0 at start) up to `arm.max_speed_scale` (1.4, at most ~1.43: the motors' velocity limit), also from the Speed slider at runtime ([D-030](docs/decisions.md), [D-033](docs/decisions.md)); start it low on the rig: the acceleration is higher than the arm has run so far.
+
+**Config** is in `config/`: `default.yaml` (all sections), `rig.yaml` (computed: poses, zones, ROIs, the arm's floor limit and keep-out), `hand_eye.yaml` (the camera mount), and your own `local.yaml` (gitignored), e.g. `backends: {camera: real}`.
+
+**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth task ([D-014](docs/decisions.md)), outside these stages: [ros2_ws/README.md](ros2_ws/README.md). Its rover navigation drives the real Leo Rover in one room: RTAB-Map + Nav2 with an OAK-D on the rover's front, in `ros2_ws/src/rover_nav` ([D-037](docs/decisions.md), [D-038](docs/decisions.md); brief: [docs/rover/ros2-navigation.md](docs/rover/ros2-navigation.md)). A standalone MuJoCo sim of the Leo Rover from its official model, drivable by the jevomir VLM, is in [`rover_nav/sim`](ros2_ws/src/rover_nav/sim/README.md) ([D-039](docs/decisions.md)).
 
 ## Working with AI agents
 
-Every block is designed to be handed to an agent on its own. See [AGENTS.md](AGENTS.md) for the parallel workflow. In Claude Code:
+Each stage is handed to one agent. See [AGENTS.md](AGENTS.md) for the parallel workflow. In Claude Code:
 
 ```text
-/start-block 04      # pick up a block: reads its task file, creates a branch, marks it in progress
+/start-stage A       # pick up a stage: reads its brief, creates a branch, marks it in progress
 /sync-docs           # before finishing: bring docs in line with the code changes
 ```

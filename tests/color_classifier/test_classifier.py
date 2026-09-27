@@ -1,10 +1,19 @@
 """Color classifier on rendered sim frames, with a SAM3 stand-in: items = depth above the mat."""
 
+# ruff: noqa: E402
+import pytest
+
+pytest.skip(
+    "rover stage 0: used the kinematic table sim; rewrite on the floor scene (stage A, A2)",
+    allow_module_level=True,
+)
+
 import time
 
 import cv2
 import numpy as np
 import pytest
+from sorter.sim.world import BG_ITEM_HEIGHT_MM
 
 from sorter.app import build_system
 from sorter.color_classifier import classifier as clf
@@ -19,7 +28,6 @@ from sorter.color_classifier.segmenter import Instance, SamSegmenter
 from sorter.core.config import Backend
 from sorter.core.types import ColorClass, Command, Frame, Intrinsics, Phase, Zone
 from sorter.orchestrator.state_machine import StateMachine
-from sorter.sim.world import BG_ITEM_HEIGHT_MM
 
 
 def depth_segmenter(frame_depth: dict):

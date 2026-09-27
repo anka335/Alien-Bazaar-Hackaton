@@ -1,6 +1,6 @@
 # leo_sim: the Leo Rover in MuJoCo, driven by hand or by jevomir
 
-Block 9 ([task](../../../../docs/tasks/09-rover-navigation.md), [D-034](../../../../docs/decisions.md)). A MuJoCo simulation of the Leo Rover in a furnished room, with a web UI. The rover can be driven by hand, or by **jevomir**: a VLM behind a scoring API (Qwen3.5-4B, closed-choice questions, one forward pass each; see `jevomir/API.md`) that sees only the rover's camera. This is a plain Python project (uv), separate from the ROS package around it: no ROS needed.
+ROS 2 rover navigation ([brief](../../../../docs/rover/ros2-navigation.md), [D-039](../../../../docs/decisions.md)). A MuJoCo simulation of the Leo Rover in a furnished room, with a web UI. The rover can be driven by hand, or by **jevomir**: a VLM behind a scoring API (Qwen3.5-4B, closed-choice questions, one forward pass each; see `jevomir/API.md`) that sees only the rover's camera. This is a plain Python project (uv), separate from the ROS package around it: no ROS needed.
 
 ## The model
 

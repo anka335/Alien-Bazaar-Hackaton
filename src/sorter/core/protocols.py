@@ -10,6 +10,7 @@ from sorter.core.types import (
     BackgroundResult,
     BoxResult,
     ColorClass,
+    FloorResult,
     Frame,
     GraspPoint,
     Observation,
@@ -42,16 +43,22 @@ class BoxDetector(Protocol):
 
 
 class ColorClassifier(Protocol):
-    """Block 4."""
+    """Block 4: segments the items in the ROI and classifies each one's color."""
 
     def classify(self, frame: Frame) -> BackgroundResult: ...
+
+
+class FloorDetector(Protocol):
+    """Stage A. Stateless: frame of the floor in, socks out (failed grasps as `avoid`)."""
+
+    def detect(self, frame: Frame, avoid: Sequence[PixelPoint] = ()) -> FloorResult: ...
 
 
 class Calibration(Protocol):
     """Block 2. The only place where pixel ↔ arm conversion happens."""
 
     def cam_pose(self, ee_pose: Pose) -> Pose:
-        """T_base_flange → T_base_cam."""
+        """T_base_link5 (`ArmController.ee_pose()`) → T_base_cam."""
         ...
 
     def to_arm(self, obs: Observation, point: GraspPoint) -> ArmPoint:
@@ -77,18 +84,26 @@ class ArmController(Protocol):
     def home(self) -> None: ...
 
     def look(self, zone: Zone) -> None:
-        """Go to look_box / look_bg; no-op if already there."""
+        """Go to the zone's look pose (look_floor / look_cargo); no-op if already there."""
         ...
 
-    def pick(self, target: ArmPoint, zone: Zone) -> PickResult:
-        """TargetRejected (no motion) if outside the zone workspace or IK fails."""
+    def pick(self, target: ArmPoint, zone: Zone, yaw_rad: float | None = None) -> PickResult:
+        """Grasp with the gripper pointing down, the fingers opening along `yaw_rad` (angle from
+        +x in the arm frame; None = any). TargetRejected (no motion) if outside the zone
+        workspace, IK fails, or the path would hit the floor or a keep-out box."""
         ...
 
-    def place_on_background(self) -> None: ...
-    def drop_to_bin(self, color: ColorClass) -> None: ...
+    def drop_to_cargo(self, color: ColorClass) -> None:
+        """Over the cargo compartment of `color`, open, back home."""
+        ...
+
+    def drop_to_laundry(self, color: ColorClass) -> None:
+        """Over the laundry bin of `color`, open, back home."""
+        ...
 
     def ee_pose(self) -> Pose:
-        """T_base_flange from FK of the measured joints."""
+        """T_base_link5 from FK of the measured joints: the link the camera is fixed to (it
+        doesn't turn with joint 6, D-027)."""
         ...
 
     def joints(self) -> tuple[float, ...]: ...
@@ -98,5 +113,5 @@ class ArmController(Protocol):
         ...
 
     def recover(self) -> None:
-        """Leave hold: lift to safe Z, open the gripper above the background, home."""
+        """Leave hold: lift to safe Z, open the gripper over the floor view, home."""
         ...

@@ -16,20 +16,20 @@ from sorter.core.types import Decision, Marker, Overlay, Phase, Zone
 PHASE_LABELS: dict[Phase, str] = {
     Phase.IDLE: "Ready",
     Phase.STARTING: "Starting up",
-    Phase.LOOK_BG: "Looking at the work area",
-    Phase.SENSE_BG: "Checking the work area",
-    Phase.PICK_FROM_BG: "Picking up the item",
-    Phase.DROP_TO_BIN: "Dropping into the bin",
-    Phase.LOOK_BOX: "Looking into the box",
-    Phase.SENSE_BOX: "Choosing what to grab",
-    Phase.PICK_FROM_BOX: "Grabbing from the box",
-    Phase.PLACE_ON_BG: "Laying it out",
-    Phase.DONE: "All sorted",
+    Phase.SCAN: "Looking at the floor",
+    Phase.SENSE_FLOOR: "Finding socks",
+    Phase.PICK_FROM_FLOOR: "Picking up the sock",
+    Phase.DROP_TO_CARGO: "Into the cargo box",
+    Phase.LOOK_CARGO: "Looking into the cargo box",
+    Phase.SENSE_CARGO: "Choosing what to grab",
+    Phase.PICK_FROM_CARGO: "Grabbing from the cargo box",
+    Phase.DROP_TO_LAUNDRY: "Into the laundry bin",
+    Phase.DONE: "All done",
     Phase.HELD: "Held",
     Phase.ERROR: "Stopped on an error",
 }
 
-# BGR. Bright colors that stand out on the gray work area and the brown box.
+# BGR. Bright colors that stand out on the floor and in the cargo box.
 _GRASP = (80, 220, 40)
 _CANDIDATE = (0, 210, 255)
 _AVOID = (40, 40, 230)
