@@ -190,8 +190,10 @@ class Phase(StrEnum):
     # load (stage A)
     SCAN = "scan"
     SENSE_FLOOR = "sense_floor"
+    AIM = "aim"  # a closer look at the chosen sock
     PICK_FROM_FLOOR = "pick_from_floor"
     DROP_TO_CARGO = "drop_to_cargo"
+    CHECK_LOAD = "check_load"  # the spot the sock was picked from, then the cargo box
     # unload (stage B)
     LOOK_CARGO = "look_cargo"
     SENSE_CARGO = "sense_cargo"

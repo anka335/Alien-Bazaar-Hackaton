@@ -155,4 +155,8 @@ class SimConfig(BaseModel):
     focal_px: float = 615.0  # RealSense D435i color at 640x480
     # the wrist camera in the TCP frame (x = approach); it looks along the approach axis
     camera_mount_mm: tuple[float, float, float] = (-140.0, 0.0, 55.0)
+    # the simulated camera's mount, T_link5_cam (4x4, mm). None: where the real camera was
+    # calibrated (config/hand_eye.yaml, filled in by the config loader), else the nominal mount
+    # from `camera_mount_mm`
+    camera_T_link5_cam: list[list[float]] | None = None
     layout: RoverLayout = Field(default_factory=RoverLayout)

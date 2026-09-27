@@ -7,12 +7,13 @@ import numpy as np
 import pytest
 
 from sorter.arm import kinematics as kin
-from sorter.arm.config import LOOK_POSES
+from sorter.arm.config import LOOK_POSES, SCAN_POSES
 from sorter.arm.controller import MIN_SPEED_SCALE, Controller, in_polygon, speed_ceiling
 from sorter.core.config import load_config
 from sorter.core.errors import ArmError, EStopped, TargetRejected
 from sorter.core.types import ArmPoint, ColorClass, Zone
-from sorter.sim.layout import check, zone_surfaces
+from sorter.sim.layout import axis_hit, check, zone_surfaces
+from sorter.sim.physics.camera import MIN_RANGE_MM
 from sorter.sim.rig import camera_pose
 
 FLOOR_TARGET = ArmPoint(300, 0, -145)  # a sock on the floor in front of the rover
@@ -49,6 +50,10 @@ class FakeDriver:
         self.speeds.append(speed_scale)
         self.q = np.asarray(wps[-1], dtype=float)
 
+    def wait(self, seconds):
+        if self.stopped:
+            raise EStopped("held")
+
     def set_gripper(self, opening):
         if self.stopped:
             raise EStopped("held")
@@ -84,10 +89,17 @@ def tcp_z(q) -> float:
 
 def test_committed_rig_fits_the_layout(cfg):
     assert check(cfg) == []  # every pick on the zone grids and every move between poses plans
-    for zone, (rect, _) in zone_surfaces(cfg.sim).items():
+    for zone, (rect, surface_z) in zone_surfaces(cfg.sim).items():
         T = camera_pose(cfg.sim, cfg.poses[LOOK_POSES[zone]])
-        assert T[:2, 3] == pytest.approx(rect.center_mm, abs=40)  # the camera over the zone
-        assert T[2, 2] == pytest.approx(-1, abs=1e-3)  # looking straight down
+        center = rect.center_mm
+        assert axis_hit(T, surface_z) == pytest.approx(center, abs=2)  # aimed at the zone
+        assert T[2, 2] < -math.cos(math.radians(31))  # looking down, at most 30° off
+        assert T[2, 3] - surface_z > MIN_RANGE_MM + 20  # far enough for the depth camera
+    fz = cfg.sim.layout.floor_z_mm
+    for name in SCAN_POSES:  # the scan poses: down at the floor from high up
+        T = camera_pose(cfg.sim, cfg.poses[name])
+        assert T[2, 2] < -math.cos(math.radians(31))
+        assert T[2, 3] - fz > 300
 
 
 def test_pick_goes_above_down_and_up(arm, cfg):
@@ -175,8 +187,9 @@ def test_drops_go_to_their_poses_via_home_and_open(arm, cfg):
 
 def test_look_is_a_no_op_when_already_there(arm):
     arm.look(Zone.CARGO)
+    n = len(arm.driver.paths)  # straight there, or via home
     arm.look(Zone.CARGO)
-    assert len(arm.driver.paths) == 1
+    assert len(arm.driver.paths) == n
     with pytest.raises(ValueError):
         arm.look(Zone.LAUNDRY)  # drops only, no look pose
 

@@ -29,8 +29,16 @@ PALETTE: dict[ColorClass, list[tuple[int, int, int]]] = {  # BGR
 
 
 def camera_mount(cfg: SimConfig) -> Pose:
-    """T_link5_cam: the camera is fixed to link5, so joint 6 doesn't turn it (D-027). Where it
-    is with joint 6 at 0: `camera_mount_mm` off the TCP, optical axis along the approach."""
+    """T_link5_cam: the camera is fixed to link5, so joint 6 doesn't turn it (D-027). The real
+    camera's calibrated mount (`camera_T_link5_cam`) if known, else the nominal one: with joint
+    6 at 0, `camera_mount_mm` off the TCP, optical axis along the approach."""
+    if cfg.camera_T_link5_cam is not None:
+        return np.array(cfg.camera_T_link5_cam, dtype=np.float64)
+    return nominal_camera_mount(cfg)
+
+
+def nominal_camera_mount(cfg: SimConfig) -> Pose:
+    """T_link5_cam of the nominal mount (`camera_mount_mm`)."""
     return kin.T_LINK5_TCP0 @ _camera_on_tcp(cfg)
 
 
@@ -45,6 +53,20 @@ def _camera_on_tcp(cfg: SimConfig) -> Pose:
     # arm, as on the rig (~110° from radial there)
     T[:3, 3] = cfg.camera_mount_mm
     return T
+
+
+# the D435i's body: 90 mm along the stereo baseline (the image's x), 25 high (y), 25 deep (z);
+# the lenses are on its front face
+CAMERA_BODY_MM = (90.0, 25.0, 25.0)
+
+
+def camera_body_points(cfg: SimConfig) -> list[tuple[float, float, float]]:
+    """The camera body's corners and center, link5 frame, mm (the arm's collision checks)."""
+    T = camera_mount(cfg)
+    w, h, d = CAMERA_BODY_MM
+    pts = [(sx * w / 2, sy * h / 2, -d * sz) for sx in (-1, 1) for sy in (-1, 1) for sz in (0, 1)]
+    pts.append((0.0, 0.0, -d / 2))
+    return [tuple(round(float(v), 1) for v in T[:3, :3] @ p + T[:3, 3]) for p in pts]
 
 
 def camera_pose(cfg: SimConfig, q: Sequence[float]) -> Pose:

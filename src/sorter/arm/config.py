@@ -8,10 +8,13 @@ from sorter.core.types import ColorClass, Zone
 
 # where the wrist camera looks at a zone from; the zones with a look pose are the pick zones
 LOOK_POSES = {Zone.FLOOR: "look_floor", Zone.CARGO: "look_cargo"}
+# the camera looks down at the floor from these, a ring around the arm from its right to its left
+SCAN_POSES = tuple(f"scan_{i}" for i in range(1, 8))
 POSE_NAMES = (
     "rest",
     "home",
     *LOOK_POSES.values(),
+    *SCAN_POSES,
     *(f"cargo_{c.value}" for c in ColorClass),  # above a cargo compartment: drop there
     *(f"laundry_{c.value}" for c in ColorClass),  # above a laundry bin: drop there
 )
@@ -37,10 +40,14 @@ class ArmConfig(BaseModel):
     safe_z_mm: float = 100.0  # recover() / shutdown() lift the TCP to this height first
     z_min_mm: float = 3.0  # floor clearance: no point of the arm goes lower
     drop_height_mm: float = 30.0  # TCP above the rim at `cargo_<color>` / `laundry_<color>`
+    drop_settle_s: float = 0.8  # over the drop pose, before opening: the item stops swinging
     # boxes no point of the arm may enter, [x0, x1, y0, y1, z0, z1] in mm, arm frame: the rover
     # body, the cargo box walls (rig.yaml, from `python -m sorter.sim.layout --write`)
     keep_out_mm: list[tuple[float, float, float, float, float, float]] = Field(default_factory=list)
     keep_out_margin_mm: float = 15.0  # the checked points are on the links' axes: their radius
+    # points on link5 checked with the arm's own (keep-out, floor): the wrist camera's body
+    # corners, link5 frame, mm (rig.yaml, from the hand-eye mount)
+    link5_points_mm: list[tuple[float, float, float]] = Field(default_factory=list)
     gripper: GripperConfig = Field(default_factory=GripperConfig)
 
 

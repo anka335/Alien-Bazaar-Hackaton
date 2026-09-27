@@ -141,7 +141,7 @@ def _nominal_hand_eye(cfg: Config) -> Config:
     log.warning(
         "no config/hand_eye.yaml: using the nominal camera mount; calibrate before an auto run"
     )
-    T = camera_mount(cfg.sim)
+    T = camera_mount(cfg.sim)  # the nominal mount: there is no hand-eye result
     he = HandEyeResult(T_link5_cam=T.tolist(), method="nominal")
     calibration = cfg.calibration.model_copy(update={"hand_eye": he})
     return cfg.model_copy(update={"calibration": calibration})

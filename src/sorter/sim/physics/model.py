@@ -23,7 +23,7 @@ from sorter.core.types import ColorClass
 from sorter.sim.config import RAIL_INSET_MM, SimConfig
 from sorter.sim.physics.floor import parquet_texture
 from sorter.sim.physics.floor import tile_mm as floor_tile_mm
-from sorter.sim.rig import PALETTE, camera_mount
+from sorter.sim.rig import CAMERA_BODY_MM, PALETTE, camera_mount
 
 URDF = ASSETS_DIR / "reBot_Lite_RS_with_gripper.urdf"
 ARM_JOINTS = tuple(f"joint{i}" for i in range(1, 7))
@@ -269,13 +269,14 @@ def _arm(parent: ET.Element, cfg: SimConfig) -> None:
     ET.SubElement(tcp, "geom", name="palm", type="box", size="0.042 0.09 0.034", pos="-0.115 0 0")
     T = camera_mount(cfg)
     mount = T[:3, 3] / 1000
+    w, h, d = (v / 2000 for v in CAMERA_BODY_MM)
     ET.SubElement(
         bodies["link5"],
         "geom",
         name="camera_body",
         type="box",
-        size="0.013 0.045 0.0125",
-        pos=_f(*(mount - T[:3, 2] * 0.013)),
+        size=_f(w, h, d),
+        pos=_f(*(mount - T[:3, 2] * d)),
         quat=_f(*_mat_quat(T[:3, :3])),
         rgba="0.1 0.1 0.12 1",
     )

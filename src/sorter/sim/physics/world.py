@@ -344,7 +344,7 @@ class PhysicsWorld:
                     return "cargo", color
         bins = lay.laundry
         half = bins.size_mm / 2
-        for color, (bx, by) in bins.centers_mm.items():
+        for color, (bx, by) in bins.centers_mm.items() if "unload" in self.cfg.scenes else ():
             if abs(x - bx) <= half and abs(y - by) <= half and z < lay.floor_z_mm + bins.height_mm:
                 return "laundry", color
         if z < lay.floor_z_mm + 40:

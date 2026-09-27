@@ -87,6 +87,21 @@ class ArmController(Protocol):
         """Go to the zone's look pose (look_floor / look_cargo); no-op if already there."""
         ...
 
+    def go_to(self, name: str) -> None:
+        """Straight joint move to a named pose (a scan pose, say); via home if needed."""
+        ...
+
+    def aim_camera(
+        self,
+        T_link5_cam: Pose,
+        target: Sequence[float],
+        heights_mm: Sequence[float],
+        tilts_deg: Sequence[float] = (0.0, 10.0, 20.0, 30.0),
+    ) -> float | None:
+        """Point the wrist camera at `target` (mm) from as high as the arm safely can (the first
+        of `heights_mm`); the camera's height above it, or None and no motion."""
+        ...
+
     def pick(self, target: ArmPoint, zone: Zone, yaw_rad: float | None = None) -> PickResult:
         """Grasp with the gripper pointing down, the fingers opening along `yaw_rad` (angle from
         +x in the arm frame; None = any). TargetRejected (no motion) if outside the zone

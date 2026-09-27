@@ -78,6 +78,7 @@ arm:                 # shared (D-019); z_min_mm and keep_out_mm come from rig.ya
   max_speed_scale: 1.4  # the dashboard's maximum; at most ~1.43, the motors' velocity limit
   safe_z_mm: 100     # recover() / shutdown() first lift the TCP to this height
   drop_height_mm: 30 # TCP above the rim at cargo_<color> / laundry_<color> (sim.layout tool)
+  drop_settle_s: 0.8 # hold still over the drop before opening: the hanging sock stops swinging
   keep_out_margin_mm: 15  # around the keep-out boxes (rig.yaml: the rover body, cargo walls)
   gripper: {open: 0.6, empty_below: 0.01}   # 0.6: ~27 mm a finger, fits beside the box walls
 
