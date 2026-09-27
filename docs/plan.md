@@ -23,7 +23,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | --- | --- | --- | --- | --- |
 | [0: Preparation](rover/0-preparation.md) | done | Softjey + Claude | `stage/0-preparation` | contracts, base scene, rig on the rover, wiring; known issues handed to A and B |
 | [A: Loading](rover/a-loading.md) | todo | — | — | socks from the floor into the cargo compartments |
-| [B: Unloading](rover/b-unloading.md) | todo | — | — | cargo compartments into the laundry bins |
+| [B: Unloading](rover/b-unloading.md) | in progress | Softjey + Claude | `claude/b-unloading-stage-d746d4` | on the real rover's geometry: vision-only loop and benchmark working, tuning ([D-036](decisions.md)) |
 | [N: Navigation](rover/n-navigation.md) | todo | — | — | driving rover, find socks, stop within reach, dock at the station |
 | [C: Full mission](rover/c-mission.md) | todo | — | — | needs A, B, N: rover interface, stow, mission loop, benchmark |
 | [D: Sim-to-real](rover/d-sim-to-real.md) | todo | — | — | needs C: the benchmarks under rig-like errors |

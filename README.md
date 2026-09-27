@@ -48,6 +48,15 @@ uv run pytest                                   # tests
 - The scene is a shared base (floor, rover, deck, cargo box, arm) plus one scene file per stage: `src/sorter/sim/scenes/load/` (socks on the floor) and `.../unload/` (the laundry bins, socks in the compartments); `sim.scenes` picks which ([D-034](docs/decisions.md)).
 - Socks are cloth that falls, folds and hangs from the gripper. Cloth is expensive: `sim.realtime: 0` runs as fast as the CPU allows (3 socks ≈ 2.6× real time).
 - The floor detector uses the render's segmentation instead of SAM3 (`sim.use_sam3: true` to call the service). `sim.miss_prob` makes grasps miss on purpose.
+- The camera sits at `sim.camera_mount_mm` off the TCP, or at the whole transform in `sim.camera_mount_T` (e.g. the rig's `config/hand_eye.yaml`, [D-037](docs/decisions.md)).
+
+**Unload on the real rover's geometry** (stage B, [D-036](docs/decisions.md)): one 150 × 150 × 60 mm cargo box, three bins of that size in front of the rover, the station off its place by seed, the camera at the hand-eye result.
+
+```bash
+uv run python -m sorter.sim.scenes.unload.rover       # compute the rig, check every pick (0 problems)
+uv run python -m sorter.sim.scenes.unload.preview     # render the scene (--view: the MuJoCo viewer)
+uv run python -m sorter.sim.scenes.unload.bench -n 20 # seeded scenarios, judged by the sim; report in data/bench/
+```
 
 **Rover layout** (`sim.layout` in `config/default.yaml`, arm base at the origin on the deck, +x forward, +y left, mm; placeholders until the rover is measured): the floor at z −200; the cargo box inside x −260..60, y 130..310, walls 50 mm; the floor view (the floor pick zone) 280 × 240 around (300, 0); the laundry bins (220 mm, 150 high) at (−140, −330), (100, −330), (340, −300). The arm's joint 1 turns ±145° and the gripper held down reaches ~100 mm above the deck, which is why the box is beside the arm and the bins are low. After changing the layout recompute the rig: `uv run python -m sorter.sim.layout --write` writes the poses, zones, ROIs and the arm's keep-out into `config/rig.yaml` and checks every pick and move (it must report 0 problems).
 

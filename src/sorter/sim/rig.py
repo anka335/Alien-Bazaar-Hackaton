@@ -30,7 +30,10 @@ PALETTE: dict[ColorClass, list[tuple[int, int, int]]] = {  # BGR
 
 def camera_mount(cfg: SimConfig) -> Pose:
     """T_link5_cam: the camera is fixed to link5, so joint 6 doesn't turn it (D-027). Where it
-    is with joint 6 at 0: `camera_mount_mm` off the TCP, optical axis along the approach."""
+    is with joint 6 at 0: `camera_mount_mm` off the TCP, optical axis along the approach; or
+    `camera_mount_T` as it is."""
+    if cfg.camera_mount_T is not None:
+        return np.asarray(cfg.camera_mount_T, dtype=float)
     return kin.T_LINK5_TCP0 @ _camera_on_tcp(cfg)
 
 
