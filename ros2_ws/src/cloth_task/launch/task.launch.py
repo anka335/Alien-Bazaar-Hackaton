@@ -63,14 +63,16 @@ def _setup(context):
         raise RuntimeError(
             "rover:=true drives the mobile base from the lens's left clutch: add spectacles:=true"
         )
-    try:
-        base_limits = [float(arg(n)) for n in ("base_max_vx", "base_max_reverse", "base_max_wz")]
-        spectacles_port = int(arg("spectacles_port"))
-    except ValueError as e:
-        raise RuntimeError(
-            f"base_max_* must be numbers and spectacles_port an integer: {e}"
-        ) from None
     if spectacles:
+        try:
+            base_limits = [
+                float(arg(n)) for n in ("base_max_vx", "base_max_reverse", "base_max_wz")
+            ]
+            spectacles_port = int(arg("spectacles_port"))
+        except ValueError as e:
+            raise RuntimeError(
+                f"base_max_* must be numbers and spectacles_port an integer: {e}"
+            ) from None
         try:
             check_base_limits(*base_limits)
         except ValueError as e:

@@ -156,7 +156,7 @@ ROS_DOMAIN_ID=77 ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST \
   ros2 run cloth_task rover_standin --ros-args -p csv_path:=/tmp/rover_standin.csv
 ```
 
-- It takes `geometry_msgs/Twist` on `/leo/cmd_vel` and publishes `nav_msgs/Odometry` on `/leo/merged_odom` at 100 Hz (`leo/odom` → `leo/base_footprint`), integrating a differential-drive model. It stops 0.5 s after the last Twist, like the firmware.
+- It takes `geometry_msgs/Twist` on `/leo/cmd_vel` and publishes `nav_msgs/Odometry` on `/leo/merged_odom` at 100 Hz (frame `leo/odom`, child `leo/base_footprint`; it publishes no TF), integrating a differential-drive model. It stops 0.5 s after the last Twist, like the firmware.
 - It appends every received Twist to the CSV at `csv_path` (default `rover_standin.csv` in the working directory), one row per Twist and no header: receive time from `time.monotonic()` (system-wide on Linux, so comparable across processes), `linear.x`, `angular.z`.
 - Kill it to make the rover absent.
 
