@@ -4,6 +4,8 @@ Block 9 ([task](../../../docs/tasks/09-rover-navigation.md), [D-019](../../../do
 
 **Status:** rover setup applied and checked; launch files and configs written and built, **not yet run** (RTAB-Map, Nav2 and the camera drivers still to install). Mount values in `config/mounts.yaml` and the Nav2 footprint are placeholders.
 
+**Simulator:** [sim/](sim/README.md) is a MuJoCo sim of the rover (official `leo_description` model) with a web UI, where the jevomir VLM drives from the rover's camera ([D-034](../../../docs/decisions.md)). Plain Python + uv, no ROS.
+
 ## Navigation camera (`nav_camera:=`)
 
 | | `oak` (default) | `wrist` |

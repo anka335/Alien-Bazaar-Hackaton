@@ -16,7 +16,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | 6 | [State machine](tasks/06-state-machine.md) | review | Softjey + Claude | `block/06-state-machine` | — |
 | 7 | [Dashboard](tasks/07-dashboard.md) | review | Softjey + Claude | `block/07-dashboard` | — |
 | 8 | [Demo preparation](tasks/08-demo.md) | todo | — | — | — |
-| 9 | [Rover navigation](tasks/09-rover-navigation.md) | in progress | Slava + Claude | `block/09-rover-navigation` | first real run (packages to install, mounts to measure) |
+| 9 | [Rover navigation](tasks/09-rover-navigation.md) | in progress | Slava + Claude | `block/09-rover-navigation` | first real run (packages to install, mounts to measure); MuJoCo sim + jevomir driver done (D-034) |
 
 ## Dependencies
 

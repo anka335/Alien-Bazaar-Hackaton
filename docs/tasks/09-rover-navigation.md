@@ -23,6 +23,7 @@ The Leo Rover carries the laptop and the arm, and drives autonomously inside one
 - [ ] First real run: map the room, make the mask, navigate; tune.
 - [ ] Rover interface (topic names, frames) in one config file. Verified on the real rover: `/leo/merged_odom`, `leo/odom` → `leo/base_footprint`, `/leo/cmd_vel`.
 - [x] `rover_nav/README.md`: install, map once, make the mask, navigate. (`ros2_ws/README.md` belongs to the ROS track: a pointer there is requested, not edited.)
+- [x] **MuJoCo sim** (`sim/`, plain Python + uv, no ROS, [D-034](../decisions.md)): the Leo Rover from the official `leo_description` 3.2.0 in a furnished room, `cmd_vel` / odometry / closed-loop moves like the real rover, the rover's camera and the OAK-D rendered, web UI. The jevomir VLM (scoring API) drives it from the camera alone (`guided` / `direct` policies); an oracle scorer runs the same loop without a GPU; `bench` scores seeded rooms, `tools/eval_direct.py` scores prompts on labelled frames, `--memory` uses the rover's path. 62 tests. Usage: [sim/README.md](../../ros2_ws/src/rover_nav/sim/README.md).
 
 ## Out of scope
 
@@ -57,6 +58,7 @@ The Leo Rover carries the laptop and the arm, and drives autonomously inside one
 - The rover's firmware stops the wheels 0.5 s after the last `/leo/cmd_vel` (`controller.input_timeout`).
 - **OAK-D:** runs in `/rover_nav` (its `robot_description` would replace the arm's); needs the Luxonis udev rule; the original OAK-D may need its own 5 V supply. Tested on the laptop (2026-09-26): color + aligned depth 640×360 at ~15 Hz, identical timestamps, depth from 0.34 m, at USB 2 speed (a USB 3 port/cable is safer). The stereo resolution must be written `400P`. After a hard kill the next start can need ~40 s and a device crash before it reconnects.
 - Payload and power: check the rover's payload rating against arm + laptop + camera, and how the arm is powered on the rover.
+- **Sim vs. the real rover** (`sim/`): tires collide as ellipsoids, furniture has friction 0.4 (so the wheels don't climb it), and the turn gain is 2.2 against the firmware's 1.76 (MuJoCo's skid-steer slips more); a 180° turn moves the centre up to ~6 cm. Driving into a wall spins the wheels and odometry keeps counting, as on the real rover. jevomir (Qwen3.5-4B on a remote GPU, `127.0.0.1:8100` through an SSH tunnel) reaches the target in 5–7 of 12 rooms; it misses targets it doesn't recognise (the sim's laundry basket is a bare white box) and has no notion of obstacles. Any text before its question makes it worse.
 
 ## Open questions
 
@@ -76,3 +78,6 @@ _None yet._
 - 2026-09-26: OAK-D tested on the laptop with `config/oak.yaml` (stereo resolution fixed to `400P`): 640×360 color + depth at ~15 Hz, synced, depth from 0.34 m, USB 2.
 - 2026-09-26: first test on the rover (OAK-D): mapping stack up, RTAB-Map at 1 Hz (~0.1 s per update), TF `map` → … → `oak_rgb_camera_optical_frame` complete; floor plane from depth: tilt error +0.9°, roll −0.8°, height −0.1 cm, so the measured mount is right. The camera needed ~40 s and two USB errors to connect on a normal start (USB 2). After a rover reboot the clock re-synced within a minute of the laptop joining its Wi-Fi.
 - 2026-09-26: final room map saved (`~/rover_nav_maps/room.*`, ~8.8 × 8.6 m). Keepout: y < −3.5 forbidden, plus the row of chairs at x = −1, y −2.5 … −1 (`--forbid-rect -1.3 -2.6 -0.7 -0.9`, new option). Bottles near (−0.5, −3.5) are in the map as obstacles; they stay in the saved map after they are removed from the room until that area is mapped again.
+- 2026-09-27: MuJoCo sim of the Leo Rover (`sim/`, D-034) from the official `leo_description` 3.2.0, web UI, and the jevomir VLM driving it through its scoring API (guided / direct policies, oracle for tests). `colcon test` runs only `test/` (`setup.cfg`).
+- 2026-09-27: jevomir on the real API (Brev H100 over an SSH tunnel): `guided` 5/12 rooms, `direct` 7/12 after a new prompt (asks where the target is; 82% right moves on 50 labelled frames against 20% for the first prompt). Oracle: 9/12 and 10/12. `bench` command and `tools/eval_direct.py` added.
+- 2026-09-27: path memory (`leo_sim/memory.py`, `--memory`): told to jevomir before each question it made things worse (direct 7/12 → 2/12; 82% → 40–64% on the labelled frames, even with true hints); used by the agent instead (search where last seen, halve back-and-forth turns, explore after a full circle) 6/12. Default stays off.

@@ -86,7 +86,7 @@ backends:
 
 **Real hardware:** the arm SDK ([`reBotArm_control_py`](https://github.com/Seeed-Projects/reBotArm_control_py)) is not a dependency yet. Block 5 adds it with the real arm backend ([D-010](docs/decisions.md)).
 
-**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth pick-and-place task (proposed, [D-014](docs/decisions.md)). Setup and run commands: [ros2_ws/README.md](ros2_ws/README.md). Rover navigation (block 9, [D-019](docs/decisions.md)) is part of this track: RTAB-Map + Nav2 on a Leo Rover with an OAK-D on its front ([D-020](docs/decisions.md)), in `ros2_ws/src/rover_nav` (in progress; usage in [its README](ros2_ws/src/rover_nav/README.md)).
+**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth pick-and-place task (proposed, [D-014](docs/decisions.md)). Setup and run commands: [ros2_ws/README.md](ros2_ws/README.md). Rover navigation (block 9, [D-019](docs/decisions.md)) is part of this track: RTAB-Map + Nav2 on a Leo Rover with an OAK-D on its front ([D-020](docs/decisions.md)), in `ros2_ws/src/rover_nav` (in progress; usage in [its README](ros2_ws/src/rover_nav/README.md)). A MuJoCo sim of the rover, drivable by the jevomir VLM, is in [`rover_nav/sim`](ros2_ws/src/rover_nav/sim/README.md) ([D-034](docs/decisions.md)).
 
 ## Working with AI agents
 
