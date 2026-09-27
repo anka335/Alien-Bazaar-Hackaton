@@ -1,7 +1,7 @@
-"""The load loop (stage A): socks from the floor into the cargo compartment of their color.
+"""The load loop (stage A): socks from the floor into the cargo box (D-035).
 
 Stage 0's baseline, observation-driven like the table loop (D-008): look at the floor, pick the
-detector's best sock, drop it into its compartment, and count it once the next look shows one
+detector's best sock, drop it into the box, and count it once the next look shows one
 sock fewer. Stage A makes it good (scan poses, grasp yaw, verification, retries).
 
     SCAN → SENSE_FLOOR → PICK_FROM_FLOOR → DROP_TO_CARGO → SCAN …   no sock × N → DONE

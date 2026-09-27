@@ -26,7 +26,7 @@ from sorter.arm.config import LOOK_POSES, POSE_NAMES, ArmConfig, ZoneConfig
 from sorter.core.config import DEFAULT_CONFIG_DIR, Config, load_config
 from sorter.core.errors import SorterError
 from sorter.core.types import ArmPoint, ColorClass, Zone
-from sorter.sim.config import RectConfig, SimConfig
+from sorter.sim.config import RAIL_INSET_MM, RectConfig, SimConfig
 from sorter.sim.rig import camera_mount, camera_pose
 
 LOOK_TCP_Z_MM = (100, -120)  # the highest TCP height tried for a look pose, then lower by 5 mm
@@ -164,25 +164,41 @@ def zone_rois(cfg: Config, poses: dict[str, list[float]]) -> dict[str, dict]:
 
 
 def keep_out(sim: SimConfig, margin_mm: float) -> list[list[float]]:
-    """`arm.keep_out_mm`: the rover body up to the deck top (the margin grows it to z = 0, so a
-    grasp may reach the cargo floor), and the cargo box's walls and dividers."""
+    """`arm.keep_out_mm`: the rover's middle (as wide as the deck, as long as the rails) up to
+    the deck top (the margin grows it to z = 0), the wheels (not the one under the cargo box:
+    the box's floor covers it), the equipment behind the arm, and the cargo box's walls and
+    dividers."""
     lay = sim.layout
+    fz = lay.floor_z_mm
     x0, x1, y0, y1 = lay.body.bounds()
-    boxes = [[x0, x1, y0, y1, lay.floor_z_mm - 100.0, -margin_mm]]
+    _, _, dy0, dy1 = lay.deck.bounds()
+    boxes = [[x0 + RAIL_INSET_MM, x1 - RAIL_INSET_MM, dy0, dy1, fz - 100.0, -margin_mm]]
     cargo = lay.cargo
+    r, w = lay.wheel_radius_mm, lay.wheel_width_mm
+    for wx, wy in itertools.product((x0 + r, x1 - r), (y0 + w / 2, y1 - w / 2)):
+        wheel = RectConfig(center_mm=(wx, wy), size_mm=(2 * r, w))
+        if not _overlap(wheel, cargo, cargo.wall_t_mm):
+            boxes.append([*wheel.bounds(), fz - 100.0, fz + 2 * r])
+    boxes += [list(b.box_mm) for b in lay.equipment.values()]
     t = cargo.wall_t_mm
     cx0, cx1, cy0, cy1 = cargo.bounds()
-    rim = cargo.rim_z_mm
+    base, rim = cargo.base_z_mm, cargo.rim_z_mm
     boxes += [
-        [cx0 - t, cx0, cy0 - t, cy1 + t, 0.0, rim],
-        [cx1, cx1 + t, cy0 - t, cy1 + t, 0.0, rim],
-        [cx0, cx1, cy0 - t, cy0, 0.0, rim],
-        [cx0, cx1, cy1, cy1 + t, 0.0, rim],
+        [cx0 - t, cx0, cy0 - t, cy1 + t, base, rim],
+        [cx1, cx1 + t, cy0 - t, cy1 + t, base, rim],
+        [cx0, cx1, cy0 - t, cy0, base, rim],
+        [cx0, cx1, cy1, cy1 + t, base, rim],
     ]
-    rects = [cargo.compartment(c) for c in cargo.compartments]
+    rects = cargo.insides()
     for a, b in zip(rects, rects[1:], strict=False):
-        boxes.append([a.bounds()[1], b.bounds()[0], cy0, cy1, 0.0, rim])
+        boxes.append([a.bounds()[1], b.bounds()[0], cy0, cy1, base, rim])
     return [[round(v, 1) for v in b] for b in boxes]
+
+
+def _overlap(a: RectConfig, b: RectConfig, grow_b: float = 0.0) -> bool:
+    ax0, ax1, ay0, ay1 = a.bounds()
+    bx0, bx1, by0, by1 = b.bounds(grow_b)
+    return ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1
 
 
 def arm_for(sim: SimConfig, arm: ArmConfig) -> ArmConfig:
@@ -274,19 +290,19 @@ def check(cfg: Config, step_mm: float = 20.0) -> list[str]:
             problems.append(f"move {a} ↔ {b}: {e}")
     lay = cfg.sim.layout
     cargo = lay.cargo
-    # where picks must work: the floor zone with any yaw; each compartment (less the margin),
-    # the fingers opening along the compartment's long side
-    along_y = cargo.size_mm[1] >= cargo.compartment(cargo.compartments[0]).size_mm[0]
+    # where picks must work: the floor zone with any yaw; the box or each compartment (less the
+    # margin), the fingers opening along its long side
+    along_y = cargo.size_mm[1] >= cargo.insides()[0].size_mm[0]
     across, along = CARGO_MARGIN_MM
     regions = [(Zone.FLOOR, cfg.zones[Zone.FLOOR].workspace_mm, [lay.floor_z_mm + 15.0], None)]
     regions += [
         (
             Zone.CARGO,
-            rect_polygon(cargo.compartment(c), *((across, along) if along_y else (along, across))),
+            rect_polygon(r, *((across, along) if along_y else (along, across))),
             [cargo.floor_z_mm + h for h in (15, 35)],
             math.pi / 2 if along_y else 0.0,
         )
-        for c in cargo.compartments
+        for r in cargo.insides()
     ]
     for zone, poly, heights, yaw in regions:
         xs = [p[0] for p in poly]

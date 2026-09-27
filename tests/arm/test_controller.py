@@ -15,7 +15,7 @@ from sorter.core.types import ArmPoint, ColorClass, Zone
 from sorter.sim.layout import check, zone_surfaces
 from sorter.sim.rig import camera_pose
 
-FLOOR_TARGET = ArmPoint(300, 0, -185)  # a sock on the floor in front of the rover
+FLOOR_TARGET = ArmPoint(300, 0, -145)  # a sock on the floor in front of the rover
 
 
 class FakeDriver:
@@ -107,7 +107,7 @@ def test_pick_goes_above_down_and_up(arm, cfg):
 
 
 def test_grasp_stops_above_the_floor(arm, cfg):
-    arm.pick(ArmPoint(300, 0, -195), Zone.FLOOR)
+    arm.pick(ArmPoint(300, 0, -155), Zone.FLOOR)
     z_floor = cfg.zones[Zone.FLOOR].z_floor_mm
     assert z_floor > cfg.sim.layout.floor_z_mm
     assert tcp_z(arm.driver.paths[1][-1]) == pytest.approx(z_floor, abs=1.5)
@@ -121,7 +121,7 @@ def test_pick_turns_the_fingers_to_the_yaw(arm, yaw):
         assert abs(err) < math.radians(3)
 
 
-def test_pick_from_a_cargo_compartment(cfg):
+def test_pick_from_the_cargo_box(cfg):
     arm = Controller(FakeDriver(cfg.poses["look_cargo"]), cfg.arm, cfg.poses, cfg.zones)
     x, y = cfg.sim.layout.cargo.compartment(ColorClass.DARK).center_mm
     arm.pick(ArmPoint(x, y, cfg.sim.layout.cargo.floor_z_mm + 20), Zone.CARGO, math.pi / 2)
@@ -138,7 +138,7 @@ def test_empty_gripper_is_reported(cfg):
     [
         (FLOOR_TARGET, Zone.CARGO),  # the floor, but asked for the cargo box
         (ArmPoint(300, 0, 400), Zone.FLOOR),  # too high to reach with the gripper down
-        (ArmPoint(40, 0, -185), Zone.FLOOR),  # under the rover
+        (ArmPoint(40, 0, -145), Zone.FLOOR),  # under the rover
     ],
 )
 def test_rejected_pick_does_not_move(arm, target, zone):
@@ -152,11 +152,10 @@ def test_no_motion_into_the_rover_or_the_cargo_walls(arm, cfg):
     # the TCP right into the rover body, next to the arm's base
     with pytest.raises(TargetRejected, match="keep-out"):
         arm.move_tcp((60.0, -120.0, -60.0))
-    # down onto a cargo divider
-    rects = [lay.cargo.compartment(c) for c in lay.cargo.compartments]
-    x = (rects[0].bounds()[1] + rects[1].bounds()[0]) / 2
+    # down onto the cargo box's outer wall
+    _, _, _, y1 = lay.cargo.bounds()
     with pytest.raises(TargetRejected, match="keep-out"):
-        arm.move_tcp((x, lay.cargo.center_mm[1], 30.0))
+        arm.move_tcp((lay.cargo.center_mm[0], y1 + lay.cargo.wall_t_mm / 2, lay.cargo.rim_z_mm))
     assert arm.driver.paths == []
     below = kin.solve((300, 0, lay.floor_z_mm - 30), "down", None, z_min_mm=-1000)
     assert below is not None

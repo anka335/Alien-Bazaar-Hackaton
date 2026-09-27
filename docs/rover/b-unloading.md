@@ -5,16 +5,16 @@
 
 ## Goal
 
-The rover is parked at the unload station. The arm empties the cargo box compartment by compartment: every sock from compartment *c* goes into laundry bin *c*. The color is known from loading, so there is no color classification. The rover stands still; we don't talk to it ([D-032](../decisions.md), [D-034](../decisions.md)).
+The rover is parked at the unload station. The arm empties the cargo box into the laundry bins. The box is one box now, not split by color ([D-035](../decisions.md)): whether unloading classifies each sock's color to pick its bin, or everything goes into one bin, is open. The rover stands still; we don't talk to it ([D-032](../decisions.md), [D-034](../decisions.md)).
 
 **Make it work perfectly in the simulator, as close to reality as you can get it:** a realistic scene (cargo box, socks in it, the station), a robust loop, and a benchmark that proves it. Hardware comes later.
 
 ## What you start from
 
-- `uv run python -m sorter run --sim --mode unload`: the MuJoCo scene with the rover, the arm on its deck, the cargo box on the deck to the arm's left (3 compartments along x, inside ~103 × 180 mm each, walls 50 mm), `sim.unload.cargo` socks per compartment, and the 3 laundry bins on the floor to the right. The dashboard's front end is not updated yet (A6 does the shared part).
-- A **baseline loop** in `src/sorter/orchestrator/unload.py`: `LOOK_CARGO` → `SENSE_CARGO` (the depth box detector on each compartment's image area, projected from `look_cargo`) → `PICK_FROM_CARGO` (fingers along the compartment's long side, yaw π/2) → `DROP_TO_LAUNDRY(c)` → `LOOK_CARGO`. It has never run end to end, and it counts a sock before checking it: expect to fix it.
+- `uv run python -m sorter run --sim --mode unload`: the MuJoCo scene of the rover as on its photos: the arm on its deck 160 mm above the floor, one cardboard cargo box to the arm's left (150 × 150 mm inside, 60 deep, rim 25 mm above the deck; [D-035](../decisions.md)), the `sim.unload.cargo` socks in it, and the 3 laundry bins on the floor to the right. The dashboard's front end is not updated yet (A6 does the shared part).
+- A **baseline loop** in `src/sorter/orchestrator/unload.py`: `LOOK_CARGO` → `SENSE_CARGO` (the depth box detector on each compartment's image area, projected from `look_cargo`) → `PICK_FROM_CARGO` (fingers along the compartment's long side, yaw π/2) → `DROP_TO_LAUNDRY(c)` → `LOOK_CARGO`. It has never run end to end, and it counts a sock before checking it: expect to fix it. It walks `cargo.compartments`, which is empty with the one box, so it finds nothing until reworked.
 - The arm: `pick(target, Zone.CARGO, yaw_rad)`, `drop_to_laundry(color)`; every path is checked against the floor and the keep-out (the rover body, the cargo walls and dividers). `rig.yaml` has `look_cargo`, `laundry_<color>`, zone `cargo`. A scripted pick from a compartment into its bin works (`tests/sim/test_physics.py::test_scripted_unload`).
-- Scene file you own: `src/sorter/sim/scenes/unload/scene.py` (the bins and the socks in the compartments). `PhysicsWorld.location(item)` tells where each sock ended (`cargo` / `laundry` + color).
+- Scene file you own: `src/sorter/sim/scenes/unload/scene.py` (the bins and the socks in the compartments). `PhysicsWorld.location(item)` tells where each sock ended (`("cargo", None)` in the box, `laundry` + color).
 - Contracts and the sim: [architecture.md](../architecture.md).
 
 ## Your lane
@@ -44,7 +44,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 
 ### B1: Looking into each compartment
 
-- `look_cargo` sees only ~245 × 183 mm of the 320 × 180 mm box. Add a look pose per compartment (or tilt the camera) through `sim/layout.py` (shared: tell A), with the camera ≥ ~200 mm above the cloth for depth.
+- `look_cargo` (camera ~270 mm above the box floor) sees ~281 × 211 mm: the whole 150 × 150 mm box.
 
 ### B2: Compartment detector
 
@@ -73,7 +73,7 @@ B0–B6 done on the sim.
 
 ## Open questions
 
-- Compartment walls: high enough that a dropped sock never bounces into the next one, low enough for the arm (50 mm now)? Decide with A (A drops into them).
+- Color sorting with one box ([D-035](../decisions.md)): classify each sock while unloading (reuse A's color classifier), or one bin?
 
 ## Requests from other blocks
 
@@ -83,3 +83,4 @@ B0–B6 done on the sim.
 
 - 2026-09-27: stage defined ([D-032](../decisions.md)).
 - 2026-09-27: stage 0 done; the brief rewritten for what it delivered ([D-034](../decisions.md)).
+- 2026-09-27 (from A): the rover layout follows its photos ([D-035](../decisions.md)): deck 160 mm above the floor, one cargo box 150 × 150 × 60 mm at (−50, 200) with no compartments (`compartment(c)` = the whole box, `location()` → `("cargo", None)`), keep-out for the wheels and the equipment behind the arm. The laundry bins didn't move. `unload.py` walks the compartments and now finds none.

@@ -94,7 +94,7 @@ class ArmController(Protocol):
         ...
 
     def drop_to_cargo(self, color: ColorClass) -> None:
-        """Over the cargo compartment of `color`, open, back home."""
+        """Over the cargo box (its compartment of `color`, if split), open, back home."""
         ...
 
     def drop_to_laundry(self, color: ColorClass) -> None:

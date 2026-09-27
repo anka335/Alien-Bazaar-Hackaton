@@ -24,7 +24,7 @@ class Zone(StrEnum):
     """Where the wrist camera looks / the arm works (D-032)."""
 
     FLOOR = "floor"  # in front of the rover: socks to load
-    CARGO = "cargo"  # the rover's cargo box, one compartment per ColorClass
+    CARGO = "cargo"  # the rover's cargo box (one box, D-035; can be split by color)
     LAUNDRY = "laundry"  # the unload station's bins, one per ColorClass (drops only)
 
 

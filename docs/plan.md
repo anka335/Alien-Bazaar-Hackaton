@@ -18,8 +18,8 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | Stage | Status | Owner | Branch | Notes |
 | --- | --- | --- | --- | --- |
 | [0: Preparation](rover/0-preparation.md) | done | Softjey + Claude | `stage/0-preparation` | contracts, base scene, rig on the rover, wiring; known issues handed to A and B |
-| [A: Loading](rover/a-loading.md) | todo | — | — | socks from the floor into the cargo compartments |
-| [B: Unloading](rover/b-unloading.md) | todo | — | — | cargo compartments into the laundry bins |
+| [A: Loading](rover/a-loading.md) | in progress | Softjey + Claude | `claude/pensive-banach-a6b5d1` | A0: the rover and the scene from photos, one cargo box ([D-035](decisions.md)) |
+| [B: Unloading](rover/b-unloading.md) | todo | — | — | the cargo box into the laundry bins; color sorting open ([D-035](decisions.md)) |
 
 ## How A and B stay out of each other's way
 

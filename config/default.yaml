@@ -18,9 +18,9 @@ sim:
   use_sam3: false    # segment with the real SAM3 service, not the render's segmentation
   seed: 0
   scenes: [load, unload]  # what src/sorter/sim/scenes/<name>/scene.py adds to the base
-  load:              # stage A's scene: socks on the floor in front of the rover
+  load:              # stage A's scene: socks on the floor around the rover (area: reach | view)
     socks: [light, dark, colored]
-  unload:            # stage B's scene: the laundry bins, socks in the cargo compartments
+  unload:            # stage B's scene: the laundry bins, socks in the cargo box
     cargo: {light: 1, dark: 1, colored: 1}
   miss_prob: 0.0     # a closing gripper catches nothing (the sim's grip is optimistic)
   width: 640
@@ -28,17 +28,17 @@ sim:
   focal_px: 615                   # D435i color at 640x480
   camera_mount_mm: [-140, 0, 55]  # wrist camera in the TCP frame (x = approach), looks along x
   layout:            # the rover, arm base at the origin on the deck (z = 0), +x forward, +y left, mm
-    floor_z_mm: -200                                          # the deck is 200 mm above the floor
-    body: {center_mm: [-150, 80], size_mm: [500, 480]}       # chassis + wheels, from above
-    deck: {center_mm: [-150, 80], size_mm: [480, 470]}       # the plate the arm stands on
-    cargo:                                                    # on the deck, left of the arm
-      center_mm: [-100, 220]
-      size_mm: [320, 180]                                     # inside, split along x
-      floor_z_mm: 5
-      wall_mm: 50
-      wall_t_mm: 6
-      compartments: [light, dark, colored]                    # from -x to +x
-    floor_view: {center_mm: [300, 0], size_mm: [280, 240]}   # the floor look_floor frames
+    # estimated from photos of the rover (D-035); the defaults in sim/config.py have the details
+    floor_z_mm: -160                                          # the deck is 160 mm above the floor
+    body: {center_mm: [-10, 0], size_mm: [360, 350]}         # chassis + wheels, from above
+    deck: {center_mm: [15, 0], size_mm: [210, 190]}          # the plate the arm stands on
+    cargo:                                                    # one cardboard box, left of the arm
+      center_mm: [-50, 200]
+      size_mm: [150, 150]                                     # inside
+      floor_z_mm: -35                                         # inside floor; the rim is 25 above the deck
+      wall_mm: 60
+      wall_t_mm: 4
+    floor_view: {center_mm: [310, 0], size_mm: [280, 240]}   # the floor look_floor frames
     laundry:                                                  # the unload station's bins
       centers_mm: {light: [-140, -330], dark: [100, -330], colored: [340, -300]}
       size_mm: 220
@@ -46,8 +46,8 @@ sim:
 
 camera: {}           # shared
 calibration:         # shared
-  board_z_mm: -184   # the printed board's top: 16 mm on the floor (z -200)
-  marks_z_mm: -199   # the floor, where the tape marks lie
+  board_z_mm: -144   # the printed board's top: 16 mm on the floor (z -160)
+  marks_z_mm: -159   # the floor, where the tape marks lie
 box_detector:        # stage B (the cargo compartments)
   avoid_radius_px: 30
   wall_margin_mm: 45     # an open finger (arm.gripper.open) and its pad fit between grasp and wall
