@@ -1,13 +1,17 @@
 # Plan
 
-The arm rides on a rover and works in two modes, load and unload ([D-032](decisions.md)). The work is three stages: a thin shared base first (stage 0), then loading and unloading in parallel, one agent each ([D-034](decisions.md)). Every stage is accepted on the simulator; hardware is a later stage 3, planned when A and B pass.
+The arm rides on a rover and sorts socks: load from the floor, unload at a station ([D-032](decisions.md)). Stage 0 built a thin shared base ([D-034](decisions.md)); then loading, unloading and navigation run in parallel, one agent each; the full mission ties them together, and a sim-to-real check comes before the hardware ([D-035](decisions.md)). Every stage is accepted on the simulator.
 
 ```mermaid
 graph LR
   S0[0 Preparation] --> SA[A Loading]
   S0 --> SB[B Unloading]
-  SA --> S3((3 Hardware))
-  SB --> S3
+  S0 --> SN[N Navigation]
+  SA --> SC[C Full mission]
+  SB --> SC
+  SN --> SC
+  SC --> SD[D Sim-to-real]
+  SD --> S3((Hardware))
 ```
 
 ## Status board
@@ -20,9 +24,13 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | [0: Preparation](rover/0-preparation.md) | done | Softjey + Claude | `stage/0-preparation` | contracts, base scene, rig on the rover, wiring; known issues handed to A and B |
 | [A: Loading](rover/a-loading.md) | todo | — | — | socks from the floor into the cargo compartments |
 | [B: Unloading](rover/b-unloading.md) | todo | — | — | cargo compartments into the laundry bins |
+| [N: Navigation](rover/n-navigation.md) | todo | — | — | driving rover, find socks, stop within reach, dock at the station |
+| [C: Full mission](rover/c-mission.md) | todo | — | — | needs A, B, N: rover interface, stow, mission loop, benchmark |
+| [D: Sim-to-real](rover/d-sim-to-real.md) | todo | — | — | needs C: the benchmarks under rig-like errors |
+| Hardware | todo | — | — | not planned in detail yet: measure the rover, calibrate, the real interface, real socks |
 
-## How A and B stay out of each other's way
+## How the parallel stages stay out of each other's way
 
-- Each owns a scene file, a loop file, a detector and a dashboard panel (lanes in [architecture.md → Repo layout](architecture.md#repo-layout)).
-- Shared code (core, arm, the base scene, the layout tool, the state machine, the dashboard backend) changes only through the contract rules in [AGENTS.md](../AGENTS.md). Both stages need new named poses: land them as small separate PRs and rebase often.
-- The front end's shared part (tabs, 3D view) is A6; B5 builds its panel on it.
+- Each owns its scene file, loop or package, and dashboard panel (lanes in [architecture.md → Repo layout](architecture.md#repo-layout); N fixes its lane when it starts).
+- Shared code (core, arm, the base scene, the layout tool, the state machine, the dashboard backend) changes only through the contract rules in [AGENTS.md](../AGENTS.md). A and B both need new named poses and N makes the rover base movable: land such changes as small separate PRs and rebase often.
+- The front end's shared part (tabs, 3D view) is A6; the other panels build on it.
