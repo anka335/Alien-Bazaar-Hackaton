@@ -30,6 +30,9 @@ camera = [
     "pyrealsense2>=2.55; sys_platform == 'linux' or sys_platform == 'win32'",
     "pyrealsense2-macosx==2.54.2; sys_platform == 'darwin'",
 ]
+nav-hw = [
+    "depthai>=3.0",
+]
 
 [project.scripts]
 sorter = "sorter.__main__:main"

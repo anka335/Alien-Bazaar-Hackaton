@@ -6,6 +6,7 @@ import { usePath } from "./hooks";
 import { AutoPage } from "./pages/AutoPage";
 import { CalibratePage } from "./pages/CalibratePage";
 import { ManualPage } from "./pages/ManualPage";
+import { RoverPage } from "./pages/RoverPage";
 import { TwinPage } from "./pages/TwinPage";
 import { SorterProvider, useSorter } from "./sorter";
 import "./styles/base.css";
@@ -13,6 +14,7 @@ import "./styles/auto.css";
 import "./styles/setup.css";
 import "./styles/calibrate.css";
 import "./styles/twin.css";
+import "./styles/rover.css";
 
 const PAGES: Record<string, () => React.JSX.Element> = {
   "/load": AutoPage,
@@ -20,6 +22,7 @@ const PAGES: Record<string, () => React.JSX.Element> = {
   "/manual": ManualPage,
   "/calibrate": CalibratePage,
   "/3d": TwinPage,
+  "/rover": RoverPage,
 };
 
 function App(): React.JSX.Element {
