@@ -138,12 +138,13 @@ class Rover:
         """No motion: a fresh frame."""
         return self._finish(Result("look", {}), self._mark())
 
-    def forward(self, distance_m: float, speed: float = 0.2) -> Result:
+    def forward(self, distance_m: float, speed: float = 0.2, guard_m: float = GUARD_M) -> Result:
         """Drive straight `distance_m` (negative = back up) at up to `speed` m/s (max 0.4),
-        holding the heading. Stops early for an obstacle ahead (depth guard)."""
-        res = Result("forward", {"distance_m": distance_m, "speed": speed})
+        holding the heading. Stops early for an obstacle closer than `guard_m` to the bumper
+        (depth guard; lower it to drive up to a known target such as a box)."""
+        res = Result("forward", {"distance_m": distance_m, "speed": speed, "guard_m": guard_m})
         mark = self._mark()
-        self._straight(distance_m, speed, res)
+        self._straight(distance_m, speed, res, guard_m)
         return self._finish(res, mark)
 
     def turn(self, angle_deg: float, speed: float = 0.6) -> Result:
@@ -390,13 +391,16 @@ class Rover:
 
     # --- motion ---
 
-    def _straight(self, distance: float, speed: float, res: Result) -> None:
+    def _straight(
+        self, distance: float, speed: float, res: Result, guard_m: float = GUARD_M
+    ) -> None:
         leo = self.sim.cfg.leo
         speed = min(abs(speed), leo.max_linear_mps)
         o = self.sim.odom
         x0, y0, yaw0 = o.x, o.y, o.yaw
         sign = 1.0 if distance >= 0 else -1.0
         lead = getattr(self.sim, "stop_lead_s", 0.0)
+        gain = getattr(self.sim, "heading_gain", 3.0)
         t_end = self.sim.t + self.sim.cfg.max_command_s
         next_guard = self.sim.t
         while True:
@@ -411,12 +415,13 @@ class Rover:
             if sign > 0 and self.sim.t >= next_guard:
                 next_guard = self.sim.t + 1 / GUARD_HZ
                 ahead = self._obstacle_ahead()
-                if ahead is not None and ahead < GUARD_M + 0.5 * o.v:
+                if ahead is not None and ahead < guard_m + 0.5 * o.v:
                     res.blocked = f"obstacle {ahead:.2f} m ahead of the front wheels"
                     break
             # slow down to stop on the spot, the firmware's own ramp lags a little
             v = min(speed, math.sqrt(2 * 0.6 * leo.accel_mps2 * rem) + 0.02)
-            w = float(np.clip(3.0 * _wrap(yaw0 - o.yaw), -0.5, 0.5))
+            # heading hold; softer on the real rover, whose odometry lags (a stiff gain swings)
+            w = float(np.clip(gain * _wrap(yaw0 - o.yaw), -0.5, 0.5))
             self.sim.set_cmd(sign * v, w)
             self._tick()
         self._halt()

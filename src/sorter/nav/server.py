@@ -12,6 +12,8 @@ queue work and read the latest JPEGs.
     POST /api/nav/command  {name, args}  one of Rover.COMMANDS
     POST /api/nav/auto     {detector}    the approach algorithm
     POST /api/nav/run      {detector, gap_m}  RUN ROBOT: find the nearest sock, stop gap_m before it
+    POST /api/nav/boxes/remember           save the AprilTag boxes in view (nav.boxes.memory)
+    POST /api/nav/box      {target, stop_m}  GO TO BOX: stop the bumper stop_m from the tag
     POST /api/nav/stop                   stop the running command / algorithm
     POST /api/nav/detect   {detector}    detections on the last frame
 """
@@ -68,6 +70,11 @@ class RunRequest(BaseModel):
     gap_m: float = Field(0.30, ge=0.0, le=1.0)
 
 
+class BoxRequest(BaseModel):
+    target: int | None = None  # default nav.boxes.target_id
+    stop_m: float | None = Field(None, ge=0.05, le=1.0)  # default nav.boxes.stop_m
+
+
 class NavLive:
     def __init__(self, base: NavConfig | None = None, sam_cfg=None, real: bool = False):
         self.base = base or NavConfig()
@@ -94,7 +101,7 @@ class NavLive:
     # --- the API side ---
 
     def submit(self, kind: str, payload) -> None:
-        if kind in ("command", "auto", "run") and self.busy:
+        if kind in ("command", "auto", "run", "box", "remember") and self.busy:
             raise HTTPException(409, f"busy: {self.busy}")
         self.jobs.put((kind, payload))
 
@@ -181,6 +188,10 @@ class NavLive:
                     self._auto(payload)
                 elif kind == "run":
                     self._run(payload)
+                elif kind == "box":
+                    self._box(payload)
+                elif kind == "remember":
+                    self._remember()
                 elif kind == "detect":
                     self._detect(payload)
                 self.error = None
@@ -267,6 +278,8 @@ class NavLive:
         from sorter.nav.hunt import CachedDetector, approach_sock
 
         ep = self._need()
+        if hasattr(ep.sim, "reset_odom"):  # the real rover: every run starts clean
+            ep.sim.reset_odom()
         name = req.detector or ("sam3" if self.real and self.sam_cfg is not None else "classic")
         self.busy = f"RUN ROBOT ({name})"
         det = CachedDetector(detect.make(name, ep.camera, self.sam_cfg, ep.cfg.sam_prompt))
@@ -286,6 +299,77 @@ class NavLive:
         finally:
             ep.rover.run = run
         self._note({"command": "RUN ROBOT", "note": r.note, "ok": r.ok})
+
+    def _tags_now(self) -> None:
+        """The AprilTags in the last frame, shown like detections on the camera view."""
+        from sorter.nav.boxes import detect_tags
+
+        ep = self._need()
+        tags = detect_tags(ep.rover.frame, ep.cfg.boxes.tag_size_m)
+        with self.lock:
+            self.detections = [
+                {
+                    "u": t.u,
+                    "v": t.v,
+                    "score": 1.0,
+                    "distance_m": t.distance,
+                    "bearing_deg": t.bearing_deg,
+                    "source": f"tag {t.id}",
+                }
+                for t in tags
+            ]
+
+    def _remember(self) -> None:
+        from sorter.nav.boxes import remember_boxes
+
+        ep = self._need()
+        self.busy = "remember boxes"
+        res = ep.rover.look()
+        b = ep.cfg.boxes
+        mem = remember_boxes(res.frame, b.tag_size_m, b.target_id, b.memory)
+        self._tags_now()
+        self._note(
+            {
+                "command": "remember boxes",
+                "ok": True,
+                "note": f"tags {list(mem['tags'])} -> {b.memory}",
+            }
+        )
+
+    def _box(self, req: BoxRequest) -> None:
+        """GO TO BOX: `boxes.approach_box` on the target tag, with the remembered layout."""
+        from sorter.nav.boxes import approach_box, load_memory
+
+        ep = self._need()
+        if hasattr(ep.sim, "reset_odom"):  # the real rover: every run starts clean
+            ep.sim.reset_odom()
+        b = ep.cfg.boxes
+        target = b.target_id if req.target is None else req.target
+        stop = b.stop_m if req.stop_m is None else req.stop_m
+        self.busy = f"GO TO BOX (tag {target})"
+        run = ep.rover.run
+
+        def logged(name, *a, **k):
+            res = run(name, *a, **k)
+            ep.commands += 1
+            self._note(res.summary() | {"auto": True})
+            self._tags_now()
+            return res
+
+        ep.rover.run = logged
+        self._pace_start()
+        try:
+            r = approach_box(
+                ep.rover,
+                target,
+                stop,
+                b.tag_size_m,
+                load_memory(b.memory),
+                ep.cfg.real.max_linear_mps,
+            )
+        finally:
+            ep.rover.run = run
+        self._note({"command": "GO TO BOX", "note": r.note, "ok": r.ok})
 
     def _detect(self, req: AutoRequest) -> None:
         ep = self._need()
@@ -458,6 +542,16 @@ def router(live_factory) -> APIRouter:
     @r.post("/run")
     def run_robot(req: RunRequest) -> dict:
         live_factory().submit("run", req)
+        return {"ok": True}
+
+    @r.post("/box")
+    def go_to_box(req: BoxRequest) -> dict:
+        live_factory().submit("box", req)
+        return {"ok": True}
+
+    @r.post("/boxes/remember")
+    def remember() -> dict:
+        live_factory().submit("remember", None)
         return {"ok": True}
 
     @r.post("/detect")

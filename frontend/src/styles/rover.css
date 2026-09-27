@@ -48,7 +48,7 @@
   background: var(--enamel-hi);
   border: 1px solid var(--line);
 }
-.rover-run button { border-radius: 999px; border: 1px solid var(--line); cursor: pointer; }
+.rover-run button { padding: 0.45rem 1rem; border-radius: 999px; border: 1px solid var(--line); background: var(--enamel); cursor: pointer; }
 .rover-run button:disabled { opacity: 0.45; cursor: default; }
 .rover-run .run-robot {
   padding: 0.7rem 2rem;

@@ -156,6 +156,7 @@ class LeoBase:
         self.bridge = bridge or Rosbridge(r.rosbridge_url)
         self.dt = 1.0 / cfg.control_hz
         self.stop_lead_s = r.stop_lead_s  # the commands stop this much early (coasting)
+        self.heading_gain = 1.0  # driving straight: the odometry lags ~0.4 s, 3 (the sim's) swings
         self.odom = Odometry()
         self.odom_source: str | None = None
         self.cmd = (0.0, 0.0)
@@ -226,6 +227,15 @@ class LeoBase:
         self.fault = None
         self._wrong_way_since = None
 
+    def reset_odom(self) -> None:
+        """Odometry from zero here (a new run), and no fault left over from the last one."""
+        self.clear_fault()
+        with self._lock:
+            self._raw = None  # merged_odom: the next message is the new origin
+            self.odom = Odometry()
+            self._last_int = None
+        self._odom_t = time.monotonic()
+
     def close(self) -> None:
         try:
             for _ in range(5):
@@ -240,8 +250,10 @@ class LeoBase:
         """Commanded one way, the odometry going clearly the other for 0.4 s: stop (a sign
         error in the odometry would otherwise make every command run away)."""
         o = self.odom
+        # the turn only when turning in place: driving straight, the heading hold's small
+        # corrections and the lagging odometry often point opposite ways for a moment
         wrong = (abs(v) > 0.05 and o.v * v < 0 and abs(o.v) > 0.03) or (
-            abs(w) > 0.2 and o.w * w < 0 and abs(o.w) > 0.1
+            abs(v) < 0.05 and abs(w) > 0.2 and o.w * w < 0 and abs(o.w) > 0.1
         )
         now = time.monotonic()
         if not wrong:

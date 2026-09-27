@@ -20,6 +20,10 @@ python -m sorter.nav real auto [--detector sam3] [--out DIR]  # the approach alg
 Search for socks and drive up to them, one after another (sorter.nav.hunt.hunt_socks):
 python -m sorter.nav hunt [--real] [--socks N] [--gap 0.30] [--detector classic|sam3] [--out DIR]
 python -m sorter.nav hunt --scenario multi --seed 0 --socks 3   # the same on the sim
+
+Cardboard boxes with AprilTags (36h11) on the real rover (sorter.nav.boxes):
+python -m sorter.nav boxes remember                  # save the boxes in view (nav.boxes.memory)
+python -m sorter.nav boxes go [--target 13] [--stop 0.15]  # drive up to the box's tag
 """
 
 from __future__ import annotations
@@ -491,6 +495,39 @@ def cmd_hunt(args) -> None:
     print(json.dumps(report.summary(), indent=1))
 
 
+def cmd_boxes(args) -> None:
+    from sorter.nav import boxes
+
+    s, cfg, _ = _real_session(args)
+    b = cfg.boxes
+    try:
+        if args.action == "remember":
+            mem = boxes.remember_boxes(s.rover.look().frame, b.tag_size_m, b.target_id, b.memory)
+            print(json.dumps(mem, indent=1))
+        else:
+            run = s.rover.run
+
+            def logged(name, *a, **k):
+                res = run(name, *a, **k)
+                print(json.dumps(res.summary()), flush=True)
+                return res
+
+            s.rover.run = logged
+            r = boxes.approach_box(
+                s.rover,
+                args.target if args.target is not None else b.target_id,
+                args.stop if args.stop is not None else b.stop_m,
+                b.tag_size_m,
+                boxes.load_memory(b.memory),
+                cfg.real.max_linear_mps,
+            )
+            print(json.dumps(vars(r), indent=1))
+    except KeyboardInterrupt:
+        print("stopped")
+    finally:
+        s.close()
+
+
 def cmd_commands(args) -> None:
     from sorter.nav.commands import Rover
 
@@ -604,6 +641,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--out")
     p.add_argument("--rosbridge")
     p.set_defaults(fn=cmd_hunt)
+    p = sub.add_parser("boxes", help="AprilTag boxes on the real rover: remember | go")
+    p.add_argument("action", choices=["remember", "go"])
+    p.add_argument("--target", type=int)
+    p.add_argument("--stop", type=float, help="front bumper to the tag at the stop (m)")
+    p.add_argument("--rosbridge")
+    p.set_defaults(fn=cmd_boxes)
     sub.add_parser("commands").set_defaults(fn=cmd_commands)
     sub.add_parser("scenarios").set_defaults(fn=cmd_scenarios)
     args = ap.parse_args(argv)

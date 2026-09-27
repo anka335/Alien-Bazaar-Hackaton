@@ -110,6 +110,17 @@ class RealConfig(BaseModel):
     oakd_fps: float = 15.0
 
 
+class BoxesConfig(BaseModel):
+    """`nav.boxes`: the cardboard boxes, each marked with an AprilTag (family 36h11)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tag_size_m: float = 0.035  # the tag's black square, edge to edge (measured by depth)
+    target_id: int = 13  # the box to drive to (the middle one of our three: 14 13 12)
+    stop_m: float = 0.15  # front bumper to the tag at the stop
+    memory: str = "data/nav_boxes.json"  # the remembered layout (`remember_boxes`)
+
+
 class NavConfig(BaseModel):
     """`nav`: the rover navigation simulator (rover stage N)."""
 
@@ -126,3 +137,4 @@ class NavConfig(BaseModel):
     detector: Literal["color", "sam3", "seg"] = "color"  # the algorithm's sock detector
     sam_prompt: str = "sock"
     real: RealConfig = Field(default_factory=RealConfig)
+    boxes: BoxesConfig = Field(default_factory=BoxesConfig)

@@ -260,7 +260,7 @@ def approach_sock(
             return FastResult(True, det, frame, n, f"already {gap_m + drive:.2f} m from it")
         if abs(det.bearing_deg) > 1.0:
             do("turn", det.bearing_deg, 0.8)
-        res = do("forward", drive, min(speed, 0.25))
+        res = do("forward", drive, min(speed, 0.4))
         if res.blocked is None:
             return FastResult(True, det, frame, n, f"stopped ~{gap_m:.2f} m before the sock")
         if not res.blocked.startswith("obstacle"):

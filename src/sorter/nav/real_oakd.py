@@ -77,6 +77,20 @@ class RealOakD:
         self._t0 = time.monotonic()
         self._lock = threading.Lock()
         self._last_seq = -1
+        self._warm_up()
+
+    def _warm_up(self, max_s: float = 4.0) -> None:
+        """Drop the first frames until the auto-exposure settles: for ~1.5 s after the start
+        they come out almost black (mean ~6 of 255, then ~75 in the same room)."""
+        t_end, means = time.monotonic() + max_s, []
+        while time.monotonic() < t_end:
+            try:
+                means.append(float(self.capture().rgb[::8, ::8].mean()))
+            except OakDError:
+                return
+            last = means[-5:]
+            if len(last) == 5 and min(last) > 12 and max(last) - min(last) < 0.05 * max(last):
+                return
 
     def capture(self, timeout_s: float = 2.0) -> Frame:
         t_end = time.monotonic() + timeout_s

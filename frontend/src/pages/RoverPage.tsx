@@ -57,6 +57,8 @@ export function RoverPage(): React.JSX.Element {
   const [detector, setDetector] = useState<(typeof DETECTORS)[number]>("classic");
   const [truth, setTruth] = useState(false);
   const [gapCm, setGapCm] = useState(30);
+  const [boxTag, setBoxTag] = useState(13);
+  const [boxStopCm, setBoxStopCm] = useState(15);
   const img = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
@@ -173,6 +175,22 @@ export function RoverPage(): React.JSX.Element {
         <button className="stop" onClick={() => send("/api/nav/stop", {})}>
           Stop (Esc)
         </button>
+      </section>
+
+      <section className="rover-run">
+        <button className="run-robot" disabled={!!busy} onClick={() => send("/api/nav/box", { target: boxTag, stop_m: boxStopCm / 100 })}>
+          GO TO BOX
+        </button>
+        <label>
+          tag <input type="number" step={1} min={0} value={boxTag} onChange={(e) => setBoxTag(+e.target.value)} />
+        </label>
+        <label>
+          stop <input type="number" step={1} min={5} max={100} value={boxStopCm} onChange={(e) => setBoxStopCm(+e.target.value)} /> cm before it
+        </label>
+        <button disabled={!!busy} onClick={() => send("/api/nav/boxes/remember", {})}>
+          Remember boxes in view
+        </button>
+        <span className="hint">AprilTag 36h11 boxes · the rover finds the tag (or a remembered neighbor) and drives up to it</span>
       </section>
 
       <section className="rover-controls">
