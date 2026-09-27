@@ -9,7 +9,7 @@ A robotic arm on a rover sorts socks by color. **Load:** the rover stops next to
 ## Where things are
 
 - [docs/plan.md](docs/plan.md): the stages and the **status board**
-- [docs/rover/](docs/rover/): one brief per stage (0 preparation, done; A loading; B unloading; N navigation; C full mission; D sim-to-real), the unit of work for an agent: goal, lane, tasks, known issues
+- [docs/rover/](docs/rover/): one brief per stage (0 preparation, done; A loading; B unloading; F far detection; N navigation; C full mission; D sim-to-real), the unit of work for an agent: goal, lane, tasks, known issues
 - [docs/architecture.md](docs/architecture.md): physical setup, components, loops, coordinate frames, **contracts between the stages**, simulator, lanes (who owns which path)
 - [docs/decisions.md](docs/decisions.md): decision log
 
@@ -22,7 +22,7 @@ A robotic arm on a rover sorts socks by color. **Load:** the rover stops next to
 
 ## Parallel workflow
 
-Several agents work at the same time, **one agent per stage** (A, B and N in parallel; C and D after them).
+Several agents work at the same time, **one agent per stage** (A, B, F and N in parallel; C and D after them).
 
 1. **Pick up a stage.** Use `/start-stage A` in Claude Code, or do it by hand:
    - read the brief `docs/rover/<letter>-*.md`, `docs/rover/0-preparation.md` (what the base gives, known issues) and `docs/architecture.md`;
