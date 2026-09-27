@@ -29,63 +29,107 @@ from sorter.nav.sim import Odometry
 log = logging.getLogger(__name__)
 
 
+ODOM_SILENT_S = 1.0  # driving with no odometry update for this long: stop with a fault
+
+
 class RosbridgeError(RuntimeError):
     pass
 
 
 class Rosbridge:
-    """A minimal rosbridge v2 client: advertise / publish / subscribe, JSON over a websocket."""
+    """A minimal rosbridge v2 client: advertise / publish / subscribe, JSON over a websocket.
+
+    No websocket keepalive: a late pong (the reader busy, a Wi-Fi hiccup) used to close the
+    connection mid-command; the odometry stream is the liveness check instead (`LeoBase`). A
+    lost connection is reopened by the reader, replaying the advertisements and subscriptions;
+    a send waits up to `RECONNECT_S` for it.
+    """
+
+    RECONNECT_S = 3.0
 
     def __init__(self, url: str, timeout_s: float = 5.0):
-        from websockets.sync.client import connect
-
-        self.url = url
-        try:
-            self._conn = connect(url, open_timeout=timeout_s, max_size=None)
-            self.ws = self._conn.__enter__()  # the connection is a context manager
-        except (OSError, TimeoutError) as e:
-            raise RosbridgeError(f"can't reach rosbridge at {url}: {e}") from None
+        self.url, self.timeout_s = url, timeout_s
         self._handlers: dict[str, list] = {}
+        self._replay: list[dict] = []  # advertise / subscribe ops, sent again on reconnect
         self._lock = threading.Lock()
         self._closed = threading.Event()
+        self._up = threading.Event()
+        self.reconnects = 0
+        self._connect()
         self._reader = threading.Thread(target=self._read, name="rosbridge", daemon=True)
         self._reader.start()
 
+    def _connect(self) -> None:
+        from websockets.sync.client import connect
+
+        try:
+            conn = connect(self.url, open_timeout=self.timeout_s, max_size=None, ping_interval=None)
+        except (OSError, TimeoutError) as e:
+            raise RosbridgeError(f"can't reach rosbridge at {self.url}: {e}") from None
+        with self._lock:
+            self._conn, self.ws = conn, conn.__enter__()  # the connection is a context manager
+            for op in self._replay:
+                self.ws.send(json.dumps(op))
+        self._up.set()
+
     def advertise(self, topic: str, msg_type: str) -> None:
-        self._send({"op": "advertise", "topic": topic, "type": msg_type})
+        self._send({"op": "advertise", "topic": topic, "type": msg_type}, replay=True)
 
     def publish(self, topic: str, msg: dict) -> None:
         self._send({"op": "publish", "topic": topic, "msg": msg})
 
     def subscribe(self, topic: str, msg_type: str, handler, throttle_ms: int = 0) -> None:
         self._handlers.setdefault(topic, []).append(handler)
-        self._send(
-            {
-                "op": "subscribe",
-                "topic": topic,
-                "type": msg_type,
-                "throttle_rate": throttle_ms,
-                "queue_length": 1,
-            }
-        )
+        op = {
+            "op": "subscribe",
+            "topic": topic,
+            "type": msg_type,
+            "throttle_rate": throttle_ms,
+            "queue_length": 1,
+        }
+        self._send(op, replay=True)
 
     def close(self) -> None:
         self._closed.set()
         with contextlib.suppress(Exception):  # closing anyway
             self._conn.__exit__(None, None, None)
 
-    def _send(self, obj: dict) -> None:
-        with self._lock:
-            self.ws.send(json.dumps(obj))
+    def _send(self, obj: dict, replay: bool = False) -> None:
+        data = json.dumps(obj)
+        if replay:
+            self._replay.append(obj)
+        for attempt in range(2):
+            if not self._up.wait(self.RECONNECT_S) or self._closed.is_set():
+                raise RosbridgeError(f"rosbridge at {self.url}: connection lost")
+            try:
+                with self._lock:
+                    self.ws.send(data)
+                return
+            except Exception:  # noqa: BLE001 - the reader reconnects; try once more
+                self._up.clear()
+                if attempt:
+                    raise RosbridgeError(f"rosbridge at {self.url}: connection lost") from None
 
     def _read(self) -> None:
         while not self._closed.is_set():
             try:
                 raw = self.ws.recv()
-            except Exception:  # noqa: BLE001 - connection gone
-                if not self._closed.is_set():
-                    log.error("rosbridge connection lost")
-                return
+            except Exception:  # noqa: BLE001 - connection gone: reopen it
+                if self._closed.is_set():
+                    return
+                self._up.clear()
+                log.error("rosbridge connection lost, reconnecting")
+                with contextlib.suppress(Exception):
+                    self._conn.__exit__(None, None, None)
+                while not self._closed.is_set():
+                    try:
+                        self._connect()
+                        self.reconnects += 1
+                        log.warning("rosbridge reconnected")
+                        break
+                    except RosbridgeError:
+                        time.sleep(0.5)
+                continue
             try:
                 msg = json.loads(raw)
             except ValueError:
@@ -111,6 +155,7 @@ class LeoBase:
         r = cfg.real
         self.bridge = bridge or Rosbridge(r.rosbridge_url)
         self.dt = 1.0 / cfg.control_hz
+        self.stop_lead_s = r.stop_lead_s  # the commands stop this much early (coasting)
         self.odom = Odometry()
         self.odom_source: str | None = None
         self.cmd = (0.0, 0.0)
@@ -125,11 +170,13 @@ class LeoBase:
         self._imu_w: float | None = None
         self._last_int = None  # monotonic time of the last own integration step
         self._wrong_way_since: float | None = None
+        self._odom_t = time.monotonic()  # the last odometry update: the link's liveness
         self.collisions = 0  # no ground truth on the real rover
         self.bridge.advertise(r.cmd_vel_topic, "geometry_msgs/msg/Twist")
-        self.bridge.subscribe(r.odom_topic, "nav_msgs/msg/Odometry", self._on_odom)
-        self.bridge.subscribe(r.wheel_states_topic, "leo_msgs/msg/WheelStates", self._on_wheels)
-        self.bridge.subscribe(r.imu_topic, "sensor_msgs/msg/Imu", self._on_imu)
+        # ~100 Hz each on the rover: 50 Hz is plenty, and the reader keeps up
+        self.bridge.subscribe(r.odom_topic, "nav_msgs/msg/Odometry", self._on_odom, 20)
+        self.bridge.subscribe(r.wheel_states_topic, "leo_msgs/msg/WheelStates", self._on_wheels, 20)
+        self.bridge.subscribe(r.imu_topic, "sensor_msgs/msg/Imu", self._on_imu, 20)
         if not self._odom_seen.wait(r.connect_timeout_s):
             raise RosbridgeError(
                 f"no odometry from {r.rosbridge_url} within {r.connect_timeout_s} s (neither "
@@ -151,6 +198,9 @@ class LeoBase:
     def tick(self) -> None:
         v, w = self.cmd
         self._check_direction(v, w)
+        silent = time.monotonic() - self._odom_t
+        if silent > ODOM_SILENT_S and (v or w) and not self.fault:
+            self.fault = f"stopped: no odometry for {silent:.1f} s (rosbridge link?)"
         if self.fault:
             v = w = 0.0
             self.cmd = (0.0, 0.0)
@@ -177,10 +227,14 @@ class LeoBase:
         self._wrong_way_since = None
 
     def close(self) -> None:
-        for _ in range(5):
-            self.bridge.publish(self.cfg.real.cmd_vel_topic, _twist(0.0, 0.0))
-            time.sleep(0.02)
-        self.bridge.close()
+        try:
+            for _ in range(5):
+                self.bridge.publish(self.cfg.real.cmd_vel_topic, _twist(0.0, 0.0))
+                time.sleep(0.02)
+        except RosbridgeError:  # link gone: the firmware's timeout stops the wheels
+            pass
+        finally:
+            self.bridge.close()
 
     def _check_direction(self, v: float, w: float) -> None:
         """Commanded one way, the odometry going clearly the other for 0.4 s: stop (a sign
@@ -227,6 +281,7 @@ class LeoBase:
             o.yaw += (new_yaw - o.yaw + math.pi) % (2 * math.pi) - math.pi
             o.x, o.y = nx, ny
             o.v, o.w = tw["linear"]["x"], tw["angular"]["z"]
+            self._odom_t = time.monotonic()
         self._odom_seen.set()
 
     def _on_wheels(self, msg: dict) -> None:
@@ -255,6 +310,7 @@ class LeoBase:
             o.x += o.v * math.cos(o.yaw) * dt
             o.y += o.v * math.sin(o.yaw) * dt
             o.distance += abs(o.v) * dt
+            self._odom_t = now
         self._odom_seen.set()
 
 

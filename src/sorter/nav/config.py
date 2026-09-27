@@ -95,6 +95,9 @@ class RealConfig(BaseModel):
     max_linear_mps: float = 0.25
     max_angular_rps: float = 0.8
     max_command_s: float = 10.0  # a single command on the real rover stops after this
+    # the rover coasts on for about this long after a stop is decided (odometry lag + the
+    # firmware's ramp): the commands stop this much early (measured: 0.53 m -> 0.63 m, 10° -> 18°)
+    stop_lead_s: float = 0.4
     # where the frames come from: `rosbridge` (the OAK-D's ROS driver on the rover), `depthai`
     # (an OAK-D plugged into this machine), `none` (drive blind: no obstacle guard), `auto` =
     # the first that gives a frame

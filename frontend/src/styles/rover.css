@@ -38,6 +38,31 @@
 }
 .rover-side { display: grid; gap: var(--gap); align-content: start; }
 .rover-side img { width: 100%; border-radius: 14px; background: var(--glass); aspect-ratio: 4 / 3; object-fit: cover; }
+.rover-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius);
+  background: var(--enamel-hi);
+  border: 1px solid var(--line);
+}
+.rover-run button { border-radius: 999px; border: 1px solid var(--line); cursor: pointer; }
+.rover-run button:disabled { opacity: 0.45; cursor: default; }
+.rover-run .run-robot {
+  padding: 0.7rem 2rem;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  background: #1c7a44;
+  border-color: #145c33;
+  color: #fff;
+}
+.rover-run .stop { margin-left: auto; padding: 0.55rem 1.2rem; background: var(--red); color: #fff; border-color: var(--red-deep); }
+.rover-run label { display: flex; gap: 0.3rem; align-items: center; color: var(--muted); }
+.rover-run input[type="number"] { width: 4rem; }
+.rover-run .hint { color: var(--muted); font-size: 0.85rem; }
 .rover-controls {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

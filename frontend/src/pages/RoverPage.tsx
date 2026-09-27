@@ -56,6 +56,7 @@ export function RoverPage(): React.JSX.Element {
   const [seed, setSeed] = useState(0);
   const [detector, setDetector] = useState<(typeof DETECTORS)[number]>("classic");
   const [truth, setTruth] = useState(false);
+  const [gapCm, setGapCm] = useState(30);
   const img = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
@@ -78,6 +79,12 @@ export function RoverPage(): React.JSX.Element {
       clearInterval(id);
     };
   }, []);
+
+  // the real rover: SAM3 by default (the classic detector needs good light)
+  const isReal = !!s?.real;
+  useEffect(() => {
+    if (isReal) setDetector((d) => (d === "classic" ? "sam3" : d));
+  }, [isReal]);
 
   const send = async (url: string, body: unknown) => {
     try {
@@ -153,6 +160,19 @@ export function RoverPage(): React.JSX.Element {
           {!s?.real && <img src="/api/nav/stream/chase.mjpg" alt="Chase camera (debug)" />}
           {!s?.real && <img src="/api/nav/stream/overview.mjpg" alt="Overview (debug)" />}
         </div>
+      </section>
+
+      <section className="rover-run">
+        <button className="run-robot" disabled={!!busy} onClick={() => send("/api/nav/run", { detector, gap_m: gapCm / 100 })}>
+          RUN ROBOT
+        </button>
+        <label>
+          stop <input type="number" step={1} min={0} max={100} value={gapCm} onChange={(e) => setGapCm(+e.target.value)} /> cm before the sock
+        </label>
+        <span className="hint">detector: {detector} · finds the nearest sock, drives up fast, stops in front of it</span>
+        <button className="stop" onClick={() => send("/api/nav/stop", {})}>
+          Stop (Esc)
+        </button>
       </section>
 
       <section className="rover-controls">

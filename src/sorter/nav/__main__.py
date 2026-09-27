@@ -16,6 +16,10 @@ python -m sorter.nav hw-check [--no-rover] [--no-camera] [--move]
 python -m sorter.nav real do DIR forward 0.3               # one command, frames into DIR
 python -m sorter.nav real look DIR | real detect DIR [--detector classic|sam3]
 python -m sorter.nav real auto [--detector sam3] [--out DIR]  # the approach algorithm
+
+Search for socks and drive up to them, one after another (sorter.nav.hunt.hunt_socks):
+python -m sorter.nav hunt [--real] [--socks N] [--gap 0.30] [--detector classic|sam3] [--out DIR]
+python -m sorter.nav hunt --scenario multi --seed 0 --socks 3   # the same on the sim
 """
 
 from __future__ import annotations
@@ -470,6 +474,23 @@ def cmd_real_auto(args) -> None:
         s.close()
 
 
+def cmd_hunt(args) -> None:
+    from sorter.nav.hunt import hunt_socks
+
+    report = hunt_socks(
+        real=args.real,
+        max_socks=args.socks,
+        detector=args.detector,
+        scenario=args.scenario,
+        seed=args.seed,
+        config_dir=args.config_dir,
+        rosbridge=args.rosbridge,
+        out=args.out,
+        gap_m=args.gap,
+    )
+    print(json.dumps(report.summary(), indent=1))
+
+
 def cmd_commands(args) -> None:
     from sorter.nav.commands import Rover
 
@@ -573,6 +594,16 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--out")
     p.add_argument("--rosbridge")
     p.set_defaults(fn=cmd_real_auto)
+    p = sub.add_parser("hunt", help="search for socks and drive up to them")
+    p.add_argument("--real", action="store_true", help="the real rover and OAK-D, not the sim")
+    p.add_argument("--socks", type=int, default=1, help="how many socks to reach")
+    p.add_argument("--gap", type=float, help="fast: stop the bumper this far (m) before a sock")
+    p.add_argument("--detector", choices=["classic", "sam3", "seg"])
+    p.add_argument("--scenario", default="multi")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--out")
+    p.add_argument("--rosbridge")
+    p.set_defaults(fn=cmd_hunt)
     sub.add_parser("commands").set_defaults(fn=cmd_commands)
     sub.add_parser("scenarios").set_defaults(fn=cmd_scenarios)
     args = ap.parse_args(argv)

@@ -145,6 +145,10 @@ def _rover(pose, cfg: NavConfig, assets: dict[str, bytes]) -> tuple[str, str, st
         math.atan(math.tan(math.radians(cam.rgb_hfov_deg) / 2) * cam.height / cam.width)
     )
     mx, my, mz = cam.mount_xyz_m
+    # the bracket spans the plate top (0.006) and the camera: up to its bottom, or down to its
+    # top when it hangs below the plate (on the front bumper)
+    b_lo, b_hi = sorted((0.006, mz - 0.02 if mz > 0.006 else mz + 0.02))
+    b_half, b_mid = max((b_hi - b_lo) / 2, 0.002), (b_lo + b_hi) / 2 - 0.006
     x, y, yaw = pose
     body = f"""
     <body name="base_link" pos="{x:.4f} {y:.4f} {BASE_Z + 0.004:.4f}" quat="{_f(_yaw_quat(yaw))}">
@@ -158,8 +162,8 @@ def _rover(pose, cfg: NavConfig, assets: dict[str, bytes]) -> tuple[str, str, st
         {visuals("antenna")}
       </body>
       <body name="oakd_bracket" pos="{mx - 0.005:.4f} {my:.4f} 0.006">
-        <geom type="box" size="0.012 0.03 {(mz - 0.006 - 0.02) / 2:.4f}"
-          pos="0 0 {(mz - 0.006 - 0.02) / 2:.4f}" rgba="0.15 0.15 0.16 1" {VISUAL}/>
+        <geom type="box" size="0.012 0.03 {b_half:.4f}"
+          pos="0 0 {b_mid:.4f}" rgba="0.15 0.15 0.16 1" {VISUAL}/>
       </body>
       <body name="oakd" pos="{mx:.4f} {my:.4f} {mz:.4f}" euler="0 {p:.4f} 0">
         <inertial pos="0 0 0" mass="0.115" diaginertia="0.0001 0.00003 0.0001"/>

@@ -11,6 +11,7 @@ queue work and read the latest JPEGs.
     POST /api/nav/reset    {scenario, seed, overrides}
     POST /api/nav/command  {name, args}  one of Rover.COMMANDS
     POST /api/nav/auto     {detector}    the approach algorithm
+    POST /api/nav/run      {detector, gap_m}  RUN ROBOT: find the nearest sock, stop gap_m before it
     POST /api/nav/stop                   stop the running command / algorithm
     POST /api/nav/detect   {detector}    detections on the last frame
 """
@@ -62,6 +63,11 @@ class AutoRequest(BaseModel):
     detector: str = "classic"
 
 
+class RunRequest(BaseModel):
+    detector: str | None = None  # default: sam3 on the real rover (if configured), else classic
+    gap_m: float = Field(0.30, ge=0.0, le=1.0)
+
+
 class NavLive:
     def __init__(self, base: NavConfig | None = None, sam_cfg=None, real: bool = False):
         self.base = base or NavConfig()
@@ -88,7 +94,7 @@ class NavLive:
     # --- the API side ---
 
     def submit(self, kind: str, payload) -> None:
-        if kind in ("command", "auto") and self.busy:
+        if kind in ("command", "auto", "run") and self.busy:
             raise HTTPException(409, f"busy: {self.busy}")
         self.jobs.put((kind, payload))
 
@@ -173,6 +179,8 @@ class NavLive:
                     self._command(payload)
                 elif kind == "auto":
                     self._auto(payload)
+                elif kind == "run":
+                    self._run(payload)
                 elif kind == "detect":
                     self._detect(payload)
                 self.error = None
@@ -253,6 +261,31 @@ class NavLive:
         finally:
             ep.rover.run = run
         self._note({"command": "auto", "note": "done: sock in the zone" if ok else "gave up"})
+
+    def _run(self, req: RunRequest) -> None:
+        """RUN ROBOT: the fast approach (`hunt.approach_sock`)."""
+        from sorter.nav.hunt import CachedDetector, approach_sock
+
+        ep = self._need()
+        name = req.detector or ("sam3" if self.real and self.sam_cfg is not None else "classic")
+        self.busy = f"RUN ROBOT ({name})"
+        det = CachedDetector(detect.make(name, ep.camera, self.sam_cfg, ep.cfg.sam_prompt))
+        run = ep.rover.run
+
+        def logged(name, *a, **k):
+            res = run(name, *a, **k)
+            ep.commands += 1
+            self._note(res.summary() | {"auto": True})
+            self._detect_now(det)
+            return res
+
+        ep.rover.run = logged
+        self._pace_start()
+        try:
+            r = approach_sock(ep.rover, det, req.gap_m)
+        finally:
+            ep.rover.run = run
+        self._note({"command": "RUN ROBOT", "note": r.note, "ok": r.ok})
 
     def _detect(self, req: AutoRequest) -> None:
         ep = self._need()
@@ -420,6 +453,11 @@ def router(live_factory) -> APIRouter:
     @r.post("/auto")
     def auto(req: AutoRequest) -> dict:
         live_factory().submit("auto", req)
+        return {"ok": True}
+
+    @r.post("/run")
+    def run_robot(req: RunRequest) -> dict:
+        live_factory().submit("run", req)
         return {"ok": True}
 
     @r.post("/detect")

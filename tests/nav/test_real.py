@@ -155,6 +155,7 @@ def fake():
 def _cfg(url: str) -> NavConfig:
     cfg = NavConfig()
     cfg.real.rosbridge_url = url
+    cfg.real.stop_lead_s = 0.0  # the fake rover stops dead, it doesn't coast
     return cfg
 
 
@@ -179,6 +180,21 @@ def test_commands_drive_the_real_base(fake):
     assert fake.cmds[-1] == (0.0, 0.0)
     assert max(abs(v) for v, _ in fake.cmds) <= cfg.real.max_linear_mps + 1e-9
     assert max(abs(w) for _, w in fake.cmds) <= cfg.real.max_angular_rps + 1e-9
+
+
+def test_a_dropped_link_reconnects_and_keeps_driving(fake):
+    """The websocket dies mid-session (a Wi-Fi hiccup): the bridge reopens it and resubscribes,
+    and the next command drives the rover."""
+    cfg = _cfg(fake.url)
+    s = RealSession(cfg, camera=FakeCamera(cfg))
+    try:
+        s.sim.bridge.ws.close()
+        res = s.rover.forward(0.2, 0.2)
+        assert res.blocked is None and s.sim.fault is None
+        assert s.sim.bridge.reconnects == 1
+        assert fake.x == pytest.approx(0.2, abs=0.03)
+    finally:
+        s.close()
 
 
 def test_turn_closes_the_loop_on_odometry():
@@ -277,6 +293,7 @@ def test_camera_over_rosbridge():
     import base64
 
     import cv2
+
     from sorter.nav.real_camera import RosCamera, decode_depth
 
     rgb = np.zeros((720, 1280, 3), np.uint8)

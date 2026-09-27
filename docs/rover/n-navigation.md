@@ -23,6 +23,8 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 
 - `src/sorter/nav/`: the Leo Rover 1.9 in its own MuJoCo world (not the arm scene), its firmware emulated, an OAK-D with stereo-like depth, seeded scenarios (`python -m sorter.nav scenarios`), the command set (`python -m sorter.nav commands`), sock detectors (`classic`, `sam3`, `seg` = sim oracle), the approach algorithm (`controller.py`), a CLI for one-command-per-process episodes and a benchmark. How to run: [README → Rover navigation sim](../../README.md#rover-navigation-sim).
 - The real rover and camera behind the same commands: `real_leo.py` (rosbridge; odometry from `merged_odom` or wheels + IMU), `real_camera.py` (the OAK-D's ROS driver over rosbridge, or none), `real_oakd.py` (a local OAK-D, depthai v3), `real.py` (session, `hw-check`, `real do|look|detect|auto`, `serve --real`). Connected to our Leo (ROS 2, namespace `/leo/`, `merged_odom` silent, so wheels + IMU): odometry at rest verified; driving by the buttons not yet verified by us.
+- `hunt.py`: `hunt_socks()`, one call for the whole search-and-approach on the sim or the real Leo (`python -m sorter.nav hunt [--real]`): the approach algorithm per sock, then `on_reached`, then the next sock; reached socks (odometry position, 0.3 m) are ignored afterwards. Without an arm the rover may drive over a reached sock on the way to the next.
+- The fast approach (`hunt.approach_sock`, the Rover tab's **RUN ROBOT**, `hunt --gap 0.05`): seek, one fast leg, then turn + drive until the bumper is `gap_m` before the sock's near edge (nearest mask depth point / floor ray through the mask's bottom row; the last ~15 cm on odometry). Sim, `classic`, 7 scenarios × seeds 0–2, target 5 cm: default mount 21/21, true gap 3.3–10.7 cm (mean 4.8); the measured real mount (`local.yaml`, 12.5° down) 18/21.
 - N3's goal zone is `nav.goal`: the sock's center 0.33–0.53 m ahead of the rover's center, ±0.10 m sideways (a placeholder for the stop requirement from `sim.layout` until the arm sits on the Leo). Any sock counts.
 - The Rover tab (`/rover`) runs a live episode, or the real rover with `serve --real`.
 
@@ -54,6 +56,9 @@ No collisions. On unseen seeds 10–19 (plus `random`): 91 %, one collision (obs
 
 ## Log
 
+- 2026-09-27: RUN ROBOT on the real Leo (SAM3, the default there; classic misses a sock in dim light) reached the sock. Found: the laptop roamed off `LeoRover-9a1f` onto another saved Wi-Fi mid-run (the `keepalive ping timeout` error): rosbridge now reconnects and the odometry stream is the liveness check (no odometry 1 s while driving: fault). The real rover coasts ~0.4 s after a stop (0.53 m → 0.63 m, 10° → 18°): `nav.real.stop_lead_s` stops early by that. RUN ROBOT stops 30 cm before the sock by default.
+- 2026-09-27: first real run of `hunt --real`: the OAK-D (depthai, on the laptop) gave almost no depth (sparse stripes, no floor), so the obstacle guard stopped every move early, then the device crashed; later the odometry fault stopped the rover (commanded left turn, wheels+IMU said right; a wheel on a cable?). Check depth in `hw-check` before driving.
+- 2026-09-27: `hunt_socks` (search and approach several socks, sim and real); the sim builds with a camera mounted below the top plate (the measured real mount in `config/local.yaml`).
 - 2026-09-27: commands, detector and algorithm tuned by 10 parallel agents and merged (benchmark 43 % → 92 %); real rover (rosbridge) and OAK-D (depthai) backends, `hw-check`, `serve --real`.
 - 2026-09-27: N1 and N3 started in `sorter.nav` on `feat/rover-nav` ([D-040](../decisions.md)).
 

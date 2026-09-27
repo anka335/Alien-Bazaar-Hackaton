@@ -396,11 +396,13 @@ class Rover:
         o = self.sim.odom
         x0, y0, yaw0 = o.x, o.y, o.yaw
         sign = 1.0 if distance >= 0 else -1.0
+        lead = getattr(self.sim, "stop_lead_s", 0.0)
         t_end = self.sim.t + self.sim.cfg.max_command_s
         next_guard = self.sim.t
         while True:
             along = (o.x - x0) * math.cos(yaw0) + (o.y - y0) * math.sin(yaw0)
-            rem = abs(distance) - sign * along
+            # the real rover coasts on for `stop_lead_s` after the stop: count that in
+            rem = abs(distance) - sign * along - abs(o.v) * lead
             if rem <= DIST_TOL_M:
                 break
             if self.sim.t > t_end:
@@ -428,8 +430,11 @@ class Rover:
         speed = min(abs(speed), leo.max_angular_rps)
         o = self.sim.odom
         t_end = self.sim.t + self.sim.cfg.max_command_s
+        lead = getattr(self.sim, "stop_lead_s", 0.0)
         while True:
             err = target - o.yaw
+            if lead and err * o.w > 0:  # turning toward the target: it coasts on this much
+                err -= math.copysign(min(abs(o.w) * lead, abs(err)), err)
             if abs(err) <= ANGLE_TOL:
                 break
             if self.sim.t > t_end:
