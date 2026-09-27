@@ -115,5 +115,15 @@ def add(world: ET.Element, asset: ET.Element, cfg: SimConfig, rng: np.random.Gen
                 dx, dy = rng.uniform(-0.2, 0.2) * w, rng.uniform(-0.2, 0.2) * h
                 yaw = rng.uniform(0, np.pi)
             pos = ((cx + dx) / 1000, (cy + dy) / 1000, z / 1000)
-            items.append(ItemSpec(color, palette_rgb(color, rng), pos, float(yaw), sheet))
+            items.append(
+                ItemSpec(
+                    color,
+                    palette_rgb(color, rng),
+                    pos,
+                    float(yaw),
+                    sheet,
+                    young=cfg.unload.sock_young,
+                    thickness_m=cfg.unload.sock_thickness_mm / 1000,
+                )
+            )
     return items
