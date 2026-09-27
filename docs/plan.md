@@ -29,9 +29,9 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | [B: Unloading](rover/b-unloading.md) | in progress | Softjey + Claude | `claude/b-unload-2` | sim: 36/36 socks into their bins on the bench (12 × 3), 18/18 with 6 socks; next the rig ([D-053](decisions.md)) |
 | [F: Far detection](rover/f-far-detection.md) | todo | — | — | socks seen 0.5–3 m away from a search pose, as targets on the floor |
 | [N: Navigation](rover/n-navigation.md) | in progress | Viacheslav + Claude | `feat/rover-nav` | Leo Rover + OAK-D sim (`sorter.nav`), camera-only commands, sock approach, Rover tab (D-046) |
-| [C: Full mission](rover/c-mission.md) | todo | — | — | needs A, B, F, N: rover interface, stow, mission loop, benchmark |
+| [C: Full mission](rover/c-mission.md) | in progress | Softjey + Claude | `main` | `sorter.mission`: drive → load → … → station on the sim (two worlds in turn, D-052); unload not called yet |
 | [D: Sim-to-real](rover/d-sim-to-real.md) | todo | — | — | needs C: the benchmarks under rig-like errors |
-| Hardware | todo | — | — | not planned in detail yet: the rover measured ([D-042](decisions.md)); calibrate, the real interface, real socks |
+| Hardware | in progress | Softjey + Claude | `main` | first load runs on the rig: every session recorded (`run --record`); the arm's turn and lean on the rover measured ([D-049](decisions.md), [D-050](decisions.md)); faults, Stop and lost CAN feedback handled ([D-048](decisions.md)); one sock loaded in the auto mode. Next: the room's color gains, the cargo box's exact spot from `look_cargo` |
 | [ROS 2: rover navigation](rover/ros2-navigation.md) | in progress | Slava + Claude | `block/09-rover-navigation` | outside the stages: RTAB-Map + Nav2 on the real Leo Rover (room mapped, mask made; first navigation run next); MuJoCo Leo Rover sim driven by jevomir (D-039), reusable for N1 |
 
 ## How the parallel stages stay out of each other's way

@@ -106,18 +106,22 @@ class StateMachine:
                 self.mode = "paused"
                 self._cycle_t0 = None  # a paused cycle is not timed
             elif cmd is Command.RESUME and self.mode == "paused" and self.phase is not Phase.HELD:
-                if self.phase is Phase.ERROR:
+                if self.phase is Phase.ERROR:  # like RESET: the arm out of its fault first
+                    self.s.arm.recover()
                     self.failures, self.error = 0, None
                 self.mode = "running"
             elif cmd is Command.STEP and self.mode == "paused" and self.phase not in _STOPPED:
                 step = True
             elif cmd is Command.STOP and self.mode != "idle":
-                if self.phase is Phase.HELD:
-                    self.s.arm.recover()
-                else:
-                    self.s.arm.home()
-                self.phase, self.next, self.mode = Phase.IDLE, None, "idle"
+                # the Hub held the arm (the phase under way aborted); the run ends even if the
+                # arm can't get home: Start is always next
+                self.phase, self.next, self.mode, self.error = Phase.IDLE, None, "idle", None
                 self._finish_run("stopped")
+                try:
+                    self.s.arm.recover()
+                except Exception as e:
+                    log.exception("stop: the arm didn't recover")
+                    self.error = f"stop: the arm didn't get home: {e}"
             elif cmd is Command.RESET and self.phase in (Phase.HELD, Phase.ERROR):
                 self.s.arm.recover()
                 self.failures, self.error = 0, None

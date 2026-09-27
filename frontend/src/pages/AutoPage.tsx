@@ -16,7 +16,7 @@ const COMMANDS: { cmd: string; label: string; title: string; icon: ReactNode; en
   { cmd: "pause", label: "Pause", title: "Pause after the current step", icon: <path d="M4 2.5h3v11H4zM9 2.5h3v11H9z" />, enabled: (s) => s.mode === "running" },
   { cmd: "resume", label: "Resume", title: "Continue the run", icon: <path d="M4 2.5v11l9-5.5z" />, enabled: (s) => s.mode === "paused" && s.phase !== "held" },
   { cmd: "step", label: "Step", title: "Run one step, then pause", icon: <path d="M3 2.5v11l7-5.5zM11 2.5h2.5v11H11z" />, enabled: (s) => s.mode === "paused" && !STOPPED.includes(s.phase) },
-  { cmd: "stop", label: "Stop", title: "Finish the current step, go home, end the run", icon: <path d="M3.5 3.5h9v9h-9z" />, enabled: (s) => s.mode !== "idle" },
+  { cmd: "stop", label: "Stop", title: "Stop the arm now, go home, end the run", icon: <path d="M3.5 3.5h9v9h-9z" />, enabled: (s) => s.mode !== "idle" },
   {
     cmd: "reset",
     label: "Reset",

@@ -79,6 +79,41 @@ _ORIGINS = [_T(xyz, _rpy_to_R(rpy)) for xyz, rpy, _ in _JOINTS]
 _SIGNS = [s for _, _, s in _JOINTS]
 _T_TCP = _T(_TCP[0], _rpy_to_R(_TCP[1]))
 
+# The frame FK, the Jacobian and IK work in: base_link turned (and tilted) on its robot, so
+# the frame is the robot's, level. Identity: the URDF base frame.
+_BASE = np.eye(4)
+
+
+def _rot_x(a: float) -> np.ndarray:
+    c, s = np.cos(a), np.sin(a)
+    return np.array([[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]])
+
+
+def _rot_y(a: float) -> np.ndarray:
+    c, s = np.cos(a), np.sin(a)
+    return np.array([[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]])
+
+
+def set_base(yaw_rad: float, roll_rad: float = 0.0, pitch_rad: float = 0.0) -> None:
+    """base_link in the frame FK / IK work in: turned by `yaw_rad` about +Z (where joint 1 = 0
+    points, counter-clockwise from +X), then tilted by `roll_rad` about +X and `pitch_rad`
+    about +Y (a base that doesn't stand level)."""
+    global _BASE
+    R = _rot_y(float(pitch_rad)) @ _rot_x(float(roll_rad)) @ _rot_z(float(yaw_rad))
+    _BASE = _T((0.0, 0.0, 0.0), R)
+
+
+def set_base_yaw(yaw_rad: float) -> None:
+    set_base(yaw_rad)
+
+
+def base_rotation() -> np.ndarray:
+    return _BASE[:3, :3].copy()
+
+
+def base_yaw() -> float:
+    return float(np.arctan2(_BASE[1, 0], _BASE[0, 0]))
+
 
 # --------------------------------------------------------------------------
 # Forward kinematics
@@ -91,7 +126,7 @@ def joint_frames(q) -> list[np.ndarray]:
     Returns a list of 7 matrices: joint1..joint6 output frames, then TCP.
     """
     q = np.asarray(q, dtype=float)
-    T = np.eye(4)
+    T = _BASE.copy()
     frames = []
     for i in range(N_JOINTS):
         T = T @ _ORIGINS[i]
@@ -115,7 +150,7 @@ def link_frames(q, finger_m: float = 0.0) -> dict[str, np.ndarray]:
     ``finger_m`` is the opening of each finger in metres (0 = closed .. 0.05 = open).
     """
     fr = joint_frames(q)
-    out = {"base_link": np.eye(4)}
+    out = {"base_link": _BASE.copy()}
     for i in range(N_JOINTS):
         out[f"link{i + 1}"] = fr[i]
     out["gripper_end"] = fr[N_JOINTS]
@@ -139,7 +174,7 @@ def approach_vector(q) -> np.ndarray:
 def jacobian(q) -> np.ndarray:
     """6x6 geometric Jacobian of the TCP: rows 0-2 linear, rows 3-5 angular (base frame)."""
     q = np.asarray(q, dtype=float)
-    T = np.eye(4)
+    T = _BASE.copy()
     axes, origins = [], []
     for i in range(N_JOINTS):
         T = T @ _ORIGINS[i]
@@ -156,7 +191,7 @@ def jacobian(q) -> np.ndarray:
 
 def _fk_jac(q: np.ndarray):
     """One pass FK + Jacobian: returns (tcp position, tcp rotation, 6x6 Jacobian)."""
-    T = np.eye(4)
+    T = _BASE.copy()
     axes = np.empty((N_JOINTS, 3))
     origins = np.empty((N_JOINTS, 3))
     for i in range(N_JOINTS):

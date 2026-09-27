@@ -33,6 +33,7 @@ from sorter.sim.rig import camera_body_points, camera_mount, camera_pose
 
 LOOK_TCP_Z_MM = (100, -120)  # camera_over: the highest TCP height tried, then lower by 5 mm
 LOOK_HEIGHTS_MM = tuple(range(400, 174, -10))  # the camera above what it looks at, tried in turn
+UPRIGHT_MIN_MM = 200.0  # an upright look no lower than this (the D435i's depth needs ~180)
 REACH_EXTENT_MM = (-360.0, 540.0, -540.0, 540.0)  # x0, x1, y0, y1 of the floor reach map
 REACH_STEP_MM = 30.0
 REACH_CHECK_MM = 20.0  # the finer grid the floor zone is checked on (as `check` does)
@@ -48,6 +49,9 @@ CARGO_MARGIN_MM = 16.0
 CARGO_CORNER_CUT_MM = 45.0
 CARGO_GRASP_DEPTH_MM = 8.0  # a shallow pinch at the pile's top: deeper catches the socks under it
 CARGO_PICK_YAWS_DEG = (0.0, 90.0, 45.0, 135.0)  # a cargo pick must plan with one of these
+# a floor pick must plan with one of these (None: as the IK comes); the 184 mm finger rail hits
+# the rover at some yaws near it
+FLOOR_PICK_YAWS = (None, 0.0, math.pi / 4, math.pi / 2, 3 * math.pi / 4)
 FLOOR_CLEARANCE_MM = 3.0  # arm.z_min_mm: this far above the floor
 HOME_TCP_MM = (220.0, 0.0, 200.0)
 HOME_APPROACH = (1.0, 0.0, -1.0)  # 45° down, forward
@@ -56,7 +60,7 @@ _SEED = (0.0, 1.2, 1.5, 0.0, 0.0, 0.0)  # elbow up
 
 def _seed(x: float, y: float) -> np.ndarray:
     s = np.array(_SEED)
-    s[0] = -math.atan2(y, x)  # joint 1 turns clockwise for a positive angle (URDF axis −z)
+    s[0] = kin.joint1_toward(x, y)
     return s
 
 
@@ -125,11 +129,14 @@ def look_pose(
     surface_z: float,
     seed: Sequence[float] | None = None,
     home: Sequence[float] | None = None,
+    upright: bool = False,
 ) -> np.ndarray:
     """Joints that point the camera at `center` on the surface at `surface_z` from as high as
     the arm safely reaches (up to LOOK_HEIGHTS_MM[0] above it), leaning up to 30° off vertical,
-    and (with `home`) that a straight joint move from `home` reaches. The camera is on link5
-    (D-027): joint 6 doesn't turn the image."""
+    and (with `home`) that a straight joint move from `home` reaches. `upright`: first from
+    nearly straight above (≤ 10°, down to UPRIGHT_MIN_MM), lower rather than leaning: into a
+    box beside the rover's raised parts. The camera is on link5 (D-027): joint 6 doesn't turn
+    the image."""
     x, y = center[0], center[1]
 
     def from_home(q: np.ndarray) -> bool:
@@ -145,17 +152,31 @@ def look_pose(
             return False
         return True
 
-    found = kin.camera_look(
-        camera_mount(sim),
-        (x, y, surface_z),
-        _seed(x, y) if seed is None else seed,
-        heights_mm=LOOK_HEIGHTS_MM,
-        z_min_mm=arm.z_min_mm,
-        keep_out=arm.keep_out_mm,
-        keep_out_margin_mm=arm.keep_out_margin_mm,
-        link5_points=arm.link5_points_mm,
-        accept=None if home is None else from_home,
-    )
+    def look(heights: Sequence[float], tilts: Sequence[float], start=None):
+        return kin.camera_look(
+            camera_mount(sim),
+            (x, y, surface_z),
+            start if start is not None else _seed(x, y) if seed is None else seed,
+            heights_mm=heights,
+            tilts_deg=tilts,
+            z_min_mm=arm.z_min_mm,
+            keep_out=arm.keep_out_mm,
+            keep_out_margin_mm=arm.keep_out_margin_mm,
+            link5_points=arm.link5_points_mm,
+            accept=None if home is None else from_home,
+        )
+
+    found = None
+    if upright:
+        heights = [h for h in LOOK_HEIGHTS_MM if h >= UPRIGHT_MIN_MM]
+        # the IK from the gripper held down over the target: the camera straight above it
+        over = kin.solve((x, y, surface_z + 105.0), "down", _seed(x, y), arm.z_min_mm)
+        for start in (None, over) if over is not None else (None,):
+            found = look(heights, (0.0, 10.0), start)
+            if found is not None:
+                break
+    if found is None:
+        found = look(LOOK_HEIGHTS_MM, (0.0, 10.0, 20.0, 30.0))
     if found is None:
         raise SystemExit(f"no look pose points the camera at {tuple(center)}")
     return found[0]
@@ -181,7 +202,7 @@ def floor_workspace(
         REACH_EXTENT_MM,
         REACH_STEP_MM,
         REACH_RING_MM,
-        2,  # the arm's planning: bump it when it changes
+        6,  # the arm's planning: bump it when it changes
     ]
 
     def cached(name: str, extra: list) -> Path:
@@ -211,7 +232,7 @@ def floor_workspace(
 
     def fine(x: float, y: float) -> bool:
         if (x, y) not in tried:
-            tried[x, y] = pick(x, y, (None, 0.0, math.pi / 2))
+            tried[x, y] = pick(x, y, FLOOR_PICK_YAWS)
         return tried[x, y]
 
     for _ in range(30):
@@ -232,16 +253,17 @@ def floor_workspace(
 def _reach_row(
     sim: SimConfig, arm: ArmConfig, zones: dict[Zone, ZoneConfig], y: float, xs: np.ndarray
 ) -> list[bool]:
-    """One row of the reach map: a pick at (x, y) plans with the fingers at any of 4 yaws."""
+    """One row of the reach map: a pick at (x, y) plans with the fingers at one of 4 yaws at
+    least (the load loop turns the grasp off the sock's own yaw where that one doesn't plan)."""
     pick = _floor_pick(sim, arm, zones)
-    yaws = (0.0, math.pi / 4, math.pi / 2, 3 * math.pi / 4)
+    yaws = FLOOR_PICK_YAWS[1:]
     return [
         REACH_RING_MM[0] <= math.hypot(x, y) <= REACH_RING_MM[1] and pick(x, y, yaws) for x in xs
     ]
 
 
 def _floor_pick(sim: SimConfig, arm: ArmConfig, zones: dict[Zone, ZoneConfig]):
-    """f(x, y, yaws): a pick at (x, y) on the floor plans at each of `yaws` and goes on home."""
+    """f(x, y, yaws): a pick at (x, y) on the floor plans at one of `yaws` and goes on home."""
     from sorter.arm.controller import Controller
 
     x0, x1, y0, y1 = REACH_EXTENT_MM
@@ -252,14 +274,19 @@ def _floor_pick(sim: SimConfig, arm: ArmConfig, zones: dict[Zone, ZoneConfig]):
     ctl = Controller(_PlanOnly(), arm, poses, zones)  # type: ignore[arg-type]
     z = sim.layout.floor_z_mm + 15.0
 
-    def pick(x: float, y: float, yaws: Sequence[float]) -> bool:
-        try:
-            for yaw in yaws:
+    lo, hi = kin.JOINT_LIMITS[0] + (-0.1, 0.1)  # the wrist reaches a few degrees past joint 1
+
+    def pick(x: float, y: float, yaws: Sequence[float | None]) -> bool:
+        if not lo <= kin.joint1_toward(x, y) <= hi:  # joint 1 doesn't turn there: no IK at all
+            return False
+        for yaw in yaws:
+            try:
                 _, _, up = ctl.plan_pick(ArmPoint(float(x), float(y), z), Zone.FLOOR, yaw, q0=home)
                 ctl._plan_joints(up[-1], home)
-        except SorterError:
-            return False
-        return True
+                return True
+            except SorterError:
+                continue
+        return False
 
     return pick
 
@@ -353,9 +380,9 @@ def zone_rois(cfg: Config, poses: dict[str, list[float]]) -> dict[str, dict]:
 
 def keep_out(sim: SimConfig, margin_mm: float) -> list[list[float]]:
     """`arm.keep_out_mm`: the rover's middle (as wide as the deck, as long as the rails) up to
-    the deck top (the margin grows it to z = 0), the wheels (not the one under the cargo box:
-    the box's floor covers it), the equipment behind the arm, and the cargo box's walls and
-    dividers."""
+    the deck top (the margin grows it to z = 0), the wheels (all four: one partly under the
+    cargo box still sticks out from under it), the equipment behind the arm, and the cargo
+    box's walls and dividers."""
     lay = sim.layout
     fz = lay.floor_z_mm
     x0, x1, y0, y1 = lay.body.bounds()
@@ -365,8 +392,7 @@ def keep_out(sim: SimConfig, margin_mm: float) -> list[list[float]]:
     r, w = lay.wheel_radius_mm, lay.wheel_width_mm
     for wx, wy in itertools.product((x0 + r, x1 - r), (y0 + w / 2, y1 - w / 2)):
         wheel = RectConfig(center_mm=(wx, wy), size_mm=(2 * r, w))
-        if not _overlap(wheel, cargo, cargo.wall_t_mm):
-            boxes.append([*wheel.bounds(), fz - 100.0, fz + 2 * r])
+        boxes.append([*wheel.bounds(), fz - 100.0, fz + 2 * r])
     boxes += [list(b.box_mm) for b in lay.equipment.values()]
     t = cargo.wall_t_mm
     cx0, cx1, cy0, cy1 = cargo.bounds()
@@ -381,12 +407,6 @@ def keep_out(sim: SimConfig, margin_mm: float) -> list[list[float]]:
     for a, b in zip(rects, rects[1:], strict=False):
         boxes.append([a.bounds()[1], b.bounds()[0], cy0, cy1, base, rim])
     return [[round(v, 1) for v in b] for b in boxes]
-
-
-def _overlap(a: RectConfig, b: RectConfig, grow_b: float = 0.0) -> bool:
-    ax0, ax1, ay0, ay1 = a.bounds()
-    bx0, bx1, by0, by1 = b.bounds(grow_b)
-    return ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1
 
 
 def arm_for(sim: SimConfig, arm: ArmConfig) -> ArmConfig:
@@ -487,13 +507,18 @@ def compute_poses(
     sim: SimConfig, arm: ArmConfig, floor_workspace: Sequence[tuple[float, float]]
 ) -> dict[str, list[float]]:
     lay = sim.layout
-    poses: dict[str, np.ndarray] = {"rest": np.zeros(kin.N_JOINTS)}
+    rest = np.zeros(kin.N_JOINTS)  # folded, facing the rover's front
+    rest[0] = kin.joint1_toward(1.0, 0.0)
+    poses: dict[str, np.ndarray] = {"rest": rest}
     home = kin.solve(HOME_TCP_MM, HOME_APPROACH, _seed(*HOME_TCP_MM[:2]), arm.z_min_mm)
     if home is None:
         raise SystemExit(f"home {HOME_TCP_MM} is not reachable")
     poses["home"] = home
     for zone, (rect, z) in zone_surfaces(sim).items():
-        poses[LOOK_POSES[zone]] = look_pose(sim, arm, rect.center_mm, z, home=home)
+        # the cargo box from straight above: a leaning look over the rover's middle had its
+        # raised top cover in the way (D-050)
+        up = zone is Zone.CARGO
+        poses[LOOK_POSES[zone]] = look_pose(sim, arm, rect.center_mm, z, home=home, upright=up)
     # from the middle of the ring outwards, each seeded by its neighbour: the IK stays on one
     # branch (a fresh seed at the ends finds the arm upright, its tool by the base column)
     targets = scan_targets(floor_workspace)
@@ -533,7 +558,7 @@ def compute_zones(
     return {
         Zone.FLOOR: ZoneConfig(
             workspace_mm=list(floor_workspace),
-            z_floor_mm=lay.floor_z_mm + 8.0,  # the fingertips stop just above the floor
+            z_floor_mm=lay.floor_z_mm + 5.0,  # the fingertips stop just above the floor
             lift_z_mm=lay.floor_z_mm + 150.0,
         ),
         Zone.CARGO: ZoneConfig(
@@ -572,13 +597,19 @@ def check(cfg: Config, step_mm: float = 20.0) -> list[str]:
             arm.plan_move(q[b], q[a])
         except SorterError as e:
             problems.append(f"move {a} ↔ {b}: {e}")
+    for color in ColorClass:  # drop_to_cargo comes in from above, from home
+        try:
+            arm._plan_drop_from_above(f"cargo_{color.value}", q["home"])
+        except SorterError as e:
+            problems.append(f"drop into cargo_{color.value} from above: {e}")
     lay = cfg.sim.layout
     cargo = lay.cargo
-    # where picks must work: the floor zone with any yaw; the cargo zone with one of
+    # where picks must work: the floor zone with one of FLOOR_PICK_YAWS (the load loop turns the
+    # grasp off the sock's yaw where that one doesn't plan); the cargo zone with one of
     # CARGO_PICK_YAWS_DEG (near a wall only some fit)
     yaws = [math.radians(a) for a in CARGO_PICK_YAWS_DEG]
     regions = [
-        (Zone.FLOOR, [lay.floor_z_mm + 15.0], [None]),
+        (Zone.FLOOR, [lay.floor_z_mm + 15.0], list(FLOOR_PICK_YAWS)),
         (Zone.CARGO, [cargo.floor_z_mm + h for h in (15, 35)], yaws),
     ]
     for zone, heights, zone_yaws in regions:

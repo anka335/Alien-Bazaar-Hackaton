@@ -17,6 +17,9 @@ class CameraConfig(BaseModel):
     exposure: float | None = None  # a fixed exposure (x100 µs) instead of the settled one
     gain: float | None = None  # a fixed gain (0-128) instead of the settled one
     white_balance_k: float | None = None  # a fixed white balance instead of the settled one
+    # B, G, R gains on every color frame after the sensor: they take out a tint the white
+    # balance can't (colored lamps: magenta); measured on a white sock under the camera
+    color_gains: tuple[float, float, float] | None = None
     settle_frames: int = 5  # frames after an option change before the probe frame
     lock_steps: int = 8  # bisection steps per locked option
     timeout_s: float = 2.0  # no frame for this long: CameraError

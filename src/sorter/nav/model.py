@@ -45,6 +45,8 @@ def build(spec: WorldSpec, cfg: NavConfig) -> tuple[str, dict[str, bytes]]:
         _item(f"clutter{i}", it, assets, asset_xml, body_xml)
     for i, ob in enumerate(spec.obstacles):
         body_xml.append(_obstacle(f"obstacle{i}", ob, rng, assets, asset_xml))
+    if spec.station is not None:
+        body_xml.append(_station(spec.station, cfg.boxes.station_tag_m, assets, asset_xml))
     rover_assets, rover_body, actuators = _rover(spec.rover, cfg, assets)
     asset_xml.append(rover_assets)
     body_xml.append(rover_body)
@@ -250,6 +252,46 @@ def _obstacle(name: str, ob: Obstacle, rng, assets, asset_xml) -> str:
         f'    <body name="{name}" pos="{ob.pos[0]:.3f} {ob.pos[1]:.3f} {sz:.3f}" '
         f'quat="{_f(_yaw_quat(ob.yaw))}">\n'
         f'      <geom {geom} material="{name}" {WORLD}/>\n    </body>'
+    )
+
+
+STATION_HALF_M = (0.14, 0.45, 0.15)  # the station's box: depth, width, height (half)
+STATION_TAGS = (14, 13, 12)  # left to right, seen from the front: 13 is the target
+
+
+def _station(pose, tag_m: float, assets, asset_xml) -> str:
+    """The unload station: a box against the wall with the AprilTags (36h11) of our cardboard
+    boxes on its face, each on a white square (a quiet zone of a quarter of the tag's side)."""
+    hx, hy, hz = STATION_HALF_M
+    x, y, yaw = pose
+    w = tag_m * 0.75  # half the white square
+    cell = 24
+    panels = []
+    for k, tag in enumerate(STATION_TAGS):
+        name = f"tag{tag}"
+        img = cv2.aruco.generateImageMarker(
+            cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11), tag, 8 * cell
+        )
+        img = cv2.copyMakeBorder(img, 2 * cell, 2 * cell, 2 * cell, 2 * cell, 0, value=255)
+        assets[f"{name}.png"] = _png(np.repeat(img[..., None], 3, axis=2))
+        asset_xml.append(f'    <texture name="{name}" type="2d" file="{name}.png"/>')
+        asset_xml.append(f'    <material name="{name}" texture="{name}" emission="0.3"/>')
+        # a square in the face's plane, wound to face +x; seen from the front the image's
+        # left is at -y
+        v = [(0, -w, -w), (0, w, -w), (0, w, w), (0, -w, w)]
+        asset_xml.append(
+            f'    <mesh name="{name}" inertia="shell" vertex="{_f(np.ravel(v), 5)}" '
+            f'face="0 1 2 0 2 3" texcoord="0 1 1 1 1 0 0 0"/>'
+        )
+        ty = (k - 1) * 0.28
+        panels.append(
+            f'      <geom type="mesh" mesh="{name}" material="{name}" '
+            f'pos="{hx + 0.002:.4f} {ty:.4f} {hz:.4f}" {VISUAL}/>'
+        )
+    return (
+        f'    <body name="station" pos="{x:.3f} {y:.3f} 0" quat="{_f(_yaw_quat(yaw))}">\n'
+        f'      <geom name="station" type="box" size="{hx} {hy} {hz}" pos="0 0 {hz}" '
+        f'rgba="0.62 0.47 0.30 1" {WORLD}/>\n' + "\n".join(panels) + "\n    </body>"
     )
 
 

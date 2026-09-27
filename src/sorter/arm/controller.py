@@ -16,7 +16,7 @@ from rebot_b601 import config as rc
 
 from sorter.arm import kinematics as kin
 from sorter.arm.config import LOOK_POSES, POSE_NAMES, ArmConfig, ZoneConfig
-from sorter.arm.driver import ArmDriver
+from sorter.arm.driver import TRACKING_FAULT, ArmDriver
 from sorter.core.errors import ArmError, EStopped, TargetRejected
 from sorter.core.types import ArmPoint, ColorClass, PickResult, Pose, Zone
 
@@ -65,6 +65,7 @@ class Controller:
         self.zones = zones
         self._held = threading.Event()
         self._at: str | None = None  # the named pose the arm is at, if any
+        self._drop_plans: dict[str, tuple | None] = {}  # drops from above from home; None: none
         self._max_speed = min(cfg.max_speed_scale, speed_ceiling())
         if self._max_speed < cfg.max_speed_scale:
             log.warning(
@@ -81,9 +82,26 @@ class Controller:
             raise EStopped("arm is held; recover() first")
 
     def _run(self, wps: np.ndarray) -> None:
+        """Run a planned path. A tracking fault (a joint fell behind: late or blocked) is
+        cleared once and the rest of the path run at half speed from where the arm stopped; a
+        second one, or any other fault, raises."""
         self._check_held()
         self._at = None
-        self.driver.execute(wps, self._speed)
+        try:
+            self.driver.execute(wps, self._speed)
+        except EStopped:
+            raise
+        except ArmError:
+            fault = self.driver.fault()
+            if fault is None or TRACKING_FAULT not in fault:
+                raise
+            log.warning("%s; cleared, going on at half speed", fault)
+            self.driver.clear_fault()
+            self._check_held()
+            q = np.asarray(self.driver.joints(), dtype=float)
+            k = int(np.argmin(np.linalg.norm(wps - q, axis=1)))  # where on the path it stopped
+            rest = np.vstack([q, wps[min(k + 1, len(wps) - 1) :]])
+            self.driver.execute(rest, max(self._speed / 2, MIN_SPEED_SCALE))
         self._check_held()  # a hold that arrived as the motion ended
 
     def _plan_joints(self, q0: Sequence[float], q1: Sequence[float]) -> np.ndarray:
@@ -191,6 +209,9 @@ class Controller:
             return
         self._held.clear()
         self.driver.resume()
+        if (fault := self.driver.fault()) is not None:  # or rest fails and the bus stays open
+            log.warning("clearing the arm's fault before the rest pose: %s", fault)
+            self.driver.clear_fault()
         self._lift()
         self._go("rest")
         self.driver.disconnect()
@@ -220,6 +241,17 @@ class Controller:
         self._check_held()
         q0 = self.driver.joints()
         c = self.cfg
+        home = self.poses["home"]
+
+        def reachable(q: np.ndarray) -> bool:  # a pose with a clear path there, else the next
+            for a in (q0, home):
+                try:
+                    self.plan_move(a, q, via_home=False)
+                    return True
+                except ArmError:
+                    continue
+            return False
+
         found = kin.camera_look(
             T_link5_cam,
             target,
@@ -230,6 +262,7 @@ class Controller:
             keep_out=c.keep_out_mm,
             keep_out_margin_mm=c.keep_out_margin_mm,
             link5_points=c.link5_points_mm,
+            accept=reachable,
         )
         if found is None:
             return None
@@ -264,7 +297,7 @@ class Controller:
         q0 = np.asarray(self.driver.joints() if q0 is None else q0, dtype=float)
         # the IK's answer depends on its seed: from where the arm is, else elbow up towards the
         # target (the arm's usual shape over the floor)
-        canonical = np.array([-math.atan2(target.y, target.x), 1.2, 1.5, 0.0, 0.0, 0.0])
+        canonical = np.array([kin.joint1_toward(target.x, target.y), 1.2, 1.5, 0.0, 0.0, 0.0])
         err: TargetRejected | None = None
         for seed in (q0, canonical):
             try:
@@ -298,9 +331,11 @@ class Controller:
         self._run(to_above)
         self._gripper(self.cfg.gripper.open)
         self._run(down)
-        opening = self._gripper(0.0)
+        self._gripper(0.0)
         self._run(up)
-        log.debug("pick at (%.0f, %.0f): gripper %.2f", target.x, target.y, opening)
+        # read once lifted: a sock that slipped out on the way up reads empty too
+        opening = self.driver.gripper()
+        log.debug("pick at (%.0f, %.0f): gripper %.3f", target.x, target.y, opening)
         return PickResult(opening, likely_empty=opening < self.cfg.gripper.empty_below)
 
     def _drop(self, pose: str) -> None:
@@ -319,8 +354,15 @@ class Controller:
         pose = f"cargo_{color.value}"
         self._go("home")
         try:
-            in_, down, up = self._plan_drop_from_above(pose)
+            if self._drop_plans.get(pose, ()) is None:
+                raise TargetRejected("didn't plan before")
+            # from `home` itself, as the layout check plans it: the IK from where the arm
+            # stopped (a hair off home) may not converge
+            if pose not in self._drop_plans:  # the same plan every time: IK takes seconds
+                self._drop_plans[pose] = self._plan_drop_from_above(pose, self.poses["home"])
+            in_, down, up = self._drop_plans[pose]
         except TargetRejected as e:
+            self._drop_plans[pose] = None
             log.warning("no drop into %s from above (%s): the plain drop", pose, e)
             self._drop(pose)
             return
@@ -332,22 +374,49 @@ class Controller:
         self._run(up)  # out of the cloth, then straight up: the fingers don't drag the sock out
         self._go("home")
 
-    def _plan_drop_from_above(self, pose: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """(home → above, above → drop, drop → back along the tool → above it) with the gripper
-        tilted outwards."""
+    def _plan_drop_from_above(
+        self, pose: str, q0: Sequence[float] | None = None
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(`q0` (default: where the arm is) → above, above → drop, drop → back along the tool
+        → above it) with the gripper tilted outwards by the first of `cargo_drop_tilts_deg`
+        (leaning away from the arm's base, turned by one of `cargo_drop_azimuths_deg`) that
+        plans. TargetRejected if none does."""
+        q0 = self.driver.joints() if q0 is None else q0
+        err: TargetRejected | None = None
+        for tilt in self.cfg.cargo_drop_tilts_deg:
+            for az in self.cfg.cargo_drop_azimuths_deg:
+                try:
+                    return self._plan_drop_tilted(pose, q0, tilt, az)
+                except TargetRejected as e:
+                    err = err or e
+        assert err is not None
+        raise err
+
+    def _plan_drop_tilted(
+        self, pose: str, q0: Sequence[float], tilt_deg: float, azimuth_deg: float = 0.0
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         c = self.cfg
         x, y, z = kin.fk_tcp(self.poses[pose])[:3, 3]
-        r = math.hypot(x, y)
-        t = math.radians(c.cargo_drop_tilt_deg)
-        approach = np.array((x / r * math.sin(t), y / r * math.sin(t), -math.cos(t)))
+        az = math.atan2(y, x) + math.radians(azimuth_deg)  # 0: straight away from the base
+        t = math.radians(tilt_deg)
+        approach = np.array((math.cos(az) * math.sin(t), math.sin(az) * math.sin(t), -math.cos(t)))
         z_above = z + c.cargo_drop_above_mm
-        in_ = self._plan_to(self.driver.joints(), (x, y, z_above), approach)
+        in_ = self._plan_to(q0, (x, y, z_above), approach)
         release = np.array((x, y, z - c.cargo_drop_depth_mm))
         down = self._plan_to(in_[-1], release, approach, linear=True)
         back = release - c.cargo_drop_back_mm * approach
         out = self._plan_to(down[-1], back, approach, linear=True)
-        up = self._plan_to(out[-1], (*back[:2], z_above), approach, linear=True)
-        return in_, down, np.vstack([out, up[1:]])
+        # then up: the fingers are out of the cloth, so lower is fine where the arm (moved out
+        # by the back-out) doesn't reach that high
+        err: TargetRejected | None = None
+        for zu in (z_above, z_above - 25.0, z_above - 50.0):
+            try:
+                up = self._plan_to(out[-1], (*back[:2], zu), approach, linear=True)
+                return in_, down, np.vstack([out, up[1:]])
+            except TargetRejected as e:
+                err = err or e
+        assert err is not None
+        raise err
 
     def drop_to_laundry(self, color: ColorClass) -> None:
         self._drop(f"laundry_{color.value}")
@@ -449,6 +518,7 @@ class Controller:
         if name not in self.poses:
             raise ValueError(f"unknown pose {name!r}")
         self.poses[name] = np.asarray(q, dtype=float)
+        self._drop_plans.clear()
         if self._at == name:
             self._at = None
 
@@ -458,10 +528,13 @@ class Controller:
         log.warning("arm held")
 
     def recover(self) -> None:
-        """Leave hold: lift, open the gripper over the floor view (what it holds drops there),
-        home."""
+        """Leave hold and a latched driver fault: lift, open the gripper over the floor view
+        (what it holds drops there), home."""
         self._held.clear()
         self.driver.resume()
+        if (fault := self.driver.fault()) is not None:
+            log.warning("clearing the arm's fault: %s", fault)
+            self.driver.clear_fault()
         self._at = None
         self._lift()
         self._go("look_floor")

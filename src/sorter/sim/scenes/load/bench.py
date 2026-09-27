@@ -51,6 +51,8 @@ def run_scene(seed: int, n_socks: int, time_limit_s: float, config_dir: str) -> 
         },
     )
     t0 = time.monotonic()
+    # the socks where the rig says the arm picks from the floor
+    cfg.sim.load.area, cfg.sim.load.zone_mm = "zone", list(cfg.zones[Zone.FLOOR].workspace_mm)
     system = build_system(cfg, sim=True)
     world = system.world
     assert world is not None

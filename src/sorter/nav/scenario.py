@@ -63,6 +63,9 @@ class WorldSpec:
     distractors: tuple[Item, ...] = ()
     obstacles: tuple[Obstacle, ...] = ()
     notes: dict = field(default_factory=dict)
+    # the unload station against a wall, AprilTags on its face (stage C): x, y, and the yaw of
+    # the face's outward normal (into the room); None: no station
+    station: tuple[float, float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -79,8 +82,10 @@ class Preset:
     distractors: int = 0
     extra_socks: int = 0
     near_wall: bool = False
+    station: bool = False  # the unload station against the -x wall (the mission)
 
 
+STATION_CLEAR_M = 0.9  # nothing starts closer than this to the station's center
 PRESETS: dict[str, Preset] = {
     "easy": Preset(),
     "side": Preset(distance_m=(1.0, 2.5), bearing_deg=(40.0, 100.0)),
@@ -121,6 +126,15 @@ PRESETS: dict[str, Preset] = {
         extra_socks=2,
         distractors=2,
         floors=("wood", "tile"),
+    ),
+    "mission": Preset(  # the full mission (stage C): several socks, then the station
+        distance_m=(1.0, 2.0),
+        bearing_deg=(0.0, 60.0),
+        extra_socks=3,
+        distractors=1,
+        obstacles=1,
+        floors=("wood", "tile"),
+        station=True,
     ),
     "random": Preset(
         distance_m=(0.8, 3.5),
@@ -246,6 +260,13 @@ def _try(name, seed, p: Preset, rng, half, floor, light) -> WorldSpec | None:
             )
         )
         taken.append((*pos, 0.3))
+    station = None
+    if p.station:
+        station = (-half + 0.16, 0.0, 0.0)
+        things = [(rx, ry)] + [s.pos for s in socks] + [o.pos for o in obstacles]
+        things += [d.pos for d in distractors]
+        if any(math.hypot(x - station[0], y - station[1]) < STATION_CLEAR_M for x, y in things):
+            return None
     return WorldSpec(
         name,
         seed,
@@ -257,6 +278,7 @@ def _try(name, seed, p: Preset, rng, half, floor, light) -> WorldSpec | None:
         tuple(distractors),
         tuple(obstacles),
         {"distance_m": round(d, 2), "bearing_deg": round(math.degrees(b), 1)},
+        station,
     )
 
 

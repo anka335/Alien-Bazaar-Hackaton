@@ -7,6 +7,7 @@ axis is the approach direction (wrist → fingertips). The wrist camera is fixed
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Sequence
 
 import numpy as np
@@ -22,6 +23,46 @@ JOINT_LIMITS = rc.JOINT_LIMITS_RAD  # (6, 2), rad
 Approach = str | Sequence[float] | None  # "down" / "forward" / "free" / a 3-vector / None = free
 Box = Sequence[float]  # x0, x1, y0, y1, z0, z1, mm
 _STEP_MM = 20.0  # spacing of the checked points along the links
+# the gripper behind the fingers, boxes in the TCP frame (x along the tool; they turn with
+# joint 6), (center, half sizes) in mm, from rebot_b601's meshes: the finger rail, 184 mm
+# across, and the gripper motor behind it. The sim's `palm*` geoms are these boxes
+HOUSING_MM = (
+    ((-81.0, 0.0, -21.0), (17.0, 92.0, 35.0)),
+    ((-116.0, 0.0, -23.0), (34.0, 31.0, 42.0)),
+)
+# they are the parts' outside: checked with this margin, not the links' (the links' points are
+# on their axes, the margin stands for their radius)
+HOUSING_MARGIN_MM = 5.0
+# points on them for the keep-out check: a grid at most ~30 mm apart (a 4 mm wall grown by the
+# margin doesn't fit between them)
+_HOUSING_PTS = np.array(
+    [
+        (cx + x, cy + y, cz + z)
+        for (cx, cy, cz), (hx, hy, hz) in HOUSING_MM
+        for x in np.linspace(-hx, hx, max(2, int(np.ceil(2 * hx / 30)) + 1))
+        for y in np.linspace(-hy, hy, max(2, int(np.ceil(2 * hy / 30)) + 1))
+        for z in np.linspace(-hz, hz, max(2, int(np.ceil(2 * hz / 30)) + 1))
+    ]
+)
+
+
+def set_base(yaw_deg: float, tilt_deg: Sequence[float] = (0.0, 0.0)) -> None:
+    """The arm's base turned on the rover (`arm.base_yaw_deg`) and tilted (`arm.base_tilt_deg`:
+    about the rover's x, then y): FK, IK and the checks work in the rover's level frame.
+    `load_config` sets it."""
+    roll, pitch = (math.radians(a) for a in tilt_deg)
+    rk.set_base(math.radians(yaw_deg), roll, pitch)
+
+
+def set_base_yaw(deg: float) -> None:
+    set_base(deg)
+
+
+def joint1_toward(x: float, y: float) -> float:
+    """Joint 1's angle that turns the arm towards (x, y) (URDF axis −z: clockwise for a
+    positive angle), in (−π, π]."""
+    a = rk.base_yaw() - math.atan2(y, x)
+    return math.atan2(math.sin(a), math.cos(a))
 
 
 def _mm(T: np.ndarray) -> Pose:
@@ -52,8 +93,8 @@ T_LINK5_TCP0: Pose = _mm(np.linalg.inv(_F0[N_JOINTS - 2]) @ _F0[N_JOINTS])  # jo
 
 def arm_points(q: Sequence[float]) -> np.ndarray:
     """Points (N, 3) on the arm, mm: along the chain of joint origins from the shoulder to the
-    TCP every ~20 mm, plus rebot_b601's gripper points. The base and link1 are left out: they
-    stand on the deck."""
+    TCP every ~20 mm, plus rebot_b601's gripper points and the gripper housing's. The base and
+    link1 are left out: they stand on the deck."""
     frames = rk.joint_frames(q)
     chain = np.array([f[:3, 3] for f in frames[1:]]) * 1000.0
     pts = [chain[:1]]
@@ -61,6 +102,8 @@ def arm_points(q: Sequence[float]) -> np.ndarray:
         n = max(1, int(np.ceil(np.linalg.norm(b - a) / _STEP_MM)))
         pts.append(a + (b - a) * (np.arange(1, n + 1)[:, None] / n))
     pts.append(rk.link_points(q)[-6:] * 1000.0)
+    T = frames[-1]  # the TCP, m
+    pts.append(_HOUSING_PTS @ T[:3, :3].T + T[:3, 3] * 1000.0)
     return np.vstack(pts)
 
 
@@ -71,10 +114,13 @@ def keep_out_hit(
     link5_points: Sequence[Sequence[float]] = (),
     z_min_mm: float | None = None,
 ) -> str | None:
-    """Which keep-out box (as text) a point of the arm at `q` is in, grown by `margin_mm`. The
+    """Which keep-out box (as text) a point of the arm at `q` is in, grown by `margin_mm`
+    (`HOUSING_MARGIN_MM` for the gripper housing's points). The
     arm's points include `link5_points` (mm, link5 frame: the wrist camera's body), and those
     are also checked against the floor at `z_min_mm` (the arm's own points are, by rebot)."""
     p = arm_points(q)
+    m = np.full(len(p), float(margin_mm))  # per point: the housing's (last in `p`) is smaller
+    m[len(p) - len(_HOUSING_PTS) :] = min(margin_mm, HOUSING_MARGIN_MM)
     if len(link5_points):
         T = fk_link5(q)
         cam = np.asarray(link5_points, dtype=float) @ T[:3, :3].T + T[:3, 3]
@@ -82,9 +128,9 @@ def keep_out_hit(
             x, y, z = cam[np.argmin(cam[:, 2])]
             return f"the camera ({x:.0f}, {y:.0f}, {z:.0f}) below the floor"
         p = np.vstack([p, cam])
+        m = np.r_[m, np.full(len(cam), float(margin_mm))]
     for b in boxes:
         x0, x1, y0, y1, z0, z1 = b
-        m = margin_mm
         inside = (
             (p[:, 0] > x0 - m)
             & (p[:, 0] < x1 + m)
@@ -269,6 +315,37 @@ def solve_camera(
     return None
 
 
+def sight_blocked(
+    camera_mm: Sequence[float],
+    target_mm: Sequence[float],
+    keep_out: Sequence[Box],
+    spread_mm: float = 50.0,
+    near_mm: float = 15.0,
+) -> bool:
+    """Whether a keep-out box stands between the camera and the target: the line of sight to
+    the target and to four points `spread_mm` around it (the view's middle, not just its
+    center), sampled every 5 mm, ending `near_mm` short of the surface."""
+    cam = np.asarray(camera_mm, dtype=float)[:3]
+    t = np.asarray(target_mm, dtype=float)[:3]
+    boxes = np.asarray(keep_out, dtype=float).reshape(-1, 6)
+    if not len(boxes):
+        return False
+    for dx, dy in ((0, 0), (spread_mm, 0), (-spread_mm, 0), (0, spread_mm), (0, -spread_mm)):
+        end = t + (dx, dy, 0.0)
+        ray = end - cam
+        n = np.linalg.norm(ray)
+        s = np.arange(0.0, max(n - near_mm, 0.0), 5.0)[:, None] / n
+        p = cam + s * ray
+        inside = (
+            (p[:, None, 0] > boxes[:, 0]) & (p[:, None, 0] < boxes[:, 1])
+            & (p[:, None, 1] > boxes[:, 2]) & (p[:, None, 1] < boxes[:, 3])
+            & (p[:, None, 2] > boxes[:, 4]) & (p[:, None, 2] < boxes[:, 5])
+        )  # fmt: skip
+        if inside.any():
+            return True
+    return False
+
+
 def camera_look(
     T_link5_cam: Pose,
     target_mm: Sequence[float],
@@ -289,6 +366,8 @@ def camera_look(
     tilt), or None."""
     x, y, _ = (float(v) for v in target_mm)
     back = np.arctan2(-y, -x) if np.hypot(x, y) > 1 else 0.0  # from the target to the base
+    # the line of sight past the rover's parts; not the target's own walls (a box it looks into)
+    walls = [b for b in keep_out if not (b[0] - 1 <= x <= b[1] + 1 and b[2] - 1 <= y <= b[3] + 1)]
     t = np.asarray(target_mm, dtype=float)
     for h in heights_mm:
         for tilt in tilts_deg:
@@ -304,6 +383,8 @@ def camera_look(
                     continue
                 hit = keep_out_hit(q, keep_out, keep_out_margin_mm, link5_points, z_min_mm)
                 if hit is not None:
+                    continue
+                if sight_blocked((fk_link5(q) @ T_link5_cam)[:3, 3], t, walls):
                     continue
                 if accept is not None and not accept(q):
                     continue

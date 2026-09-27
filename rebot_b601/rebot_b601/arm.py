@@ -537,6 +537,11 @@ class Arm:
         self._abort: str | None = None
         self._comm_fail = 0
         self._err_since = np.full(6, np.nan)
+        self._prev_cmd: tuple[float, np.ndarray] | None = None  # (time, q_cmd) of the last check
+        self._lag_speed = np.zeros(6)   # recent commanded speed [deg/s], decays after a stop
+        self._fb_key: np.ndarray | None = None   # the last feedback, bit for bit
+        self._fb_since = 0.0                     # when it last changed
+        self._stale = False                      # feedback frozen: no motion until reconnect
         self._grip_target = 0.0          # rad
         self._grip_cmd_time = 0.0
         self._last_target: np.ndarray | None = None   # last requested xyz, for the viewer
@@ -579,6 +584,7 @@ class Arm:
         self._fault = self._abort = None
         self._comm_fail = 0
         self._err_since[:] = np.nan
+        self._stale, self._fb_key = False, None
         self._traj = None
         self._hold = np.clip(meas.q, lo, hi)
         self._q_cmd = self._hold.copy()
@@ -680,6 +686,7 @@ class Arm:
             meas = self._meas
             if meas is None:
                 return
+        self._check_stale(meas, now)
         with self._lock:
             self._meas = meas
             if self._traj is not None:
@@ -700,6 +707,27 @@ class Arm:
                 backend.send_arm(q_cmd)
                 backend.send_gripper_torque(tau_g)
 
+    def _check_stale(self, meas: Measurement, now: float) -> bool:
+        """True (and a fault) once the hardware's feedback has been frozen too long."""
+        if self.backend is None or self.backend.simulated or not self._enabled:
+            self._fb_key = None
+            return False
+        key = np.concatenate([meas.q, meas.dq, meas.tau])
+        if self._fb_key is None or not np.array_equal(key, self._fb_key):
+            self._fb_key, self._fb_since = key, now
+            return False
+        limit = C.STALE_FEEDBACK_MOVING_S if self._traj is not None else C.STALE_FEEDBACK_IDLE_S
+        if now - self._fb_since <= limit:
+            return False
+        if not self._stale:
+            self._stale = True
+            self._raise_fault(
+                f"lost motor feedback: nothing new from the motors for {now - self._fb_since:.1f} s "
+                "(the CAN adapter stopped receiving); holding the last setpoint. Quit, replug the "
+                "USB-CAN adapter and start again"
+            )
+        return True
+
     def _gripper_torque(self, meas: Measurement, now: float) -> float:
         if not C.GRIPPER_ENABLED:
             return 0.0
@@ -710,10 +738,17 @@ class Arm:
         return float(np.clip(tau, -lim, lim))
 
     def _safety_checks(self, meas: Measurement, q_cmd: np.ndarray, now: float) -> None:
-        # tracking error
+        # tracking error, allowing a lag of TRACKING_LAG_S at the recent commanded speed (it
+        # decays over TRACKING_LAG_S after the setpoint stops: the joint still catches up)
         err = np.degrees(np.abs(meas.q - q_cmd))
+        if self._prev_cmd is not None and (dt := now - self._prev_cmd[0]) > 1e-3:
+            speed = np.degrees(np.abs(q_cmd - self._prev_cmd[1])) / dt
+            decay = math.exp(-dt / C.TRACKING_LAG_S) if C.TRACKING_LAG_S > 0 else 0.0
+            self._lag_speed = np.maximum(speed, self._lag_speed * decay)
+        self._prev_cmd = (now, q_cmd.copy())
+        allowed = C.TRACKING_ERR_DEG + C.TRACKING_LAG_S * self._lag_speed
         for j in range(6):
-            if err[j] > C.TRACKING_ERR_DEG:
+            if err[j] > allowed[j]:
                 if np.isnan(self._err_since[j]):
                     self._err_since[j] = now
                 elif now - self._err_since[j] > C.TRACKING_ERR_TIME_S:
@@ -741,7 +776,9 @@ class Arm:
                 self._fault = msg
                 log.error("FAULT: %s", msg)
             self._abort = msg
-            if self._meas is not None:
+            if self._stale:  # the measured pose is old: hold where it was told to be, no jump
+                self._hold = self._q_cmd.copy()
+            elif self._meas is not None:
                 self._hold = np.clip(self._meas.q, C.JOINT_LIMITS_RAD[:, 0], C.JOINT_LIMITS_RAD[:, 1])
             self._traj = None
             self._done.set()
@@ -1004,6 +1041,8 @@ class Arm:
         self._require(motion=False)
         if not self._enabled:
             raise ArmError("torque is off; disconnect and connect again")
+        if self._stale:
+            raise ArmError("no motor feedback (the CAN adapter stopped receiving): quit, replug it and start again")
         with self._lock:
             fault = self._fault
             self._hold = np.clip(self._meas.q, C.JOINT_LIMITS_RAD[:, 0], C.JOINT_LIMITS_RAD[:, 1])

@@ -57,6 +57,8 @@ No collisions. On unseen seeds 10–19 (plus `random`): 91 %, one collision (obs
 
 ## Log
 
+- 2026-09-27 (from C, [D-052](../decisions.md)): `WorldSpec.station` and scenario `mission` (the unload station with tags 14 13 12 against the −x wall, `model._station`), `nav.boxes.station_tag_m`. Other scenarios unchanged.
+
 - 2026-09-27: the OAK-D's first ~1.5 s of frames are nearly black (auto-exposure): `RealOakD` now waits for it to settle. The camera's pitch measured 16.1° at 13:00 (12.5° in the morning): the mount moves, re-check with `hw-check`.
 - 2026-09-27: RUN ROBOT on the real Leo (SAM3, the default there; classic misses a sock in dim light) reached the sock. Found: the laptop roamed off `LeoRover-9a1f` onto another saved Wi-Fi mid-run (the `keepalive ping timeout` error): rosbridge now reconnects and the odometry stream is the liveness check (no odometry 1 s while driving: fault). The real rover coasts ~0.4 s after a stop (0.53 m → 0.63 m, 10° → 18°): `nav.real.stop_lead_s` stops early by that. RUN ROBOT stops 30 cm before the sock by default.
 - 2026-09-27: first real run of `hunt --real`: the OAK-D (depthai, on the laptop) gave almost no depth (sparse stripes, no floor), so the obstacle guard stopped every move early, then the device crashed; later the odometry fault stopped the rover (commanded left turn, wheels+IMU said right; a wheel on a cable?). Check depth in `hw-check` before driving.

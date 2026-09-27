@@ -15,10 +15,12 @@ import math
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, replace
 
+import mujoco
 import numpy as np
 from rebot_b601.assets import ASSETS_DIR
 from rebot_b601.kinematics import _FINGER_L, _FINGER_R, FINGER_TRAVEL_M
 
+from sorter.arm import kinematics as kin
 from sorter.core.types import ColorClass
 from sorter.sim.config import RAIL_INSET_MM, SimConfig
 from sorter.sim.physics.floor import parquet_texture
@@ -229,7 +231,10 @@ def _arm(parent: ET.Element, cfg: SimConfig) -> None:
                 **{"class": "visual"},
             )
 
-    body = ET.SubElement(parent, "body", name="base_link")
+    # the arm turned and tilted on the rover (arm.base_yaw_deg, base_tilt_deg)
+    quat = np.zeros(4)
+    mujoco.mju_mat2Quat(quat, kin.rk.base_rotation().ravel())
+    body = ET.SubElement(parent, "body", name="base_link", quat=_f(*quat))
     inertial(body, "base_link")
     visuals(body, "base_link")
     ET.SubElement(body, "geom", name="base_col", type="cylinder", size="0.06 0.04", pos="0 0 0.04")
@@ -271,8 +276,17 @@ def _arm(parent: ET.Element, cfg: SimConfig) -> None:
     inertial(tcp, "gripper_end")
     visuals(tcp, "gripper_end")
     ET.SubElement(tcp, "site", name="tcp", size="0.004")
-    # the gripper housing behind the fingers; the camera is on link5, joint 6 doesn't turn it
-    ET.SubElement(tcp, "geom", name="palm", type="box", size="0.042 0.09 0.034", pos="-0.115 0 0")
+    # the gripper behind the fingers (kinematics.HOUSING_MM); the camera is on link5, joint 6
+    # doesn't turn it
+    for k, (center, half) in enumerate(kin.HOUSING_MM):
+        ET.SubElement(
+            tcp,
+            "geom",
+            name="palm" if k == 0 else f"palm{k}",
+            type="box",
+            size=_f(*(v / 1000 for v in half)),
+            pos=_f(*(v / 1000 for v in center)),
+        )
     T = camera_mount(cfg)
     mount = T[:3, 3] / 1000
     w, h, d = (v / 2000 for v in CAMERA_BODY_MM)

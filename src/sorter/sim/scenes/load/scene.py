@@ -14,6 +14,7 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
+from sorter.arm.controller import in_polygon
 from sorter.sim.config import SimConfig
 from sorter.sim.physics.model import CLOTH_N, ItemSpec, palette_rgb
 
@@ -23,6 +24,16 @@ ROVER_GAP_MM = 70.0  # a sock's center stays this far from the rover and the car
 
 def _spot(cfg: SimConfig, rng: np.random.Generator) -> tuple[float, float]:
     sc, lay = cfg.load, cfg.layout
+    if sc.area == "zone":  # a sock's middle this far inside the zone: most of it is in reach
+        poly, inset = sc.zone_mm, sc.sock_mm[1] / 2
+        xs, ys = zip(*poly, strict=True)
+        while True:
+            x, y = rng.uniform(min(xs), max(xs)), rng.uniform(min(ys), max(ys))
+            if all(
+                in_polygon(x + dx, y + dy, poly)
+                for dx, dy in ((0, 0), (inset, 0), (-inset, 0), (0, inset), (0, -inset))
+            ):
+                return x, y
     if sc.area == "view":
         x0, x1, y0, y1 = lay.floor_view.bounds(-sc.margin_mm)
         return rng.uniform(x0, x1), rng.uniform(y0, y1)
@@ -81,6 +92,18 @@ def sock_shape(rng: np.random.Generator, size_mm: tuple[float, float], bunched: 
 
 def add(world: ET.Element, asset: ET.Element, cfg: SimConfig, rng: np.random.Generator):
     sc, lay = cfg.load, cfg.layout
+    if sc.placed:
+        z = (lay.floor_z_mm + 8) / 1000
+        return [
+            ItemSpec(
+                p.color,
+                p.rgb or palette_rgb(p.color, rng),
+                (p.x_mm / 1000, p.y_mm / 1000, z),
+                p.yaw_rad,
+                rest_m=tuple(sock_shape(rng, sc.sock_mm, p.bunched).ravel()),
+            )
+            for p in sc.placed
+        ]
     placed: list[tuple[float, float]] = []
     items = []
     for color in sc.socks:

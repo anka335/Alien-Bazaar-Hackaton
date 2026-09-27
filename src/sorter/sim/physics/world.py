@@ -38,6 +38,10 @@ SETTLE_S = 1.5  # the items settle before anything else happens
 GRIP_CATCH_NM = 0.5  # motor 7 torque that means "closing" (rebot_b601 holds a grip with 1 N·m)
 GRIP_RELEASE_NM = 0.5  # and "opening"
 GRIP_MAX_M = 0.035  # a finger further out than this pinches nothing
+# a sock squeezed between the fingers keeps them this far apart (both together): the flex gives
+# way to ~1 mm under the fingers' force, a real sock doesn't. On the rig closed on nothing reads
+# ≤ 0.012 and `arm.gripper.empty_below` is 0.02 (D-050): 2.5 mm reads 0.025. Measure it.
+PINCHED_SOCK_M = 0.0025
 GRIP_STALL_M_S = 0.004  # fingers slower than this have stopped on something
 GRIP_SETTLE_S = 0.3  # after a close command starts (the fingers are at rest at first too)
 
@@ -67,6 +71,8 @@ class PhysicsWorld:
         self.grip_act = m.actuator("gripper").id
         self.finger_qpos = m.jnt_qposadr[m.joint("finger_left").id]
         self.finger_dof = m.jnt_dofadr[m.joint("finger_left").id]
+        self._finger_jnt = m.joint("finger_left").id
+        self._finger_lo = float(m.jnt_range[self._finger_jnt, 0])
         self.tcp_site = m.site("tcp").id
         self._kp = m.actuator_gainprm[self.arm_act, 0].copy()
         self._gravcomp = m.body_gravcomp.copy()
@@ -84,7 +90,9 @@ class PhysicsWorld:
         # along unheld. (Touching none, the held one wraps through the fingers and, let go,
         # stays hooked on them.) The hand's contype becomes a bit only the held item's affinity
         # has; the world still meets the hand through its own contype and the hand's affinity
-        self._hand = np.array([m.geom("palm").id, *self._pads])
+        # the gripper housing is several `palm*` boxes (kinematics.HOUSING_MM)
+        palm = [g for g in range(m.ngeom) if m.geom(g).name.startswith("palm")]
+        self._hand = np.array([*palm, *self._pads])
         self._hand_bits = (m.geom_contype[self._hand].copy(), m.geom_conaffinity[self._hand].copy())
         self._flex_affinity = m.flex_conaffinity.copy()
         self._shed_until: float | None = None  # sim time the hand touches cloth again
@@ -179,6 +187,7 @@ class PhysicsWorld:
         if held:
             if not self.enabled or torque > GRIP_RELEASE_NM:
                 d.eq_active[self._grip_eq[self._grip_idx]] = 0
+                m.jnt_range[self._finger_jnt, 0] = self._finger_lo
                 # the fingers kept closing through the held cloth: it may be threaded round a
                 # pad. For a moment the hand touches no cloth, so it falls off, not hooked
                 m.flex_conaffinity[:] = self._flex_affinity
@@ -233,6 +242,7 @@ class PhysicsWorld:
         eq = self._grip_eq[idx]
         m.eq_data[eq, 3:6] = local_g  # hold each vertex where it is now, in the gripper_end frame
         d.eq_active[eq] = 1
+        m.jnt_range[self._finger_jnt, 0] = PINCHED_SOCK_M / 2  # the cloth keeps them apart
         m.geom_contype[self._hand] = HELD_BIT
         m.geom_conaffinity[self._hand] = 1
         for i in pinched:

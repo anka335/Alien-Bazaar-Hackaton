@@ -123,7 +123,7 @@ def show_pose(
     found: list[tuple[float, np.ndarray]] = []
     for _ in range(samples):
         q = home.copy()
-        q[0] = rng.uniform(-0.6, 0.6)
+        q[0] = home[0] + rng.uniform(-0.6, 0.6)
         q[1:5] = home[1:5] + rng.uniform(-2.2, 2.2, 4)
         q = np.clip(q, lim[:, 0] + 0.03, lim[:, 1] - 0.03)
         tcp = kin.fk_tcp(q)[:3, 3]

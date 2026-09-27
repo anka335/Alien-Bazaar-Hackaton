@@ -97,6 +97,16 @@ WORKSPACE_Z = (Z_MIN, 0.70)
 # TRACKING_ERR_TIME_S (arm blocked, collided, or motor fault).
 TRACKING_ERR_DEG = _env_float("REBOT_TRACKING_ERR_DEG", 12.0)
 TRACKING_ERR_TIME_S = 0.4
+# Plus this many seconds of the commanded joint speed: a joint that follows a moving setpoint
+# with a delay (a late control loop over USB-CAN, slow feedback: ~0.3 s on the macOS rig) lags
+# by delay x speed without being blocked. A blocked joint's error keeps growing past it.
+TRACKING_LAG_S = _env_float("REBOT_TRACKING_LAG_S", 0.4)
+# Motor feedback that doesn't change at all for this long (bit for bit: position, velocity,
+# torque of every motor) is stale: the adapter stopped receiving while the commands still go
+# out. On the rig it stays the same ≤ 0.3 s normally; a dead receive froze it for minutes and
+# the arm jerked back to the frozen pose on every fault. Hardware only.
+STALE_FEEDBACK_MOVING_S = 0.5
+STALE_FEEDBACK_IDLE_S = 1.5
 # Refuse to enable the motors when the measured pose is outside the limits by
 # more than this (usually means the zero calibration is missing / wrong).
 POSE_SANITY_MARGIN_DEG = 15.0
@@ -111,8 +121,8 @@ TEMP_DISABLE_C = 135.0
 GRIPPER_OPEN_DEG = _env_float("REBOT_GRIPPER_OPEN_DEG", 240.0)
 GRIPPER_KP = 12.0
 GRIPPER_KD = 0.05
-GRIPPER_TORQUE_LIMIT = _env_float("REBOT_GRIPPER_TORQUE", 3.0)   # Nm while moving
-GRIPPER_HOLD_TORQUE = 1.0                                        # Nm when stalled/holding
+GRIPPER_TORQUE_LIMIT = _env_float("REBOT_GRIPPER_TORQUE", 4.5)   # Nm while moving (3: socks slipped out)
+GRIPPER_HOLD_TORQUE = _env_float("REBOT_GRIPPER_HOLD_TORQUE", 2.5)  # Nm when stalled/holding (RS00: 5 rated)
 GRIPPER_ENABLED = not _env_bool("REBOT_DISABLE_GRIPPER", False)
 
 # ---- Dry run --------------------------------------------------------------
