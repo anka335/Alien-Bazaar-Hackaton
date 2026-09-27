@@ -8,7 +8,7 @@ Single source of truth for the contracts between the stages. The shared types ar
 - **Leo Rover, ROS 2 track** ([D-037](decisions.md)): separately from the stages, `ros2_ws/src/rover_nav` drives a real Leo Rover (LeoOS, ROS 2 Jazzy) with the laptop on board through one room on a saved map; see [Rover navigation](#rover-navigation-ros-2-track). Not part of the sorter loop.
 - **Arm:** Seeed reBot Arm B601-RS (6 DoF + parallel gripper, [D-011](decisions.md)), driven through `rebot_b601/` ([D-019](decisions.md)). Joint 1 turns ±145°, so nothing right behind the arm is reachable; with the gripper pointing down the TCP reaches ~100 mm above the deck at most, and the floor from ~140 to ~450 mm out.
 - **Camera:** Intel RealSense D435i RGB-D on the wrist, fixed to link5, looking along the gripper ([D-006](decisions.md), [D-027](decisions.md)).
-- **Cargo box:** one cardboard box, 190 × 190 mm outside and 75 deep, to the arm's left and a bit behind, its underside 45 mm below the deck; every sock goes into it, not split by color ([D-040](decisions.md)). `sim.layout.cargo.compartments` can still split it along x.
+- **Cargo box:** one cardboard box, 190 × 190 mm outside and 75 deep, to the arm's right and a bit behind ([D-045](decisions.md)), its underside 45 mm below the deck; every sock goes into it, not split by color ([D-040](decisions.md)). `sim.layout.cargo.compartments` can still split it along x.
 - **Behind the arm** on the rover: the electronics case, the power supply and a power strip (keep-out).
 - **Unload station:** 3 laundry bins (cardboard boxes like the cargo box) on the floor in a row in front of the rover, one per color ([D-043](decisions.md)); the rover parks there within a tolerance, the loop finds each bin with the camera.
 - The layout is `sim.layout` (arm base frame, mm), measured on the rover except the equipment and the box's position ([D-042](decisions.md)):
@@ -19,7 +19,7 @@ Single source of truth for the contracts between the stages. The shared types ar
 | rover body (chassis + wheels, from above) | 420 × 420: x −300..120, y −210..210; wheels Ø120 (not measured) × 130 at its corners; below the deck (z < 0) |
 | deck plate | 300 × 185: x −240..60, y −92.5..92.5, top z = 0; the arm at its front edge |
 | equipment (`equipment`) | electronics case x −200..−55, z −75..−5; power supply and power strip on it, up to z 35 |
-| cargo box, inside | 182 × 182 (190 outside): x −141..41, y 109..291, floor z −41 (underside −45), rim z 34, walls 4 mm |
+| cargo box, inside | 182 × 182 (190 outside): x −141..41, y −291..−109, floor z −41 (underside −45), rim z 34, walls 4 mm |
 | floor view (what `look_floor` frames) | 280 × 240 centered at (310, 0) |
 | floor pick zone (`zones.floor`, computed) | the ring the arm reaches: ~150–490 mm out, −146° … +140° (not behind the rover, not under the box) |
 | cargo pick zone (`zones.cargo`, computed) | the box's inside 16 mm off the walls, corners cut by 45 mm; a pick plans with the fingers at 0, 90, 45 or 135° |
