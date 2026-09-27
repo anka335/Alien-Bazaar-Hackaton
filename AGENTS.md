@@ -9,7 +9,7 @@ A robotic arm on a rover sorts socks by color. **Load:** the rover stops next to
 ## Where things are
 
 - [docs/plan.md](docs/plan.md): the stages and the **status board**
-- [docs/rover/](docs/rover/): one brief per stage (0 preparation, done; A loading; B unloading), the unit of work for an agent: goal, lane, tasks, known issues
+- [docs/rover/](docs/rover/): one brief per stage (0 preparation, done; A loading; B unloading; N navigation; C full mission; D sim-to-real), the unit of work for an agent: goal, lane, tasks, known issues
 - [docs/architecture.md](docs/architecture.md): physical setup, components, loops, coordinate frames, **contracts between the stages**, simulator, lanes (who owns which path)
 - [docs/decisions.md](docs/decisions.md): decision log
 
@@ -22,18 +22,18 @@ A robotic arm on a rover sorts socks by color. **Load:** the rover stops next to
 
 ## Parallel workflow
 
-Two agents work at the same time, **one agent per stage** (A loading, B unloading).
+Several agents work at the same time, **one agent per stage** (A, B and N in parallel; C and D after them).
 
 1. **Pick up a stage.** Use `/start-stage A` in Claude Code, or do it by hand:
-   - read the brief `docs/rover/<a|b>-*.md`, `docs/rover/0-preparation.md` (what the base gives, known issues) and `docs/architecture.md`;
-   - create branch `stage/<a|b>-short-name` from fresh `main`. For both agents on one machine, use a separate worktree: `git worktree add ../abh-a -b stage/a-loading`;
+   - read the brief `docs/rover/<letter>-*.md`, `docs/rover/0-preparation.md` (what the base gives, known issues) and `docs/architecture.md`;
+   - create branch `stage/<letter>-short-name` from fresh `main`. For several agents on one machine, use a separate worktree each: `git worktree add ../abh-a -b stage/a-loading`;
    - set the stage to `in progress` with the owner in the status board ([docs/plan.md](docs/plan.md)) and in the brief's header.
-2. **Stay in your lane.** Edit only the paths your stage owns ([architecture.md → Repo layout](docs/architecture.md#repo-layout)), plus your brief. If you need a change in the other stage's code, write it under *Requests from other blocks* in its brief instead.
+2. **Stay in your lane.** Edit only the paths your stage owns ([architecture.md → Repo layout](docs/architecture.md#repo-layout)), plus your brief. If you need a change in another stage's code, write it under *Requests from other blocks* in its brief instead.
 3. **Shared code is a contract.** Core, the arm, the base scene, the layout tool, the state machine, the dashboard backend and the front end's shared part belong to both. To change one:
    - update `docs/architecture.md` in the same PR;
-   - add a line to the *Log* of the other stage's brief;
+   - add a line to the *Log* of the other active stages' briefs;
    - say so explicitly in the PR description;
-   - keep it a small PR of its own, so the other agent can rebase onto it early.
+   - keep it a small PR of its own, so the other agents can rebase onto it early.
 4. **Finish.** Run your stage's tests, run `/sync-docs`, update the status board, and open a PR into `main`.
 
 ## Keeping docs in sync (mandatory)
