@@ -1,6 +1,6 @@
 """The unload loop (stage B): every sock from the cargo box into the laundry bin of its color.
 
-Only the wrist camera tells the loop where things are (D-036). The rover is
+Only the wrist camera tells the loop where things are (D-040). The rover is
 parked at the station, but not exactly where the layout says, and the bins are put down by
 hand, so the loop first finds each bin (a look at its layout place, a second look centered on
 the estimate if the bin was cut by the image edge). Then, per sock: look into the cargo box,

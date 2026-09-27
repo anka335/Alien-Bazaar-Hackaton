@@ -18,7 +18,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | D3 | Friction grip | todo | — | An option to grip by friction instead of attaching the cloth vertices |
 | D4 | Real SAM3 on renders | todo | — | The benchmarks run with `sim.use_sam3` (the real service) instead of the render's segmentation |
 | D5 | Arm like the rig | todo | — | Joint lag and a slower control loop as seen on the real arm |
-| D6 | Benchmark under perturbations | todo | — | A's, B's and C's benchmarks with D1–D5 on hold up (a small drop is fine) |
+| D6 | Benchmark under perturbations | todo | — | A's, B's, F's and C's benchmarks with D1–D5 on hold up (a small drop is fine) |
 
 ## Log
 

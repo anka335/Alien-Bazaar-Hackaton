@@ -4,12 +4,12 @@ Instructions for AI coding agents (Claude Code, Codex, Cursor, …) and humans w
 
 ## Project in one paragraph
 
-A robotic arm on a rover sorts socks by color. **Load:** the rover stops next to socks; the arm finds them on the floor with the RGB-D camera on its wrist, classifies each one's color (light / dark / colored) and drops it into the matching compartment of the cargo box on the rover. **Unload:** at a station the arm empties each compartment into its laundry bin. A live dashboard shows the process. Everything is built on the MuJoCo simulator first. This is a **hackathon project**: favor simple, working, demo-able solutions over generality. Details are in [README.md](README.md).
+A robotic arm on a rover sorts socks by color. **Load:** the rover stops next to socks; the arm finds them on the floor with the RGB-D camera on its wrist, classifies each one's color (light / dark / colored) and drops it into the matching compartment of the cargo box on the rover. **Unload:** at a station the arm empties each compartment into its laundry bin. A live dashboard shows the process. Everything is built on the MuJoCo simulator first. Separately, the ROS 2 track drives the real Leo Rover in one room ([docs/rover/ros2-navigation.md](docs/rover/ros2-navigation.md)). This is a **hackathon project**: favor simple, working, demo-able solutions over generality. Details are in [README.md](README.md).
 
 ## Where things are
 
 - [docs/plan.md](docs/plan.md): the stages and the **status board**
-- [docs/rover/](docs/rover/): one brief per stage (0 preparation, done; A loading; B unloading; N navigation; C full mission; D sim-to-real), the unit of work for an agent: goal, lane, tasks, known issues
+- [docs/rover/](docs/rover/): one brief per stage (0 preparation, done; A loading; B unloading; F far detection; N navigation; C full mission; D sim-to-real), the unit of work for an agent: goal, lane, tasks, known issues
 - [docs/architecture.md](docs/architecture.md): physical setup, components, loops, coordinate frames, **contracts between the stages**, simulator, lanes (who owns which path)
 - [docs/decisions.md](docs/decisions.md): decision log
 
@@ -22,7 +22,7 @@ A robotic arm on a rover sorts socks by color. **Load:** the rover stops next to
 
 ## Parallel workflow
 
-Several agents work at the same time, **one agent per stage** (A, B and N in parallel; C and D after them).
+Several agents work at the same time, **one agent per stage** (A, B, F and N in parallel; C and D after them).
 
 1. **Pick up a stage.** Use `/start-stage A` in Claude Code, or do it by hand:
    - read the brief `docs/rover/<letter>-*.md`, `docs/rover/0-preparation.md` (what the base gives, known issues) and `docs/architecture.md`;

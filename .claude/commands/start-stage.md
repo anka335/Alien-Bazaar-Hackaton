@@ -1,5 +1,5 @@
 ---
-description: Pick up a rover stage (A, B, N, C or D) - read its brief, create a branch, mark it in progress
+description: Pick up a rover stage (A, B, F, N, C or D) - read its brief, create a branch, mark it in progress
 argument-hint: <stage letter, e.g. A or N>
 ---
 

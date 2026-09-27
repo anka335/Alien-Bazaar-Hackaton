@@ -1,7 +1,7 @@
 # Rover stage C: Full mission
 
 **Status:** todo · **Owner:** — · **Branch:** —
-**Depends on:** [A: Loading](a-loading.md), [B: Unloading](b-unloading.md), [N: Navigation](n-navigation.md).
+**Depends on:** [A: Loading](a-loading.md), [B: Unloading](b-unloading.md), [F: Far detection](f-far-detection.md), [N: Navigation](n-navigation.md).
 
 ## Goal
 

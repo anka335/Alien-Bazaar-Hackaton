@@ -5,6 +5,7 @@ Single source of truth for the contracts between the stages. The shared types ar
 ## Physical setup
 
 - **Rover** ([D-032](decisions.md)): built and driven by others. The arm is bolted to its deck plate, **200 mm above the floor**. For our code the rover stands still: in load mode it has stopped next to socks, in unload mode it is parked at the station. There is no rover interface yet.
+- **Leo Rover, ROS 2 track** ([D-037](decisions.md)): separately from the stages, `ros2_ws/src/rover_nav` drives a real Leo Rover (LeoOS, ROS 2 Jazzy) with the laptop on board through one room on a saved map; see [Rover navigation](#rover-navigation-ros-2-track). Not part of the sorter loop.
 - **Arm:** Seeed reBot Arm B601-RS (6 DoF + parallel gripper, [D-011](decisions.md)), driven through `rebot_b601/` ([D-019](decisions.md)). Joint 1 turns ±145°, so nothing right behind the arm is reachable; with the gripper pointing down the TCP reaches ~100 mm above the deck at most, and the floor from ~140 to ~450 mm out.
 - **Camera:** Intel RealSense D435i RGB-D on the wrist, fixed to link5, looking along the gripper ([D-006](decisions.md), [D-027](decisions.md)).
 - **Cargo box** on the deck, to the arm's left: 3 compartments in a row along x (light, dark, colored).
@@ -63,7 +64,7 @@ STARTING → SCAN → SENSE_FLOOR ─sock─► PICK_FROM_FLOOR → DROP_TO_CARG
                       └─no sock × empty_confirmations─► DONE
 ```
 
-**Unload (stage B):** only the wrist camera tells where things are ([D-036](decisions.md)). Once per run the bins are found (a look at each bin's layout place, a second one centered on the estimate if the bin was cut by the image edge). Per sock: the sock on top of the pile, its grasp and finger directions (the open fingers kept off other socks); after the pick a second look into the box (exactly one sock gone gives the color; none or several: everything back into the box, and again; it is also the next cycle's look), the `show_held` pose (is anything held); the drop into the found bin via home, then a look into the bin: only a seen drop is counted.
+**Unload (stage B):** only the wrist camera tells where things are ([D-040](decisions.md)). Once per run the bins are found (a look at each bin's layout place, a second one centered on the estimate if the bin was cut by the image edge). Per sock: the sock on top of the pile, its grasp and finger directions (the open fingers kept off other socks); after the pick a second look into the box (exactly one sock gone gives the color; none or several: everything back into the box, and again; it is also the next cycle's look), the `show_held` pose (is anything held); the drop into the found bin via home, then a look into the bin: only a seen drop is counted.
 
 ```text
 STARTING → LOOK_CARGO (the bins, once) → SENSE_CARGO ─sock─► PICK_FROM_CARGO → DROP_TO_LAUNDRY(color) → LOOK_CARGO …
@@ -328,8 +329,26 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 - **Grip:** when a close stalls the fingers on cloth touching both pads, the vertices between them are attached to the gripper until an open (a stand-in for friction). `sim.miss_prob` makes a close catch nothing.
 - `PhysicsWorld`: `step`, `teleport_arm`, `joints`, `tcp`, `looking_at`, `vertices(item)`, `location(item)` → `gripper` / `cargo` + color / `laundry` + color / `floor` / `other`, `at(location, color=None)`.
 - The arm: `rebot_b601.arm.Arm` runs unchanged on `MujocoBackend`; `PhysicsCamera` renders the D435i (depth noise, no depth under 175 mm) and `segment()` gives MuJoCo's segmentation as SAM3-style instances.
-- `sorter.sim.layout` computes the rig (poses, zones, views, keep-out) with the arm's IK and checks it; `sorter.sim.rig` has the sim camera mount: `sim.camera_mount_mm` off the TCP, or the whole `T_link5_cam` in `sim.camera_mount_T` (e.g. the rig's hand-eye result, [D-037](decisions.md)).
+- `sorter.sim.layout` computes the rig (poses, zones, views, keep-out) with the arm's IK and checks it; `sorter.sim.rig` has the sim camera mount: `sim.camera_mount_mm` off the TCP, or the whole `T_link5_cam` in `sim.camera_mount_T` (e.g. the rig's hand-eye result, [D-041](decisions.md)).
 - Stage B's working geometry is the real rover (`sorter.sim.scenes.unload.rover`: `REAL_ROVER` over `sim.layout`, its rig computed and cached, the camera at the hand-eye result); `bench` runs seeded unload scenarios judged by the simulator's ground truth.
+
+## Rover navigation (ROS 2 track)
+
+`ros2_ws/src/rover_nav` ([D-037](decisions.md), [D-038](decisions.md)). Ready-made nodes: RTAB-Map for SLAM, Nav2 for driving, a Nav2 keepout filter for the forbidden half of the room. Two launches: **mapping** (RTAB-Map mapping, keyboard teleop, done once) and **navigation** (RTAB-Map localization on the saved database, Nav2, keepout filter).
+
+| Interface | Direction | Notes |
+| --- | --- | --- |
+| `/rover_nav/oak/rgb/image_rect`, `/rover_nav/oak/stereo/image_raw`, `/rover_nav/oak/rgb/camera_info` | in | `nav_camera:=oak` (default): OAK-D on the rover's front, DepthAI driver started by `rover_nav` in `/rover_nav`; TF `leo/base_link` → `oak` → `oak_rgb_camera_optical_frame` from the driver's description |
+| `/camera/camera/color/image_raw`, `/camera/camera/aligned_depth_to_color/image_raw`, `.../color/camera_info` | in | `nav_camera:=wrist`: the RealSense driver as started by `cloth_task` (640×480, 15 fps, TF off); reused, never started twice |
+| TF `leo/base_link` → arm `base_link` → … → `camera_color_optical_frame` | in | Rover → arm base: static, measured mount, published by `rover_nav` (always). Arm → camera: the arm stack's `robot_state_publisher` with the arm in the `drive` pose, or a static transform in the drive pose while the arm stack isn't available |
+| `/leo/merged_odom` (`nav_msgs/Odometry`, 100 Hz) + `leo/odom` → `leo/base_footprint` TF | in | The rover's `odom_filter` (LeoOS, wheel odometry + IMU), over the rover's Wi-Fi |
+| `/leo/cmd_vel` (`geometry_msgs/Twist`) | out | To the rover firmware. Nav2, or `teleop_twist_keyboard` while mapping |
+| `/map` + `map` → `leo/odom` TF | internal | RTAB-Map |
+| Keepout mask (`.pgm` + `.yaml`) | internal | Generated from the saved 2D map and a dividing line by `rover_nav`'s mask tool |
+
+- **Names:** the arm owns the plain names (`base_link`, `/joint_states`, `/robot_description`). The rover runs with LeoOS's `ROBOT_NAMESPACE=leo`: frames `leo/…`, topics `/leo/…` (`rover_nav/scripts/setup_rover.sh`). TF tree: `map` → `leo/odom` → `leo/base_footprint` → `leo/base_link` → `base_link` (arm) → … → camera.
+- With `nav_camera:=wrist`, the arm stays in `drive` while the rover moves: moving it breaks mapping and localization. With `oak` the arm is free.
+- **Sim** (`rover_nav/sim`, [D-039](decisions.md)): a standalone MuJoCo Leo Rover from the official `leo_description` (uv project, no ROS): `cmd_vel` with the firmware's timeout, wheel + gyro odometry, the rover and OAK-D cameras. Not wired to ROS yet; the jevomir VLM drives it through its scoring API.
 
 ## Repo layout
 
@@ -349,5 +368,6 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 | `config/hand_eye.yaml` | calibration |
 | `tests/<package>/` | same as the package; `tests/conftest.py` shared |
 | `ros2_ws/` | the ROS 2 track ([D-014](decisions.md)), outside these stages |
+| `ros2_ws/src/rover_nav/` (incl. `sim/`, the MuJoCo Leo Rover) | the ROS 2 rover navigation track ([D-037](decisions.md), [D-039](decisions.md)); brief: [rover/ros2-navigation.md](rover/ros2-navigation.md) |
 
 "Shared" means: change it only through the contract rules in [AGENTS.md](../AGENTS.md).

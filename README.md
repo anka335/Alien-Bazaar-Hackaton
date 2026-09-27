@@ -18,7 +18,7 @@ Everything is built and accepted on a MuJoCo simulator first ([D-032](docs/decis
 
 ## Project plan
 
-Stages ([docs/plan.md](docs/plan.md)): [0 Preparation](docs/rover/0-preparation.md) (done: the shared base); then [A Loading](docs/rover/a-loading.md), [B Unloading](docs/rover/b-unloading.md) and [N Navigation](docs/rover/n-navigation.md) in parallel, one agent each; then [C Full mission](docs/rover/c-mission.md) and [D Sim-to-real](docs/rover/d-sim-to-real.md); then the hardware.
+Stages ([docs/plan.md](docs/plan.md)): [0 Preparation](docs/rover/0-preparation.md) (done: the shared base); then [A Loading](docs/rover/a-loading.md), [B Unloading](docs/rover/b-unloading.md), [F Far detection](docs/rover/f-far-detection.md) and [N Navigation](docs/rover/n-navigation.md) in parallel, one agent each; then [C Full mission](docs/rover/c-mission.md) and [D Sim-to-real](docs/rover/d-sim-to-real.md); then the hardware.
 
 | File | What's inside |
 | --- | --- |
@@ -48,9 +48,9 @@ uv run pytest                                   # tests
 - The scene is a shared base (floor, rover, deck, cargo box, arm) plus one scene file per stage: `src/sorter/sim/scenes/load/` (socks on the floor) and `.../unload/` (the laundry bins, socks in the compartments); `sim.scenes` picks which ([D-034](docs/decisions.md)).
 - Socks are cloth that falls, folds and hangs from the gripper. Cloth is expensive: `sim.realtime: 0` runs as fast as the CPU allows (3 socks ≈ 2.6× real time).
 - The floor detector uses the render's segmentation instead of SAM3 (`sim.use_sam3: true` to call the service). `sim.miss_prob` makes grasps miss on purpose.
-- The camera sits at `sim.camera_mount_mm` off the TCP, or at the whole transform in `sim.camera_mount_T` (e.g. the rig's `config/hand_eye.yaml`, [D-037](docs/decisions.md)).
+- The camera sits at `sim.camera_mount_mm` off the TCP, or at the whole transform in `sim.camera_mount_T` (e.g. the rig's `config/hand_eye.yaml`, [D-041](docs/decisions.md)).
 
-**Unload on the real rover's geometry** (stage B, [D-036](docs/decisions.md)): one 150 × 150 × 60 mm cargo box, three bins of that size in front of the rover, the station off its place by seed, the camera at the hand-eye result.
+**Unload on the real rover's geometry** (stage B, [D-040](docs/decisions.md)): one 150 × 150 × 60 mm cargo box, three bins of that size in front of the rover, the station off its place by seed, the camera at the hand-eye result.
 
 ```bash
 uv run python -m sorter.sim.scenes.unload.rover       # compute the rig, check every pick (0 problems)
@@ -76,7 +76,7 @@ uv run python -m sorter.sim.scenes.unload.bench -n 20 # seeded scenarios, judged
 
 **Config** is in `config/`: `default.yaml` (all sections), `rig.yaml` (computed: poses, zones, ROIs, the arm's floor limit and keep-out), `hand_eye.yaml` (the camera mount), and your own `local.yaml` (gitignored), e.g. `backends: {camera: real}`.
 
-**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth task ([D-014](docs/decisions.md)), outside these stages: [ros2_ws/README.md](ros2_ws/README.md).
+**ROS 2 track:** `ros2_ws/` holds a separate ROS 2 Jazzy + MoveIt 2 cloth task ([D-014](docs/decisions.md)), outside these stages: [ros2_ws/README.md](ros2_ws/README.md). Its rover navigation drives the real Leo Rover in one room: RTAB-Map + Nav2 with an OAK-D on the rover's front, in `ros2_ws/src/rover_nav` ([D-037](docs/decisions.md), [D-038](docs/decisions.md); brief: [docs/rover/ros2-navigation.md](docs/rover/ros2-navigation.md)). A standalone MuJoCo sim of the Leo Rover from its official model, drivable by the jevomir VLM, is in [`rover_nav/sim`](ros2_ws/src/rover_nav/sim/README.md) ([D-039](docs/decisions.md)).
 
 ## Working with AI agents
 
