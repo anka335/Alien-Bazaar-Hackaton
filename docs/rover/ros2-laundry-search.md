@@ -14,14 +14,33 @@ The rover searches for laundry in the area in front of the three laundry boxes, 
 1. **Get in front of the boxes.** The search always starts from a fixed pose in front of the boxes (the *box pose*): facing the middle (colored) box, centred on it, at a set distance.
    - If the rover isn't there, it drives there.
    - If it's too close, it backs up a little until it's at the set distance.
-   - The box detector gives the boxes in the rover's frame (`/boxes/<label>` in `leo/base_link`, `/boxes/target_distance`), so align from the markers, not from the map.
+   - The box detector gives the boxes in the rover's frame (`/boxes/<label>` in `leo/base_link`, `/boxes/target_distance`), so align from the markers, not from the map. When the markers aren't in view, see [the problem](#the-problem-finding-the-boxes-again-not-solved-yet) below.
 2. **Search.** From the box pose, run the patrol (a 1 m square or circle with a look-around at every stop). The pattern must lie on the room side, away from the boxes. The current patrol turns left from the start heading, so starting while facing the boxes would drive into them: turn around first (or mirror the pattern). The whole search stays in front of the boxes, roughly in the middle of the room.
 3. **Laundry seen → go to it.** As soon as laundry is detected (during a look-around or while driving), stop the patrol and drive to the laundry. Stop about 20 cm before it, as in the earlier simple mission.
 4. **Pick up.** Stand still and wait until the arm reports that it's done (picked, or failed).
-5. **Return to the boxes.** Drive back to the box pose (step 1, including the fine alignment from the markers).
+5. **Return to the boxes.** Drive back to the remembered box pose by odometry, then line up from the markers as in step 1 (see [the problem](#the-problem-finding-the-boxes-again-not-solved-yet) below).
 6. **Then** start the search again (step 2), until stopped. What the arm does at the boxes (unloading) isn't part of this task.
 
 A stop (like `patrol_ctl stop`) must work in every state and stop the wheels at once.
+
+## The problem: finding the boxes again (not solved yet)
+
+Nothing remembers where the boxes are:
+
+- The box detector knows the boxes only **while the markers are in view**: within about 1 m and inside the OAK-D's ~70° field of view. It gives their pose relative to the rover, live, and forgets it as soon as the markers leave the image.
+- The patrol knows only its own start pose (odometry).
+
+So "get in front of the boxes" works only if the markers are already in view (it is fine alignment, not finding). "Return to the boxes" after a pick has no answer: by then the rover has usually turned away, may be more than 1 m from the boxes, and sees nothing.
+
+**How to solve it (simple, no SLAM):**
+
+1. **Remember the boxes in the odometry frame.** Every time the markers are seen, turn the box pose from `leo/base_link` into `leo/odom` (the rover's odometry pose at the image's time) and store it. Store the *box pose* (the standing pose in front of the middle box) with it. Odometry drifts only a few cm over a 1 m search, so the stored pose stays good enough to drive back to.
+2. **Return:** drive by odometry to the remembered box pose (turn towards it, drive, turn to face the boxes). The markers are then in view again. Line up from them precisely: forward or back to the set distance, turn to centre the middle box. Then update the remembered pose.
+3. **At the start, with no markers in view:** turn in place in steps, as in a look-around, pausing at each, until the markers appear. If they never appear after a full turn, stop and report "boxes not found" rather than guess.
+4. **Optional hint:** the fixed start pose (0, 2.5) facing south plus the known box position (about x = 1.5, y = 1, map frame) tell roughly which way to turn first. Only as a hint; the markers decide.
+5. **Keep trips short.** The search pattern is small (1 m), and every return re-aligns from the markers, so the odometry drift never adds up. If the laundry is far away (a trip of several metres), expect a few cm to a dm of error on the way back, still enough to bring the markers into view.
+
+Test it with a fake detector that publishes the boxes only when the (fake) rover faces them within 1 m, so the "not in view" cases are covered.
 
 ## What exists
 
@@ -70,3 +89,4 @@ A stop (like `patrol_ctl stop`) must work in every state and stop the wheels at 
 ## Log
 
 - 2026-09-27: task written down (not started).
+- 2026-09-27: the problem of finding the boxes again (markers seen only within ~1 m, nothing remembers them) and the proposed fix (remember them in `leo/odom`, re-align from the markers) written down.
