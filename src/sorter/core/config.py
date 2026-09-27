@@ -20,6 +20,7 @@ from sorter.color_classifier.config import ColorClassifierConfig
 from sorter.core.types import Zone
 from sorter.dashboard.config import DashboardConfig
 from sorter.floor_detector.config import FloorDetectorConfig
+from sorter.nav.config import NavConfig
 from sorter.orchestrator.config import LoadConfig, StateMachineConfig
 from sorter.sim.config import SimConfig
 
@@ -49,6 +50,7 @@ class Config(BaseModel):
 
     backends: BackendsConfig = Field(default_factory=BackendsConfig)
     sim: SimConfig = Field(default_factory=SimConfig)
+    nav: NavConfig = Field(default_factory=NavConfig)  # the rover navigation sim (stage N)
     camera: CameraConfig = Field(default_factory=CameraConfig)
     views: dict[Zone, ViewConfig] = Field(default_factory=dict)
     calibration: CalibrationConfig = Field(default_factory=CalibrationConfig)
