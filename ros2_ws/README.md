@@ -7,7 +7,7 @@ ROS 2 Jazzy + MoveIt 2 version of a single-cloth pick-and-place task ([D-014](..
 | Package | What |
 | --- | --- |
 | `rebot_b601_moveit_config` | MoveIt 2 + ros2_control for the reBot B601-RS. The robot description is built at launch from `rebot_b601/…/reBot_Lite_RS_with_gripper.urdf` (symlinked): the driver's soft joint limits, box collision shapes (real meshes for the fingers), a table, the wrist camera from `config/camera_mount.yaml`, a `<ros2_control>` block (mock hardware) |
-| `cloth_task` | `task_supervisor` (state machine), `arm_bridge` (real arm), `cloth_detector` (real camera + SAM3), `sim_cloth_detector` / `sim_gripper` (simulation), `record_pose` / `go_to_pose`, `leader_teleop`, `spectacles_bridge` (Spectacles teleop), `rover_standin` (a Leo Rover stand-in for tests), `task.launch.py`, `config/task.yaml`, `config/poses.yaml` |
+| `cloth_task` | `task_supervisor` (state machine), `arm_bridge` (real arm), `cloth_detector` (real camera + SAM3), `sim_cloth_detector` / `sim_gripper` (simulation), `record_pose` / `go_to_pose`, `leader_teleop`, `spectacles_bridge` (Spectacles teleop), `rover_standin` (a Leo Rover stand-in for tests), `spectacles_standin_lens` (a lens stand-in for tests), `task.launch.py`, `config/task.yaml`, `config/poses.yaml` |
 
 ## Status
 
@@ -168,6 +168,20 @@ ROS_DOMAIN_ID=77 ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST \
 - It takes `geometry_msgs/Twist` on `/leo/cmd_vel` and publishes `nav_msgs/Odometry` on `/leo/merged_odom` at 100 Hz (frame `leo/odom`, child `leo/base_footprint`; it publishes no TF), integrating a differential-drive model. It stops 0.5 s after the last Twist, like the firmware.
 - It appends every received Twist to the CSV at `csv_path` (default `rover_standin.csv` in the working directory), one row per Twist and no header: receive time from `time.monotonic()` (system-wide on Linux, so comparable across processes), `linear.x`, `angular.z`.
 - Kill it to make the rover absent.
+
+### Lens stand-in
+
+`spectacles_standin_lens` plays the lens over the WebSocket for tests, with no glasses. It needs only `websockets`, so it runs without ROS, directly or through `ros2 run cloth_task spectacles_standin_lens`:
+
+```bash
+python3 ros2_ws/src/cloth_task/cloth_task/spectacles_standin_lens.py \
+  --url ws://127.0.0.1:9110 --scenario scenario.json --log /tmp/standin_lens.jsonl
+```
+
+- The scenario is a JSON list of phases, played in order. Each has a `duration` in seconds and a `kind`: `send` (the default) sends teleop v1 at 30 Hz with the phase's `base` and `arm` fields over the disengaged defaults, `silence` keeps the socket open and sends nothing, and `disconnect` closes the socket. The next `send` or `silence` phase opens a new socket, with `seq` from 0 again. Example: `[{"duration": 1.0}, {"duration": 0.5, "base": {"engaged": true, "vx": 0.35}}, {"duration": 0.5, "kind": "silence"}]`. Phases can also be given in code (`Phase`, `run()`).
+- It sends the wire frames as the lens would compute them. It does not run `teleopStep`.
+- It logs every sent frame, received status, phase start and close (code, reason, and which side closed) to the JSON-lines log, with `time.monotonic()` times, comparable with the rover stand-in's CSV.
+- It exits 1 on a connection error, or when the robot bridge closes the socket during a phase without `"expect_close": true` (for example a refusal, 1013).
 
 ## Named poses
 

@@ -35,6 +35,7 @@ setup(
             "status_web = cloth_task.status_web:main",
             "spectacles_bridge = cloth_task.spectacles_bridge:main",
             "rover_standin = cloth_task.rover_standin:main",
+            "spectacles_standin_lens = cloth_task.spectacles_standin_lens:main",
         ],
     },
 )
