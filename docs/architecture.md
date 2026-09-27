@@ -372,6 +372,10 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 
 The commands (`sorter.nav.commands.Rover`) need a base with `set_cmd(v, w)`, `tick()`, `odom`, `t`, `dt`, `moving()`, `ref`, `cfg` and a camera with `capture() → Frame`, `K`, `T_rover_cam`: `RoverSim` + `OakD` in the sim, `real_leo.LeoBase` (rosbridge: `/cmd_vel` out every tick, `/merged_odom` in) + `real_oakd.RealOakD` (depthai v3) on the hardware. A `Frame` is RGB uint8, depth uint16 mm aligned to it (0 = none), the RGB intrinsics and the camera's pose in the rover frame.
 
+## Full mission (stage C)
+
+`sorter.mission` ([D-052](decisions.md)): `run_mission()` / `python -m sorter.mission` alternates the nav world and the arm world. Drive (`nav.controller.Approach`, nav goal zone) → hand over the socks in the arm's floor zone (Leo frame → arm base frame: `+ sim.layout.body.center_mm`; color class from the sock's RGB) as `sim.load.placed` → a fresh arm world runs the load loop (`StateMachine`, mode load) to DONE → socks in the cargo box leave the nav world → repeat until `capacity` or no sock → drive home on the odometry → `approach_box` on the station's tag 13. Report: `mission.json` (socks, loaded, cargo by class, stops, station gap).
+
 ## Rover navigation (ROS 2 track)
 
 `ros2_ws/src/rover_nav` ([D-037](decisions.md), [D-038](decisions.md)). Ready-made nodes: RTAB-Map for SLAM, Nav2 for driving, a Nav2 keepout filter for the forbidden half of the room. Two launches: **mapping** (RTAB-Map mapping, keyboard teleop, done once) and **navigation** (RTAB-Map localization on the saved database, Nav2, keepout filter).
@@ -408,6 +412,7 @@ The commands (`sorter.nav.commands.Rover`) need a base with `set_cmd(v, w)`, `ti
 | `config/hand_eye.yaml` | calibration |
 | `tests/<package>/` | same as the package; `tests/conftest.py` shared |
 | `src/sorter/nav/`, `tests/nav/`, `frontend/src/pages/RoverPage.tsx`, `config/default.yaml` → `nav` | N |
+| `src/sorter/mission/`, `tests/mission/` | C |
 | `ros2_ws/` | the ROS 2 track ([D-014](decisions.md)), outside these stages |
 | `ros2_ws/src/rover_nav/` (incl. `sim/`, the MuJoCo Leo Rover) | the ROS 2 rover navigation track ([D-037](decisions.md), [D-039](decisions.md)); brief: [rover/ros2-navigation.md](rover/ros2-navigation.md) |
 

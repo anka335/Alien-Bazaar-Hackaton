@@ -119,6 +119,6 @@ A0–A7 done on the sim.
 
 - 2026-09-27: shared code touched by stage N ([D-046](../decisions.md)): the root config has a `nav` section, `create_app(..., nav=)` mounts `/api/nav/*` and the `/rover` page, the front end has a Rover tab (`TopBar.tsx`, `main.tsx`), `pyproject.toml` an optional `nav-hw` extra (depthai). Nothing else in the shared code changed.
 - 2026-09-27 (shared, [D-050](../decisions.md)): the cargo box is at (−185, −225) (the wrist camera saw its corner); the Leo's raised top cover is a keep-out block (`sim.layout.equipment.leo_top`); `kinematics.camera_look` refuses a view with a keep-out box in its line of sight, and `look_cargo` looks from straight above; `rig.yaml` recomputed.
+- 2026-09-27 (from C, [D-052](../decisions.md)): `sim.load.placed`: socks at given spots (arm frame) instead of random ones; the mission hands over the socks the rover stopped next to.
 - 2026-09-27 (from the rig): an empty gripper reading after a pick is checked with the camera (`_still_on_floor`): a squeezed sock reads like nothing, and the loop went on scanning with the sock in the gripper.
-
 

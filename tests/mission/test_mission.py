@@ -9,6 +9,7 @@ from sorter.mission.mission import color_class, rover_to_arm_mm, run_mission
 from sorter.nav.boxes import detect_tags
 from sorter.nav.config import NavConfig
 from sorter.nav.episode import Episode
+from sorter.nav.model import STATION_HALF_M
 from sorter.nav.scenario import SOCK_COLORS, make
 
 
@@ -21,13 +22,15 @@ def test_color_class():
 
 
 def test_nav_goal_is_in_the_arm_floor_zone():
-    """The approach's goal zone (Leo frame) lands in the arm's floor zone (rig.yaml)."""
+    """Where the approach stops a sock (Leo frame) lands in the arm's floor zone (rig.yaml)."""
     from sorter.arm.controller import in_polygon
     from sorter.core.types import Zone
+    from sorter.nav.controller import DONE_FRACTION
 
     cfg = load_config()
     zone = [tuple(p) for p in cfg.zones[Zone.FLOOR].workspace_mm]
     (gx, gy), (hx, hy) = cfg.nav.goal.center_m, cfg.nav.goal.half_size_m
+    hx, hy = hx * DONE_FRACTION, hy * DONE_FRACTION
     for x in (gx - hx, gx, gx + hx):
         for y in (gy - hy, gy, gy + hy):
             assert in_polygon(*rover_to_arm_mm(cfg, x, y), zone), (x, y)
@@ -44,7 +47,8 @@ def test_station_tags_seen_in_order():
         ep.close()
     by_bearing = [t.id for t in sorted(tags, key=lambda t: -t.bearing_deg)]  # left to right
     assert by_bearing == [14, 13, 12]
-    assert abs(next(t for t in tags if t.id == 13).distance - 1.2) < 0.1
+    face = 1.2 - STATION_HALF_M[0]  # the rover's center to the station's face
+    assert abs(next(t for t in tags if t.id == 13).distance - face) < 0.05
 
 
 def test_mission_without_arm_reaches_the_station(tmp_path):
