@@ -97,3 +97,4 @@ B0–B6 done on the sim.
 - 2026-09-27 (shared, [D-050](../decisions.md)): the base leans ~6° forward on the rover: `arm.base_tilt_deg` levels the frame, `floor_z_mm` −192, the floor zone stops the fingertips 5 mm above it; the cargo box is at (−220, −190) (photo), the PSU on the left; `rig.yaml` recomputed. The rig's auto white balance turns white socks pink: `python -m sorter.camera.wb` fixes it per room. Gripper 4.5 / 2.5 Nm, `empty_below` 0.02.
 
 
+- 2026-09-27: shared code touched by stage N ([D-046](../decisions.md)): the root config has a `nav` section, `create_app(..., nav=)` mounts `/api/nav/*` and the `/rover` page, the front end has a Rover tab (`TopBar.tsx`, `main.tsx`), `pyproject.toml` an optional `nav-hw` extra (depthai). Nothing else in the shared code changed.

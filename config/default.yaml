@@ -102,3 +102,16 @@ dashboard:           # shared
   stream_fps: 10     # live wrist feed and decision frame streams
   jpeg_quality: 80
   status_hz: 5       # max rate of status pushes over /ws
+
+nav:                           # the rover navigation sim and the real Leo Rover (stage N, D-046)
+  camera:                      # the OAK-D: all keys in sorter/nav/config.py (OakDConfig)
+    mount_xyz_m: [0.10, 0.0, 0.075]  # on the top plate, base_link frame (m): measure the real one
+    pitch_deg: 25.0            # down; 20-25 keeps both the far floor and the pick zone in view
+    depth_mode: extended       # extended disparity: depth from ~0.2 m (normal: ~0.7 m)
+  goal:                        # where the sock must end up, rover frame (m)
+    center_m: [0.43, 0.0]
+    half_size_m: [0.10, 0.10]
+  real:
+    rosbridge_url: ws://10.0.0.1:9090    # from a laptop on the rover Wi-Fi; on the rover: ws://127.0.0.1:9090
+    max_linear_mps: 0.25       # caps on the real rover until the commands are trusted
+    max_angular_rps: 0.8

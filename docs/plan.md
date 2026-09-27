@@ -28,7 +28,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | [A: Loading](rover/a-loading.md) | in progress | Softjey + Claude | `claude/pensive-banach-a6b5d1` | scene, scan-all-around loop, detector, benchmark ([D-040](decisions.md), [D-041](decisions.md)); known issues in the brief |
 | [B: Unloading](rover/b-unloading.md) | in progress | Softjey + Claude | `claude/b-unloading-stage-d746d4` | vision-only loop and benchmark on the measured rover, station in front; tuning ([D-043](decisions.md)) |
 | [F: Far detection](rover/f-far-detection.md) | todo | — | — | socks seen 0.5–3 m away from a search pose, as targets on the floor |
-| [N: Navigation](rover/n-navigation.md) | todo | — | — | driving rover: to F's targets, stop within reach, dock at the station |
+| [N: Navigation](rover/n-navigation.md) | in progress | Viacheslav + Claude | `feat/rover-nav` | Leo Rover + OAK-D sim (`sorter.nav`), camera-only commands, sock approach, Rover tab (D-046) |
 | [C: Full mission](rover/c-mission.md) | todo | — | — | needs A, B, F, N: rover interface, stow, mission loop, benchmark |
 | [D: Sim-to-real](rover/d-sim-to-real.md) | todo | — | — | needs C: the benchmarks under rig-like errors |
 | Hardware | in progress | Softjey + Claude | `main` | first load runs on the rig: every session recorded (`run --record`); the arm's turn and lean on the rover measured ([D-049](decisions.md), [D-050](decisions.md)); faults, Stop and lost CAN feedback handled ([D-048](decisions.md)); one sock loaded in the auto mode. Next: the room's color gains, the cargo box's exact spot from `look_cargo` |

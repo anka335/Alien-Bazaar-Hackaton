@@ -112,8 +112,17 @@ def _serve(system: System, manual=None, calibrate=None, modes=None):
     from sorter.dashboard.server import create_app
 
     d = system.cfg.dashboard
+    from sorter.nav.server import lazy
+
+    nav = lazy(system.cfg.nav, system.cfg.color_classifier.sam)
     app = create_app(
-        system.hub, d, views=system.cfg.views, manual=manual, calibrate=calibrate, modes=modes
+        system.hub,
+        d,
+        views=system.cfg.views,
+        manual=manual,
+        calibrate=calibrate,
+        modes=modes,
+        nav=nav,
     )
     server = uvicorn.Server(uvicorn.Config(app, host=d.host, port=d.port, log_level="warning"))
     server.thread = threading.Thread(target=server.run, name="dashboard", daemon=True)

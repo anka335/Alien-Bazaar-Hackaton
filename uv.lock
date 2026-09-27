@@ -70,6 +70,21 @@ wheels = [
 ]
 
 [[package]]
+name = "depthai"
+version = "3.10.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0e/f8/7d3aceef36304ca7cad0e401645ca2e577e31f373da110595e0b20983b0a/depthai-3.10.0-cp39.cp310.cp311.cp312.cp313.cp314-cp39.cp310.cp311.cp312.cp313.cp314-macosx_11_0_arm64.whl", hash = "sha256:1913158a32fdcd05c84e3bf11c9f8f209a4cb9b69f7a80bbec97f9c714d48c2a", size = 67203827, upload-time = "2026-09-02T04:39:06.74Z" },
+    { url = "https://files.pythonhosted.org/packages/78/c6/c1f39dfcbb31e4890295cf1801309fbff42fd786d2cb2416c79d2928d160/depthai-3.10.0-cp39.cp310.cp311.cp312.cp313.cp314-cp39.cp310.cp311.cp312.cp313.cp314-macosx_11_0_x86_64.whl", hash = "sha256:121e2b3592eb4951480f160a9408d516ece6a5852de0dbfd7f233d98fc41d2c3", size = 70821955, upload-time = "2026-09-02T04:39:10.791Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/c7/0743ac1121036fb566d261223e6fc4707a30698790350c9093f7102f1db0/depthai-3.10.0-cp39.cp310.cp311.cp312.cp313.cp314-cp39.cp310.cp311.cp312.cp313.cp314-manylinux_2_28_aarch64.whl", hash = "sha256:acc7e09f7608e2742c3fde466c90230c85ae8b49328148e3d90935a18b6b5eb6", size = 82579808, upload-time = "2026-09-02T04:39:14.622Z" },
+    { url = "https://files.pythonhosted.org/packages/ac/c8/ddbd078b6bad9c814a58e542c8ebe71ce2f2050caae7760e6f5021cacb24/depthai-3.10.0-cp39.cp310.cp311.cp312.cp313.cp314-cp39.cp310.cp311.cp312.cp313.cp314-manylinux_2_28_x86_64.whl", hash = "sha256:82bf7e03f906c9447ffd516b717cdf707ce72429845b0ee76800b2406a011514", size = 88153472, upload-time = "2026-09-02T04:39:19.159Z" },
+    { url = "https://files.pythonhosted.org/packages/47/09/e6f9a372aef90bc876a4eebf83a7a3c5275c9100b21c9c87410ca00f3e3d/depthai-3.10.0-cp39.cp310.cp311.cp312.cp313.cp314-cp39.cp310.cp311.cp312.cp313.cp314-win_amd64.whl", hash = "sha256:ae5dbc7be1a6a14bf1f4c9a6ce0102677c419949e43e1cdeec5693ce652c0b11", size = 71010079, upload-time = "2026-09-02T04:39:23.344Z" },
+]
+
+[[package]]
 name = "etils"
 version = "1.14.0"
 source = { registry = "https://pypi.org/simple" }
@@ -467,6 +482,9 @@ camera = [
 hardware = [
     { name = "rebot-b601", extra = ["hardware"] },
 ]
+nav-hw = [
+    { name = "depthai" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -477,6 +495,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "depthai", marker = "extra == 'nav-hw'", specifier = ">=3.0" },
     { name = "fastapi", specifier = ">=0.110" },
     { name = "mujoco", specifier = ">=3.14.0" },
     { name = "numpy", specifier = ">=1.26" },
@@ -490,7 +509,7 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.29" },
     { name = "websockets", specifier = ">=12" },
 ]
-provides-extras = ["hardware", "camera"]
+provides-extras = ["hardware", "camera", "nav-hw"]
 
 [package.metadata.requires-dev]
 dev = [
