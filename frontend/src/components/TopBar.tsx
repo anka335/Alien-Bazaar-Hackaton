@@ -12,6 +12,7 @@ export const TABS: { path: string; label: string; mode: OperatorMode | null }[] 
   { path: "/calibrate", label: "Calibrate", mode: "calibrate" },
   { path: "/3d", label: "3D view", mode: null },
   { path: "/rover", label: "Rover", mode: null },
+  { path: "/mission", label: "Mission", mode: null },
 ];
 
 export function currentTab(path: string, operator: OperatorMode | undefined): string {

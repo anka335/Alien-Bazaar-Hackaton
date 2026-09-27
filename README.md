@@ -76,6 +76,8 @@ The Leo Rover 1.9 with an OAK-D in its own MuJoCo world, steered by camera-only 
 
 Drive, load at every stop, drive to the station ([D-052](docs/decisions.md), stage C): `uv run python -m sorter.mission --seed 0 --out data/mission/s0 --video` (JSON lines per step, `mission.json`, an MP4 per stop); `--no-arm` checks the driving alone in seconds; `--capacity N` sends the rover to the station after N socks. Unloading at the station is not run yet.
 
+**Mission tab** (`/mission` in the dashboard): START MISSION runs it all, STOP stops the rover and the arm. On the sim (`run --sim`) it is the above; on the rig (`uv run python -m sorter run`, the Leo's Wi-Fi joined, see *Rover navigation on the real Leo*) the real Leo drives up to each sock (stops 10 cm before it; SAM3 if the key is set), the real arm loads what is in reach, and at the end the rover goes back to the station and parks 15 cm from tag 13. Start the rover facing the station, 1–2 m from it: it remembers the station from there. Don't use the Rover tab at the same time (a second rosbridge session).
+
 ### Rover navigation on the real Leo
 
 The same commands drive the real rover over rosbridge (LeoOS runs it on port 9090 for its web UI; no ROS install needed here): `sorter.nav.real_leo` sends `cmd_vel` every control tick and reads `merged_odom`, or, if that topic is silent, integrates the wheel encoders (`firmware/wheel_states`) and the IMU's gyro (`imu/data`) itself. Topic names are relative, so rosbridge resolves them in the rover's namespace (`/leo/` on ours).

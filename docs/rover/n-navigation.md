@@ -57,6 +57,7 @@ No collisions. On unseen seeds 10–19 (plus `random`): 91 %, one collision (obs
 
 ## Log
 
+- 2026-09-27 (from C, shared): the Mission tab: `create_app(..., mission=)` mounts `/api/mission/*`, `app.run` makes a `MissionControl` (it switches the operator mode to load and sends START between drives), `/mission` in `PAGES`, a Mission tab in `TopBar.tsx` / `main.tsx`.
 - 2026-09-27 (from C, [D-052](../decisions.md)): `WorldSpec.station` and scenario `mission` (the unload station with tags 14 13 12 against the −x wall, `model._station`), `nav.boxes.station_tag_m`. Other scenarios unchanged.
 
 - 2026-09-27: the OAK-D's first ~1.5 s of frames are nearly black (auto-exposure): `RealOakD` now waits for it to settle. The camera's pitch measured 16.1° at 13:00 (12.5° in the morning): the mount moves, re-check with `hw-check`.

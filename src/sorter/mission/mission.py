@@ -150,6 +150,7 @@ def load_stop(
     video: Path | None = None,
     time_limit_s: float = LOAD_TIME_LIMIT_S,
     arm_speed: float = 1.4,
+    cancelled: Callable[[], bool] | None = None,
 ) -> tuple[list[bool], str, float]:
     """One stop's load run in a fresh arm world with `placed` around the rover: (in the cargo
     box, per sock; how it ended; simulated s)."""
@@ -185,6 +186,10 @@ def load_stop(
     t0, end, last = world.time(), "time limit", None
     try:
         while world.time() - t0 < time_limit_s:
+            if cancelled is not None and cancelled():
+                from sorter.nav.commands import Cancelled
+
+                raise Cancelled
             if rec is not None:
                 rec.frame(f"{world.time() - t0:5.1f} s  {sm.phase.value}")
             d = system.hub.decision()
@@ -260,11 +265,15 @@ def run_mission(
     video: bool = False,
     arm: bool = True,
     on_event: Callable[[dict], None] | None = None,
+    cancelled: Callable[[], bool] | None = None,
+    on_frame: Callable[[object], None] | None = None,
 ) -> MissionReport:
     """The whole mission on the sim (see the module doc). `capacity`: socks the cargo box takes
     before the rover drives to the station. `out`: the nav frames and log, `mission.json` and,
     with `video`, an MP4 per stop. `arm=False`: no arm world, every sock in the zone counts as
-    loaded (to check the driving fast). `on_event(dict)`: every step, as a JSON-able dict."""
+    loaded (to check the driving fast). `on_event(dict)`: every step, as a JSON-able dict.
+    `cancelled()` True stops the mission (the rover's command raises `Cancelled`); `on_frame`
+    gets every OAK-D frame a command ends with."""
     from sorter.nav import detect
     from sorter.nav.boxes import approach_box
     from sorter.nav.controller import MAX_STEPS, Approach
@@ -293,14 +302,18 @@ def run_mission(
         return sim.odom
 
     run = rover.run
-    if root is not None:
+    if cancelled is not None:
+        rover.cancelled = cancelled
 
-        def recorded(name, *a, **k):
-            res = run(name, *a, **k)
+    def recorded(name, *a, **k):
+        res = run(name, *a, **k)
+        if root is not None:
             ep.record(res)
-            return res
+        if on_frame is not None and res.frame is not None:
+            on_frame(res.frame)
+        return res
 
-        rover.run = recorded
+    rover.run = recorded
     try:
         sam = cfg.color_classifier.sam
         found = CachedDetector(detect.make(detector, ep.camera, sam, cfg.nav.sam_prompt))
@@ -333,7 +346,9 @@ def run_mission(
             placed = [p for _, p in handed]
             if arm:
                 vid = root / f"stop_{k}.mp4" if (video and root is not None) else None
-                ok_each, end, sim_s = load_stop(config_dir, placed, seed * 100 + k, vid)
+                ok_each, end, sim_s = load_stop(
+                    config_dir, placed, seed * 100 + k, vid, cancelled=cancelled
+                )
             else:
                 ok_each, end, sim_s = [True] * len(placed), "done (no arm)", 0.0
             loaded = []
@@ -398,6 +413,18 @@ def drive_home(rover, sim, station_odom: tuple[float, float, float]) -> dict:
     sx, sy, syaw = station_odom
     d = STATION_HALF_M[0] + HOME_M
     gx, gy = sx + d * math.cos(syaw), sy + d * math.sin(syaw)
+    out = drive_to(rover, sim, gx, gy)
+    o = sim.odom
+    face = _wrap_deg(math.degrees(math.atan2(sy - o.y, sx - o.x) - o.yaw))
+    rover.run("turn", face, 1.0)
+    return out
+
+
+def drive_to(rover, base, gx: float, gy: float, heading: float | None = None) -> dict:
+    """Drive on the odometry to (gx, gy) (odometry frame, m), then turn to `heading` (rad) if
+    given. Legs of at most `HOME_LEG_M`, re-planned from the odometry; an obstacle: turn
+    aside, go round."""
+    sim = base
     moves, aside = 0, 1
     while moves < HOME_MAX_MOVES:
         o = sim.odom
@@ -417,9 +444,8 @@ def drive_home(rover, sim, station_odom: tuple[float, float, float]) -> dict:
             moves += 2
             aside = -aside
     o = sim.odom
-    face = _wrap_deg(math.degrees(math.atan2(sy - o.y, sx - o.x) - o.yaw))
-    rover.run("turn", face, 1.0)
-    o = sim.odom
+    if heading is not None:
+        rover.run("turn", _wrap_deg(math.degrees(heading - o.yaw)), 1.0)
     return {"moves": moves, "left_m": round(math.hypot(gx - o.x, gy - o.y), 2)}
 
 

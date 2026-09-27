@@ -105,7 +105,7 @@ def _physics_floor_detector(cfg: Config, parts: dict):
 _PHYSICS_RIG = {"calibration": _physics_calibration, "floor_detector": _physics_floor_detector}
 
 
-def _serve(system: System, manual=None, calibrate=None, modes=None):
+def _serve(system: System, manual=None, calibrate=None, modes=None, mission=None):
     """Start the dashboard's web server in a thread; returns the uvicorn server."""
     import uvicorn
 
@@ -123,6 +123,7 @@ def _serve(system: System, manual=None, calibrate=None, modes=None):
         calibrate=calibrate,
         modes=modes,
         nav=nav,
+        mission=mission,
     )
     server = uvicorn.Server(uvicorn.Config(app, host=d.host, port=d.port, log_level="warning"))
     server.thread = threading.Thread(target=server.run, name="dashboard", daemon=True)
@@ -227,12 +228,15 @@ def run(
     sm_thread = threading.Thread(target=sm.run, args=(stop,), name="state-machine", daemon=True)
     sm_thread.start()
 
-    server = None
+    server = mission = None
     if dashboard:
         system.hub.set_mode(mode)
         manual, calibrate = _setup_controls(system, sim, rig_file or Path("config/rig.yaml"))
         modes = ModeSwitch(system.hub, manual, on_change=_show_marks(system.world))
-        server = _serve(system, manual, calibrate, modes)
+        from sorter.mission.control import MissionControl
+
+        mission = MissionControl(system, sm, sim)
+        server = _serve(system, manual, calibrate, modes, mission)
 
     if autostart and system.hub.mode() in RUN_MODES:
         system.hub.send(Command.START)
@@ -245,6 +249,8 @@ def run(
             log.error("dashboard server exited (port %s in use?)", system.cfg.dashboard.port)
     except KeyboardInterrupt:
         log.warning("Ctrl+C: hold, then shut down")
+        if mission is not None:
+            mission.stop()  # the rover stops at its next control tick
         system.arm.hold()
     finally:
         stop.set()

@@ -295,6 +295,10 @@ Decision(phase, obs, overlay, summary)
 
 **The front end is updated only in part**: its tabs are Load / Unload (one run page, the tab says which loop it switches to), Manual, Calibrate, 3D view; the run page's phase strip and the 3D view are still the table's (the old layout JSON). The rest (the 3D view from `parts`, the rover phases, the load panel) is task A6; B adds its panel on top (B5). The Rover tab (`/rover`, `RoverPage.tsx`) is stage N's and works already.
 
+### Mission API (stage C)
+
+The Mission tab (`/mission`) talks to `sorter.mission.control` (mounted by `create_app(..., mission=)`; `app.run` makes a `MissionControl` with the system and its state machine): `GET /api/mission/state` (phase idle / searching / loading / to_station / done / stopped / error, note, cargo by class, stops, the last 60 events), `POST /api/mission/start {capacity, gap_m, detector}` (409 while a run is going), `POST /api/mission/stop` (cancels the rover's command at its next tick, sends STOP to the arm's run), `GET /api/mission/view.jpg` (the OAK-D's last frame). Real rig: the real Leo over rosbridge (`nav.real`) and this process's arm; per sock `hunt.approach_sock(gap_m)`, then the load run through the Hub (mode load, START, wait until idle), then the next; then back in front of the station as seen at the start and `approach_box`. Sim (`run --sim`): `mission.run_mission` in a thread.
+
 ### Rover navigation API (stage N)
 
 The Rover tab talks to `sorter.nav.server` (mounted by `create_app(..., nav=)`, also standalone with `python -m sorter.nav serve`). One thread owns the nav sim and its renderer and runs one command at a time in real time.

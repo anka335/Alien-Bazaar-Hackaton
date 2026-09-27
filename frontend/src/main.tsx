@@ -6,6 +6,7 @@ import { usePath } from "./hooks";
 import { AutoPage } from "./pages/AutoPage";
 import { CalibratePage } from "./pages/CalibratePage";
 import { ManualPage } from "./pages/ManualPage";
+import { MissionPage } from "./pages/MissionPage";
 import { RoverPage } from "./pages/RoverPage";
 import { TwinPage } from "./pages/TwinPage";
 import { SorterProvider, useSorter } from "./sorter";
@@ -23,6 +24,7 @@ const PAGES: Record<string, () => React.JSX.Element> = {
   "/calibrate": CalibratePage,
   "/3d": TwinPage,
   "/rover": RoverPage,
+  "/mission": MissionPage,
 };
 
 function App(): React.JSX.Element {

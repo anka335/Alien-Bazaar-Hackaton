@@ -36,7 +36,7 @@ from sorter.dashboard.render import PHASE_LABELS, encode_jpeg, placeholder, rend
 WEB_DIR = Path(__file__).parent / "web"  # `npm run build` in frontend/ (not in git)
 BOUNDARY = "frame"
 # the admin panel's tabs: each serves the single page, the front end routes it
-PAGES = ("/", "/load", "/unload", "/manual", "/calibrate", "/3d", "/rover")
+PAGES = ("/", "/load", "/unload", "/manual", "/calibrate", "/3d", "/rover", "/mission")
 NOT_BUILT = """<!doctype html><meta charset="utf-8"><title>Sorter</title>
 <body style="font:16px system-ui;margin:3rem;max-width:40rem">
 <h1>The dashboard isn't built</h1>
@@ -149,6 +149,7 @@ def create_app(
     modes: ModeSwitch | None = None,
     web_dir: Path = WEB_DIR,
     nav: Callable | None = None,
+    mission=None,
 ) -> FastAPI:
     """`views` gives the zone ROIs drawn on the decision frame (`cfg.views`). `manual` and
     `calibrate`: the controls of the manual and calibrate modes, switched by `modes` (made
@@ -158,6 +159,10 @@ def create_app(
         from sorter.nav.server import router as nav_router
 
         app.include_router(nav_router(nav))
+    if mission is not None:  # the Mission tab: drive, load, station (sorter.mission.control)
+        from sorter.mission.control import router as mission_router
+
+        app.include_router(mission_router(mission))
     rois = {z: list(v.roi) for z, v in (views or {}).items()}
     frames = Frames(hub, cfg, rois)
     period_s = 1 / cfg.stream_fps
