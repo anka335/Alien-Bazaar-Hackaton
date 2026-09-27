@@ -327,8 +327,8 @@ class PhysicsWorld:
             return self.data.flexvert_xpos[a : a + n] * 1000
 
     def location(self, item: int) -> tuple[str, ColorClass | None]:
-        """Where item `item` is: gripper / cargo (+ compartment) / laundry (+ bin) / floor /
-        other (e.g. on the rover, or on a wall)."""
+        """Where item `item` is: gripper / cargo (+ compartment, if split) / laundry (+ bin) /
+        floor / other (e.g. on the rover, or on a wall)."""
         with self.lock:
             if item in self._vert_item[self._grip_idx]:
                 return "gripper", None
@@ -337,12 +337,14 @@ class PhysicsWorld:
         lay = self.layout
         cargo = lay.cargo
         if z < cargo.rim_z_mm + 20:
+            if not cargo.compartments and cargo.contains(x, y):
+                return "cargo", None  # one box, not split by color
             for color in cargo.compartments:
                 if cargo.compartment(color).contains(x, y):
                     return "cargo", color
         bins = lay.laundry
         half = bins.size_mm / 2
-        for color, (bx, by) in bins.centers_mm.items():
+        for color, (bx, by) in bins.centers_mm.items() if "unload" in self.cfg.scenes else ():
             if abs(x - bx) <= half and abs(y - by) <= half and z < lay.floor_z_mm + bins.height_mm:
                 return "laundry", color
         if z < lay.floor_z_mm + 40:

@@ -1,10 +1,10 @@
 """PhysicsCamera: the wrist RGB-D camera, rendered by MuJoCo from where the arm really is.
 
-A true pinhole at `sim.focal_px`, mounted on the gripper (`sim.camera_mount_mm`), with the
-D435i's depth behavior: Z in mm, noise growing with distance, no data closer than the minimum
-range (the fingers) or on random speckles. It has its own capture thread like the real camera
-(block 1) and keeps only the newest frame. It also renders MuJoCo's segmentation, which stands in
-for the SAM3 service in the simulator (`segment`).
+A true pinhole at `sim.focal_px`, mounted on link5 where the real camera was calibrated
+(`sorter.sim.rig.camera_mount`), with the D435i's depth behavior: Z in mm, noise growing with
+distance, no data closer than the minimum range (the fingers) or on random speckles. It has its
+own capture thread like the real camera (block 1) and keeps only the newest frame. It also renders
+MuJoCo's segmentation, which stands in for the SAM3 service in the simulator (`segment`).
 """
 
 from __future__ import annotations

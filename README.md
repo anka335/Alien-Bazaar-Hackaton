@@ -2,7 +2,7 @@
 
 A robotic arm on a rover collects socks from the floor and sorts them by color.
 
-**Load:** the rover stops next to socks. The arm looks at the floor with the depth camera on its wrist, classifies each sock as **light**, **dark** or **colored**, picks it up and drops it into the matching compartment of the 3-compartment cargo box on the rover. **Unload:** at a station the arm empties each compartment into its laundry bin. A live dashboard shows the camera, the decisions, a 3D view and the counters.
+**Load:** the rover stops next to socks. The arm looks at the floor with the depth camera on its wrist, classifies each sock as **light**, **dark** or **colored**, picks it up and drops it into the cargo box on the rover (one box for now; where the color sorting happens is open, [D-040](docs/decisions.md)). **Unload:** at a station the arm empties the box into the laundry bins. A live dashboard shows the camera, the decisions, a 3D view and the counters.
 
 Everything is built and accepted on a MuJoCo simulator first ([D-032](docs/decisions.md)); the real rover and arm come after.
 
@@ -10,11 +10,11 @@ Everything is built and accepted on a MuJoCo simulator first ([D-032](docs/decis
 
 | Component | Details |
 | --- | --- |
-| Rover | built and driven by others; the arm stands on its deck, 200 mm above the floor |
+| Rover | built and driven by others; four wheels, the arm stands on its deck, 200 mm above the floor |
 | Robot arm | Seeed reBot Arm B601-RS (RobStride motors): 6 DoF + parallel gripper, driven through [`rebot_b601/`](rebot_b601/README.md) |
 | Camera | Intel RealSense D435i RGB-D on the arm's wrist (eye-in-hand), USB 3 |
-| Cargo box | on the deck, left of the arm: 3 compartments (light, dark, colored) |
-| Unload station | 3 laundry bins on the floor, right of the rover |
+| Cargo box | one cardboard box, 190 × 190 × 75 mm (outside), right of the arm and a bit behind |
+| Unload station | 3 laundry bins (boxes like the cargo box) on the floor in front of the rover |
 
 ## Project plan
 
@@ -39,21 +39,31 @@ uv run python -m sorter run --sim               # load mode on the simulator; --
 uv run pytest                                   # tests
 ```
 
-`run --sim` starts the state machine and the dashboard at <http://127.0.0.1:8000> ([D-031](docs/decisions.md)). The operator modes are `load`, `unload` (the state machine runs that loop; Start / Pause / Step / Stop / Reset) and the setup modes `manual`, `calibrate`; `--mode` picks the one to start in, `--autostart` presses Start. The mode changes between runs. Hold (the red button, Space / Esc) freezes the arm; Reset continues; Ctrl+C holds, goes to rest and turns the motors off. Other flags: `--no-dashboard`, `--config-dir`, `-v`. Every run is logged to `data/runs/<run_id>/` (`state_machine.save_runs: false` to turn off). The front end still shows the table-era "Auto" tab and 3D table until stage A updates it (A6).
+`run --sim` starts the state machine and the dashboard at <http://127.0.0.1:8000> ([D-031](docs/decisions.md)). The operator modes are `load`, `unload` (the state machine runs that loop; Start / Pause / Step / Stop / Reset) and the setup modes `manual`, `calibrate`; `--mode` picks the one to start in, `--autostart` presses Start. The mode changes between runs. Hold (the red button, Space / Esc) freezes the arm; Reset continues; Ctrl+C holds, goes to rest and turns the motors off. Other flags: `--no-dashboard`, `--config-dir`, `-v`. Every run is logged to `data/runs/<run_id>/` (`state_machine.save_runs: false` to turn off). On the rig (without `--sim`; `--record` / `--no-record` to override) the whole session is recorded to `data/sessions/<stamp>/`: a DEBUG log, the arm's telemetry at 50 Hz (measured and commanded joints, torque, gripper), every arm and detector call, the decision frames and the wrist camera's video; Enter in the terminal drops a mark. The front end has the Load / Unload tabs but still the table-era phase strip and 3D view until stage A updates it (A6).
 
 ## The simulator
 
 `--sim` simulates the hardware only (the arm's motors and the wrist camera) in a MuJoCo scene ([D-021](docs/decisions.md)); calibration, the detectors and the loops run their real code on the rendered RGB-D frames, and the arm runs the real `rebot_b601` control loop. So `run` without `--sim` runs the same code on the rig.
 
-- The scene is a shared base (floor, rover, deck, cargo box, arm) plus one scene file per stage: `src/sorter/sim/scenes/load/` (socks on the floor) and `.../unload/` (the laundry bins, socks in the compartments); `sim.scenes` picks which ([D-034](docs/decisions.md)).
+- The scene is a shared base (floor, rover, deck, cargo box, arm) plus one scene file per stage: `src/sorter/sim/scenes/load/` (socks on the parquet floor around the rover) and `.../unload/` (the laundry bins, socks in the box); `sim.scenes` picks which ([D-034](docs/decisions.md)).
 - Socks are cloth that falls, folds and hangs from the gripper. Cloth is expensive: `sim.realtime: 0` runs as fast as the CPU allows (3 socks ≈ 2.6× real time).
+- The sim's wrist camera sits where the real one was calibrated (`config/hand_eye.yaml`); after a new calibration run `python -m sorter.sim.layout --write`.
+- Watch one load run: `uv run mjpython -m sorter.sim.scenes.load.watch [--seed 3] [--socks 4]` (live in the MuJoCo viewer; `mjpython` on macOS), or `uv run python -m sorter.sim.scenes.load.watch --no-viewer --record run.mp4` (a video). The load benchmark: `uv run python -m sorter.sim.scenes.load.bench -n 50 --workers 3` (report in `data/bench/`).
 - The floor detector uses the render's segmentation instead of SAM3 (`sim.use_sam3: true` to call the service). `sim.miss_prob` makes grasps miss on purpose.
 
-**Rover layout** (`sim.layout` in `config/default.yaml`, arm base at the origin on the deck, +x forward, +y left, mm; placeholders until the rover is measured): the floor at z −200; the cargo box inside x −260..60, y 130..310, walls 50 mm; the floor view (the floor pick zone) 280 × 240 around (300, 0); the laundry bins (220 mm, 150 high) at (−140, −330), (100, −330), (340, −300). The arm's joint 1 turns ±145° and the gripper held down reaches ~100 mm above the deck, which is why the box is beside the arm and the bins are low. After changing the layout recompute the rig: `uv run python -m sorter.sim.layout --write` writes the poses, zones, ROIs and the arm's keep-out into `config/rig.yaml` and checks every pick and move (it must report 0 problems).
+**Unload** (stage B, [D-043](docs/decisions.md)): the socks piled in the cargo box, the three bins in front of the rover off their places by seed (parking); the loop finds everything with the wrist camera.
+
+```bash
+uv run mjpython -m sorter.sim.scenes.unload.demo      # one scenario, live in the MuJoCo viewer (--no-viewer --dashboard: the browser)
+uv run python -m sorter.sim.scenes.unload.preview     # render the scene (--view: the MuJoCo viewer)
+uv run python -m sorter.sim.scenes.unload.bench -n 20 # seeded scenarios, judged by the sim; report in data/bench/
+```
+
+**Rover layout** (`sim.layout` in `config/default.yaml`, arm base at the origin on the deck, +x forward, +y left, mm; measured, [D-042](docs/decisions.md), except the equipment, the box's center and the station): the floor at z −200; the deck 300 × 185 with the arm at its front edge; the body 420 × 420 with wheels 130 wide at its corners; the electronics, power supply and power strip behind the arm; the cargo box inside 182 × 182 around (−50, −200) (right of the arm, [D-045](docs/decisions.md)), rim 34 above the deck; the floor view 280 × 240 around (310, 0); the laundry bins (190 mm, 75 high) at (290, 220) light, (290, 0) dark, (290, −220) colored. The arm's joint 1 turns ±145° and the gripper held down reaches ~100 mm above the deck, which is why the box is beside the arm, not behind it, and the bins are low. After changing the layout recompute the rig: `uv run python -m sorter.sim.layout --write` writes the poses, zones, ROIs and the arm's keep-out into `config/rig.yaml` and checks every pick and move (it must report 0 problems).
 
 ## Rover navigation sim
 
-The Leo Rover 1.9 with an OAK-D in its own MuJoCo world, steered by camera-only commands ([D-040](docs/decisions.md), stage N).
+The Leo Rover 1.9 with an OAK-D in its own MuJoCo world, steered by camera-only commands ([D-046](docs/decisions.md), stage N).
 
 - The Rover tab: `/rover` in the dashboard, or on its own `uv run python -m sorter.nav serve` → http://127.0.0.1:8010/rover (build the front end first). Click a pixel of the OAK-D view, then Face / Go to pixel; Forward, Turn, Scan, Seek sock, Clearance, arrow keys nudge, Esc stops; Approach sock runs the algorithm (`classic`, `sam3`, `seg` = sim oracle). Below it, the command panel has every command as a card: its parameters as fields (a click on the view fills `u`, `v`), a Run button and its last result.
 - One command per process, an episode in a directory: `uv run python -m sorter.nav new runs/e1 --scenario easy --seed 0`, then `... do runs/e1 go_to_pixel 220 109`, `... detect runs/e1 --detector classic|sam3|seg`, `... depth runs/e1 U V`, `... finish runs/e1` (the ground-truth score). Frames land in `runs/e1/frames/` (`NNN_grid.png` has a pixel grid and the goal zone).

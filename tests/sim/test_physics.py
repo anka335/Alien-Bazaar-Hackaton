@@ -26,6 +26,7 @@ def _system(sim_config, scenes, **sim):
 @pytest.fixture
 def load_system(sim_config):
     sim_config.sim.load.socks = [ColorClass.DARK]
+    sim_config.sim.load.area = "view"
     system = _system(sim_config, ["load"])
     yield system
     system.camera.close()
@@ -35,6 +36,10 @@ def load_system(sim_config):
 @pytest.fixture
 def unload_system(sim_config):
     sim_config.sim.unload.cargo = {ColorClass.COLORED: 1}
+    # the base's stiff cloth: a limp sock hangs ~100 mm and, let go from `drop_height_mm` over
+    # the rim, catches on it (the unload loop lets go with the fingers inside the bin)
+    sim_config.sim.unload.sock_young = 1e5
+    sim_config.sim.unload.sock_thickness_mm = 4.0
     system = _system(sim_config, ["unload"])
     yield system
     system.camera.close()
@@ -51,6 +56,7 @@ def _top(world, item) -> ArmPoint:
 
 def test_scenes_put_the_socks_in_place(sim_config):
     sim_config.sim.load.socks = [ColorClass.LIGHT, ColorClass.DARK]
+    sim_config.sim.load.area = "view"  # clear of the station's bins
     sim_config.sim.unload.cargo = {ColorClass.LIGHT: 1, ColorClass.COLORED: 1}
     world = _system(sim_config, ["load", "unload"]).world
     try:
@@ -58,8 +64,8 @@ def test_scenes_put_the_socks_in_place(sim_config):
         assert where == [
             (ColorClass.LIGHT, ("floor", None)),
             (ColorClass.DARK, ("floor", None)),
-            (ColorClass.LIGHT, ("cargo", ColorClass.LIGHT)),
-            (ColorClass.COLORED, ("cargo", ColorClass.COLORED)),
+            (ColorClass.LIGHT, ("cargo", None)),  # one box, not split by color (D-040)
+            (ColorClass.COLORED, ("cargo", None)),
         ]
     finally:
         world.stop()
@@ -83,21 +89,18 @@ def test_floor_detector_finds_the_sock(load_system):
     assert np.linalg.norm(cloth - [p.x, p.y, p.z], axis=1).min() < 15
 
 
-@pytest.mark.xfail(
-    reason="the dropped sock doesn't settle in its compartment in time (stage A, A3)"
-)
 def test_scripted_load(load_system):
-    """A sock from the floor into its cargo compartment, from its known position."""
+    """A sock from the floor into the cargo box, from its known position."""
     s, world = load_system, load_system.world
     result = s.arm.pick(_top(world, 0), Zone.FLOOR)
     assert world.location(0)[0] == "gripper" and not result.likely_empty
     s.arm.drop_to_cargo(ColorClass.DARK)
     s.arm.look(Zone.CARGO)  # let it land
-    assert world.location(0) == ("cargo", ColorClass.DARK)
+    assert world.location(0) == ("cargo", None)
 
 
 def test_scripted_unload(unload_system):
-    """A sock from its cargo compartment into its laundry bin, from its known position."""
+    """A sock from the cargo box into its laundry bin, from its known position."""
     s, world = unload_system, unload_system.world
     s.arm.look(Zone.CARGO)
     result = s.arm.pick(_top(world, 0), Zone.CARGO, math.pi / 2)
@@ -107,9 +110,9 @@ def test_scripted_unload(unload_system):
     assert world.location(0) == ("laundry", ColorClass.COLORED)
 
 
-@pytest.mark.xfail(reason="friction alone still drags the sock along (stage A, A4)")
 def test_miss_prob_makes_a_grasp_catch_nothing(sim_config):
     sim_config.sim.load.socks = [ColorClass.DARK]
+    sim_config.sim.load.area = "view"
     s = _system(sim_config, ["load"], miss_prob=1.0)
     try:
         s.arm.pick(_top(s.world, 0), Zone.FLOOR)  # likely_empty is a hint: cloth may be pinched

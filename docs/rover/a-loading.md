@@ -1,22 +1,31 @@
 # Rover stage A: Loading
 
-**Status:** todo · **Owner:** — · **Branch:** —
+**Status:** in progress · **Owner:** Softjey + Claude · **Branch:** `claude/pensive-banach-a6b5d1`
 **Depends on:** [0: Preparation](0-preparation.md) (done). Runs in parallel with [B: Unloading](b-unloading.md).
 
 ## Goal
 
-The rover has stopped next to socks on the floor. The arm finds them, classifies each sock's color on the spot, picks it up and drops it into the cargo compartment of that color, until no sock is left in reach. The rover stands still; we don't talk to it ([D-032](../decisions.md), [D-034](../decisions.md)).
+The rover has stopped next to socks on the floor. The arm finds them, classifies each sock's color on the spot, picks it up and drops it into the cargo box (one box, [D-040](../decisions.md)), until no sock is left in reach. The rover stands still; we don't talk to it ([D-032](../decisions.md), [D-034](../decisions.md)).
 
 **Make it work perfectly in the simulator, as close to reality as you can get it:** a realistic scene (socks, floor, light, camera noise), a robust loop, and a benchmark that proves it. Hardware comes later.
 
-## What you start from
+## Where it stands
 
-- `uv run python -m sorter run --sim` (mode `load`): the MuJoCo scene with the rover, the arm on its deck 200 mm above the floor, the cargo box, and the socks of `sim.load.socks` on the floor. The dashboard's front end is not updated yet (A6).
-- A **baseline loop** in `src/sorter/orchestrator/load.py`: `SCAN` (observe the floor from `look_floor`) → `SENSE_FLOOR` → `PICK_FROM_FLOOR` → `DROP_TO_CARGO` → `SCAN`, counted when the next look shows one sock fewer. It has never run end to end: expect to fix it.
-- A **baseline floor detector** `ClassifierFloorDetector` (`src/sorter/floor_detector/`): block 4's color classifier over `views.floor.roi`, on the render's segmentation in the sim. No grasp angle, no mask.
-- The arm: `pick(target, Zone.FLOOR, yaw_rad)` (gripper down, fingers opening along `yaw_rad`), `drop_to_cargo(color)`; every path is checked against the floor and the rover's keep-out. `rig.yaml` has `look_floor`, `cargo_<color>`, zone `floor` = the floor view (280 × 240 mm around (300, 0)).
-- Scene file you own: `src/sorter/sim/scenes/load/scene.py` (`add()` gets the MJCF world and returns the socks). `PhysicsWorld.location(item)` tells where each sock ended: the ground truth for tests and the benchmark.
-- Contracts and the sim: [architecture.md](../architecture.md).
+- **Loop** (`orchestrator/load.py`, [D-041](../decisions.md)): scans a ring of 7 poses around the arm, picks the nearest sock (a closer, aimed look if cut off), drops it after it stops swinging, counts it only if its spot is empty and the box's surface rose where it landed. Retries up to `load.max_attempts`, then leaves the sock.
+- **Detector** (`floor_detector/`): `SockDetector`, masks sized in mm from depth, grasp at the widest part, yaw across the sock there.
+- **Sim**: the camera where the real one was calibrated; the rover, box and parquet from photos; sock-shaped socks over the reachable ring; cloth lies on cloth.
+- **See it**: `uv run mjpython -m sorter.sim.scenes.load.watch` (live in the MuJoCo viewer) or `uv run python -m sorter.sim.scenes.load.watch --no-viewer --record run.mp4` (a video of one run); `uv run python -m sorter.sim.scenes.load.bench -n 50 --workers 3` (the numbers).
+- **Numbers so far**: 12 scenes, 29 socks: 93 % of the reachable socks ended in the box (before the last changes). A partial 50-scene run after them: 15 of 18 socks in the box in 9 scenes, one scene ended in ERROR (5 failures in a row, 0 of 4 loaded).
+
+### Known issues
+
+- **Seed 0 of the 50-scene run: ERROR after 5 consecutive failures, 0/4 loaded.** Not investigated. Likely several socks close together or a sock the pick keeps missing: failures from different socks add up to `max_consecutive_failures`.
+- **Counting**: a sock in the box is sometimes not counted (white socks especially: the raised area stays small), and once one was counted that wasn't there. `load.raised_mm` / `min_raised_mm2` and the box view need tuning with data.
+- **`look_cargo`** sees the box from only ~210 mm (the arm can't get the camera higher over a box that close to its base): the box just fits the frame; a sock draped over the far wall is cut off.
+- **Drops**: coming in at the drop height dragged the hanging sock over the box's wall; now the arm comes in high, lets go under the rim and backs out (`arm.cargo_drop_*`). The box (150 mm) is shorter than a sock (200 mm): with 3+ socks the pile reaches the rim and a sock can still flop over it.
+- **Speed**: ~50 s of sim time per sock; a 4-sock scene takes 2–6 min wall (cloth, 3 scenes in parallel). A pile in the box costs ~5x per step with `sim.cloth_collisions`.
+- **Sim nondeterminism**: the loop's thread timing changes when the arm gets its next command, so a seed doesn't replay exactly.
+- **Not done**: A6 (dashboard front end), floor textures other than parquet (A0), the unload loop still walks compartments (B).
 
 ## Your lane
 
@@ -30,19 +39,19 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 
 | # | Task | Status | Owner | Done when |
 | --- | --- | --- | --- | --- |
-| A0 | Realistic load scene | todo | — | Sock-shaped cloth of real sizes, several floor textures, lighting and depth noise like the D435i on a real floor; a scene is reproducible from its seed |
-| A1 | Floor scan | todo | — | A sock is found wherever it lies in the reachable ring, not only in the floor view |
-| A2 | Floor detector + color | todo | — | ≥ 95 % correct colors across floor textures on the benchmark; grasp angle and mask filled |
-| A3 | Grasp from the floor | todo | — | ≥ 90 % successful grasps on the benchmark |
-| A4 | Verify and retry | todo | — | Every failure path has a test; counters only count socks that are in their compartment |
-| A5 | Load loop | todo | — | Runs end to end on the sim with holds and errors handled |
+| A0 | Realistic load scene | in progress | Softjey + Claude | Sock-shaped cloth of real sizes, several floor textures, lighting and depth noise like the D435i on a real floor; a scene is reproducible from its seed |
+| A1 | Floor scan | done | Softjey + Claude | A sock is found wherever it lies in the reachable ring, not only in the floor view |
+| A2 | Floor detector + color | review | Softjey + Claude | ≥ 95 % correct colors across floor textures on the benchmark; grasp angle and mask filled |
+| A3 | Grasp from the floor | review | Softjey + Claude | ≥ 90 % successful grasps on the benchmark |
+| A4 | Verify and retry | in progress | Softjey + Claude | Every failure path has a test; counters only count socks that are in their compartment |
+| A5 | Load loop | review | Softjey + Claude | Runs end to end on the sim with holds and errors handled |
 | A6 | Dashboard: front end + load panel | todo | — | Tabs Load / Unload, the 3D view from `/api/twin/layout` `parts`, rover phases; the load panel shows the scan frame, found socks, per-compartment counters |
-| A7 | Benchmark pass | todo | — | One command runs N seeded scenarios headless; ≥ 90 % of socks end in the right compartment |
+| A7 | Benchmark pass | in progress | Softjey + Claude | One command runs N seeded scenarios headless; ≥ 90 % of socks end in the right compartment |
 
 ### A0: Realistic load scene
 
-- Socks: `ItemSpec.sheet_m` / `gather` shape the cloth (an 8 × 8 grid). Aim for real socks: ~200 × 90 mm flat, mostly lying flat, sometimes bunched.
-- Floor textures (wood like the real floor, plain, carpet-like), picked by seed; the lamp and the camera's noise as on the rig.
+- Done: the rover, the box and the equipment from photos; herringbone parquet like the real floor; socks with a sock outline (`sock_shape`: leg, heel bend, rounded toe; `ItemSpec.rest_m`), ~70 % flat, the rest bunched, spread over the reachable ring.
+- Left: more floor textures (plain, carpet-like) picked by seed; sock knit texture and a two-tone heel and toe; the lamp and the camera's noise as on the rig. Socks look ~12 mm thick (the flex radius); the arm is the URDF's green, the real one is lime.
 - Cloth costs simulation time (3 socks ≈ 2.6× real time): keep the benchmark fast enough.
 
 ### A1: Floor scan
@@ -58,12 +67,12 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 ### A3: Grasp from the floor
 
 - Grasp point: mask center or thickest part; yaw across the sock's short axis (PCA of the mask), converted from the image to the arm frame. Floor height from the depth around the sock, not a constant.
-- Known issue: `tests/sim/test_physics.py::test_scripted_load` is xfail: after `drop_to_cargo` the sock is not yet `("cargo", DARK)` when checked. Find out whether it is still falling, lands on a wall, or the drop pose is off, and fix it.
+- The scripted floor → box drop (`test_scripted_load`) works; over seeds 0–5 one sock (seed 5) ended on the box's rim (`other`). The box is small (150 mm): aim the drop and check where it lands.
 
 ### A4: Verify and retry
 
 - After a pick: the gripper (`likely_empty` is only a hint), and the next look. Miss → retry up to `load.max_attempts`, then skip the sock and log it.
-- Known issue: `test_miss_prob_makes_a_grasp_catch_nothing` is xfail: with `sim.miss_prob = 1` friction alone still drags the sock along. Make `miss_prob` a reliable miss.
+- `sim.miss_prob = 1` makes a floor grasp miss (6 of 6 seeds in the new scene).
 
 ### A5: Load loop
 
@@ -71,7 +80,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 
 ### A6: Dashboard
 
-- The front end (`frontend/`) still has the table's "Auto" tab and 3D table. Update the shared parts (`api.ts` modes, `TopBar` tabs `/load`, `/unload`, the 3D view drawing `parts` generically, the phases), then the load panel. Tell B when the shared part is merged: B's panel builds on it.
+- The front end (`frontend/`) has the `load` / `unload` modes and the tabs `/load`, `/unload` (both on the old run page, `AutoPage`), but still the table's 3D view and phase strip. Update the rest of the shared parts (the 3D view drawing `parts` generically, the phases), then the load panel. Tell B when the shared part is merged: B's panel builds on it.
 - Rewrite the skipped `tests/dashboard/test_server.py` and `test_calibrate.py` (calibration now on the floor view).
 
 ### A7: Benchmark
@@ -85,7 +94,7 @@ A0–A7 done on the sim.
 ## Open questions
 
 - Several socks at one stop: collect all in reach (planned) or only the one the rover stopped for?
-- A sock we can't classify confidently: most likely class (current policy) or a fixed compartment?
+- With one box ([D-040](../decisions.md)): does loading still need the color (for the dashboard, or to hand it to unloading), or does sorting happen at unload?
 
 ## Requests from other blocks
 
@@ -95,5 +104,12 @@ A0–A7 done on the sim.
 
 - 2026-09-27: stage defined ([D-032](../decisions.md)).
 - 2026-09-27: stage 0 done; the brief rewritten for what it delivered ([D-034](../decisions.md)).
+- 2026-09-27: A0 started: the rover, the one cargo box and the parquet floor from photos, sock-shaped socks over the reachable ring ([D-040](../decisions.md)); the shared layout, keep-out and base scene changed (noted in B's Log).
+- 2026-09-27: the load loop scanning a ring around the arm, the sock detector, the camera from the hand-eye result, the benchmark and the watch tool ([D-041](../decisions.md)); shared: `ArmController.go_to` / `aim_camera`, `Observer.observe(zone, pose)` / `observe_point`, `plan_move`, `arm.link5_points_mm`, `arm.drop_settle_s`, phases `AIM` / `CHECK_LOAD`, scan poses in `rig.yaml`, `sim.cloth_collisions` (noted in B's Log).
+- 2026-09-27: the rover measured ([D-042](../decisions.md)): deck 200 mm high, arm at the front edge, the box 190 mm outside; `rig.yaml` recomputed. The benchmark numbers above are from the old layout.
 - 2026-09-27: stages N (navigation), C (full mission), D (sim-to-real) added ([D-035](../decisions.md)): repositioning and the rover interface are C's, N hands over at the stop requirement.
-- 2026-09-27: shared code touched by stage N ([D-040](../decisions.md)): the root config has a `nav` section, `create_app(..., nav=)` mounts `/api/nav/*` and the `/rover` page, the front end has a Rover tab (`TopBar.tsx`, `main.tsx`), `pyproject.toml` an optional `nav-hw` extra (depthai). Nothing else in the shared code changed.
+- 2026-09-27 (from B): shared front end: the `auto` mode replaced by `load` / `unload` (the back end's modes since stage 0; `/` crashed on `TAB_MODES["unload"]`), tabs Load / Unload both on the old run page `AutoPage`, `isRunMode()` in `api.ts`. The 3D view, the phase strip and the load panel are still A6's.
+- 2026-09-27 (from B): shared `ItemSpec` takes the cloth's `young` and `thickness_m`; the defaults are the base's (1e5 Pa, 4 mm), so your scene is unchanged. B's socks are limp (1e4 Pa, 1 mm) so a held one hangs into the camera's view ([D-044](../decisions.md)); worth trying for A's too if the held sock matters to you.
+- 2026-09-27 (from B, [D-043](../decisions.md)): shared `sim.layout` tool: the cargo zone is B's pick zone (16 mm off the walls, corners cut by 45 mm, `grasp_depth_mm` 8; the check plans a pick at 0/90/45/135° and needs one), and `rig.yaml` has `show_held` (found with a MuJoCo collision check, `layout.collision_check`). The station (`sim.layout.laundry`) moved in front of the rover: 190 mm boxes at x 290, y ±220 / 0, so with both scenes (`run --sim`'s default) the bins stand in your floor ring; your bench and watch use only `load`. B's `sim.camera_mount_T` is gone in favor of your `camera_T_link5_cam`.
+- 2026-09-27: the cargo box moved to the arm's right ([D-045](../decisions.md)): `sim.layout.cargo.center_mm` (−50, −200); `rig.yaml` recomputed (look_cargo, cargo_*, scan poses, both zones, views, keep-out changed). Rebase and rerun your layout-dependent tests.
+- 2026-09-27: shared code touched by stage N ([D-046](../decisions.md)): the root config has a `nav` section, `create_app(..., nav=)` mounts `/api/nav/*` and the `/rover` page, the front end has a Rover tab (`TopBar.tsx`, `main.tsx`), `pyproject.toml` an optional `nav-hw` extra (depthai). Nothing else in the shared code changed.

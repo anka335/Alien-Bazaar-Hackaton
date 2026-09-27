@@ -18,31 +18,34 @@ sim:
   use_sam3: false    # segment with the real SAM3 service, not the render's segmentation
   seed: 0
   scenes: [load, unload]  # what src/sorter/sim/scenes/<name>/scene.py adds to the base
-  load:              # stage A's scene: socks on the floor in front of the rover
+  load:              # stage A's scene: socks on the floor around the rover (area: reach | view)
     socks: [light, dark, colored]
-  unload:            # stage B's scene: the laundry bins, socks in the cargo compartments
+  unload:            # stage B's scene: the laundry bins, socks in the cargo box
     cargo: {light: 1, dark: 1, colored: 1}
   miss_prob: 0.0     # a closing gripper catches nothing (the sim's grip is optimistic)
+  cloth_collisions: true  # cloth on cloth lies on top (a pile ~5x slower); false: piles pass through
   width: 640
   height: 480
   focal_px: 615                   # D435i color at 640x480
   camera_mount_mm: [-140, 0, 55]  # wrist camera in the TCP frame (x = approach), looks along x
   layout:            # the rover, arm base at the origin on the deck (z = 0), +x forward, +y left, mm
+    # measured on the rover (D-042); the equipment behind the arm is still a photo estimate
     floor_z_mm: -200                                          # the deck is 200 mm above the floor
-    body: {center_mm: [-150, 80], size_mm: [500, 480]}       # chassis + wheels, from above
-    deck: {center_mm: [-150, 80], size_mm: [480, 470]}       # the plate the arm stands on
-    cargo:                                                    # on the deck, left of the arm
-      center_mm: [-100, 220]
-      size_mm: [320, 180]                                     # inside, split along x
-      floor_z_mm: 5
-      wall_mm: 50
-      wall_t_mm: 6
-      compartments: [light, dark, colored]                    # from -x to +x
-    floor_view: {center_mm: [300, 0], size_mm: [280, 240]}   # the floor look_floor frames
-    laundry:                                                  # the unload station's bins
-      centers_mm: {light: [-140, -330], dark: [100, -330], colored: [340, -300]}
-      size_mm: 220
-      height_mm: 150
+    body: {center_mm: [-90, 0], size_mm: [420, 420]}         # chassis + wheels, from above
+    wheel_width_mm: 130
+    deck: {center_mm: [-90, 0], size_mm: [300, 185]}         # the plate; the arm at its front edge
+    cargo:                                                    # one cardboard box, right of the arm (D-045)
+      center_mm: [-50, -200]                                  # not measured: D-040's spot mirrored
+      size_mm: [182, 182]                                     # inside (190 outside)
+      floor_z_mm: -41                                         # inside floor; its underside 45 below the deck
+      wall_mm: 75                                             # the rim is 34 above the deck
+      wall_t_mm: 4
+    floor_view: {center_mm: [310, 0], size_mm: [280, 240]}   # the floor look_floor frames
+    laundry:            # the unload station: boxes like the cargo box on the floor in front (D-043)
+      centers_mm: {light: [290, 220], dark: [290, 0], colored: [290, -220]}   # not measured
+      size_mm: 190                                            # outside
+      height_mm: 75
+      wall_t_mm: 4
 
 camera: {}           # shared
 calibration:         # shared
@@ -65,7 +68,9 @@ color_classifier:    # stage A: the floor detector's segmentation + color (D-013
   max_area_frac: 0.8           # a blob covering more of the ROI is the background itself
   overlap_max: 0.5             # drop an instance this much covered by a better-scored one
   erode_px: 5                  # erode the mask before color stats (shadows, edges)
-  lightness_dark: 22           # median L* below → dark whatever the chroma (navy, dark brown)
+  lightness_dark: 22           # median L* below → dark whatever the chroma
+  lightness_dim: 35            # median L* below and chroma below chroma_muted → dark too:
+  chroma_muted: 35             #   a dim, muted color (navy, dark brown) under a lamp
   chroma_colored: 20           # median Lab chroma at or above → colored
   lightness_light: 55          # else median L* at or above → light, below → dark
   confidence_margin: 10        # distance from the deciding threshold that gives confidence 1
@@ -78,6 +83,7 @@ arm:                 # shared (D-019); z_min_mm and keep_out_mm come from rig.ya
   max_speed_scale: 1.4  # the dashboard's maximum; at most ~1.43, the motors' velocity limit
   safe_z_mm: 100     # recover() / shutdown() first lift the TCP to this height
   drop_height_mm: 30 # TCP above the rim at cargo_<color> / laundry_<color> (sim.layout tool)
+  drop_settle_s: 0.8 # hold still over the drop before opening: the hanging sock stops swinging
   keep_out_margin_mm: 15  # around the keep-out boxes (rig.yaml: the rover body, cargo walls)
   gripper: {open: 0.6, empty_below: 0.01}   # 0.6: ~27 mm a finger, fits beside the box walls
 
@@ -95,7 +101,7 @@ dashboard:           # shared
   jpeg_quality: 80
   status_hz: 5       # max rate of status pushes over /ws
 
-nav:                           # the rover navigation sim and the real Leo Rover (stage N, D-040)
+nav:                           # the rover navigation sim and the real Leo Rover (stage N, D-046)
   camera:                      # the OAK-D: all keys in sorter/nav/config.py (OakDConfig)
     mount_xyz_m: [0.10, 0.0, 0.075]  # on the top plate, base_link frame (m): measure the real one
     pitch_deg: 25.0            # down; 20-25 keeps both the far floor and the pick zone in view

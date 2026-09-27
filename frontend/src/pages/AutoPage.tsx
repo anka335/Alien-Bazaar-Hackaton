@@ -1,9 +1,9 @@
 // The sorting tab (auto mode): the state machine's phase and program lights, the decision frame
 // or the 3D view, the wrist camera, the bins, the run controls and the warnings.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { postJSON, type Bin, type Status } from "../api";
+import { MODE_LABELS, isRunMode, postJSON, type Bin, type OperatorMode, type Status } from "../api";
 import { LiveImage } from "../components/common";
-import { useStored } from "../hooks";
+import { usePath, useStored } from "../hooks";
 import { useSorter } from "../sorter";
 import { TwinView } from "../twin/TwinView";
 
@@ -97,7 +97,9 @@ export function AutoPage(): React.JSX.Element {
   const { status: s, online, run, setMode, phaseLabel } = useSorter();
   const [view, setView] = useStored<"decision" | "twin">("screen-view", "decision");
   const visited = useVisited(s?.phase);
-  const auto = s?.operator === "auto";
+  // the Load and Unload tabs share this page; the tab says which loop it switches to
+  const tabMode: OperatorMode = usePath() === "/unload" ? "unload" : "load";
+  const auto = isRunMode(s?.operator);
   const send = (cmd: string) => run(postJSON("/api/command", { cmd }));
 
   const alarm = s?.phase === "held" || s?.phase === "error";
@@ -176,7 +178,7 @@ export function AutoPage(): React.JSX.Element {
         ) : (
           <div className="mode-strip">
             <span>The arm is in the <b>{s.operator}</b> mode: the sorter can't run.</span>
-            <button type="button" className="primary" onClick={() => setMode("auto")}>Switch to Auto</button>
+            <button type="button" className="primary" onClick={() => setMode(tabMode)}>Switch to {MODE_LABELS[tabMode]}</button>
           </div>
         )}
         <ol className="events" aria-label="Recent warnings">

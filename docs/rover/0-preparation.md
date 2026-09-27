@@ -30,7 +30,7 @@ Checked: `uv run pytest` passes; `python -m sorter.sim.layout` reports 0 problem
 
 - xfail `tests/sim/test_physics.py::test_scripted_load` (A3) and `test_miss_prob_makes_a_grasp_catch_nothing` (A4).
 - Skipped until rewritten for the rover: `tests/orchestrator/test_runlog.py` (A5), `tests/color_classifier/test_classifier.py` (A2), `tests/dashboard/test_server.py`, `test_calibrate.py` (A6), `test_manual.py` (B5).
-- The front end still shows the table's "Auto" tab and 3D table (A6).
+- The front end has the Load / Unload tabs, but still the table's phase strip and 3D table (A6).
 - The calibration page and the board tool were moved to the floor view but not rerun on the sim.
 
 ## Log

@@ -1,6 +1,9 @@
 // The sorter's HTTP API (docs/architecture.md → Dashboard HTTP API): types and small helpers.
 
-export type OperatorMode = "auto" | "manual" | "calibrate";
+export type OperatorMode = "load" | "unload" | "manual" | "calibrate";
+
+/** The modes the state machine runs in (its loops); the others are setup modes. */
+export const isRunMode = (m: OperatorMode | undefined): boolean => m === "load" || m === "unload";
 export type Bin = "light" | "dark" | "colored";
 
 export interface SorterEvent {
@@ -136,13 +139,15 @@ export async function postJSON<T = { ok: boolean }>(url: string, body: unknown):
 }
 
 export const TAB_MODES: Record<OperatorMode, string> = {
-  auto: "/auto",
+  load: "/load",
+  unload: "/unload",
   manual: "/manual",
   calibrate: "/calibrate",
 };
 
 export const MODE_LABELS: Record<OperatorMode, string> = {
-  auto: "Auto",
+  load: "Load",
+  unload: "Unload",
   manual: "Manual",
   calibrate: "Calibrate",
 };
