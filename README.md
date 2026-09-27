@@ -76,6 +76,8 @@ The Leo Rover 1.9 with an OAK-D in its own MuJoCo world, steered by camera-only 
 
 The same commands drive the real rover over rosbridge (LeoOS runs it on port 9090 for its web UI; no ROS install needed here): `sorter.nav.real_leo` sends `cmd_vel` every control tick and reads `merged_odom`, or, if that topic is silent, integrates the wheel encoders (`firmware/wheel_states`) and the IMU's gyro (`imu/data`) itself. Topic names are relative, so rosbridge resolves them in the rover's namespace (`/leo/` on ours).
 
+**Snap Spectacles teleop of the base:** `scripts/spectacles_base.sh` runs the lens's bridge and its ngrok tunnel ([docs/rover/spectacles-teleop.md](docs/rover/spectacles-teleop.md)). To set up a machine, an agent follows [docs/rover/spectacles-teleop-setup.md](docs/rover/spectacles-teleop-setup.md).
+
 The camera (`nav.real.camera`, `auto` tries them in this order): the OAK-D's ROS driver on the rover over rosbridge (`/oak/rgb/image_raw/compressed`, `/oak/stereo/image_raw/compressedDepth`, `/oak/rgb/camera_info`); an OAK-D plugged into this machine (depthai v3, `uv sync --extra nav-hw`); none (gray frames, no obstacle guard: drive with care).
 
 1. Join the rover's Wi-Fi (the rover is 10.0.0.1; `nav.real.rosbridge_url` defaults to `ws://10.0.0.1:9090`).

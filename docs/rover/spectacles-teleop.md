@@ -11,6 +11,8 @@ No ROS install is needed. It uses LeoOS's rosbridge on port 9090, like `sorter.n
 
 ## Run
 
+An agent setting up a new machine follows [spectacles-teleop-setup.md](spectacles-teleop-setup.md), which checks every step.
+
 Once per machine:
 
 1. `uv sync`, as for the rest of the repo. Without uv, `python3` with `websockets` also works.
