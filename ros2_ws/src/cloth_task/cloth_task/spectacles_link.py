@@ -4,7 +4,8 @@ Kept free of rclpy (only `websockets`) so it can be tested with a real client an
 socket goes through `Session.on_connect()`: a refused one is closed with 1013 (try again later),
 an accepted one replaces the current socket, which is closed. Every text frame from the current
 socket goes to `Session.on_teleop()` (undecodable JSON as malformed) and is answered with a
-status; a status is also pushed at `status_hz` so a timeout reaches the lens. All Session calls
+status; a status is also pushed at `status_hz` so a timeout reaches the lens. When the current
+socket closes (or errors), `Session.on_disconnect()` stops the base at once. All Session calls
 hold `lock`, shared with the ROS callbacks.
 """
 
@@ -100,6 +101,8 @@ class LensLink:
         finally:
             if self._current is ws:
                 self._current = None
+                with self.lock:
+                    self.session.on_disconnect()
                 self.log(f"lens {ws.remote_address} disconnected")
 
     async def _push_status(self) -> None:

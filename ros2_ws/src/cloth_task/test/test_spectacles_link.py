@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import threading
+import time
 
 import numpy as np
 import pytest
@@ -10,7 +11,7 @@ import pytest
 websockets = pytest.importorskip("websockets")
 
 from cloth_task.spectacles_link import REFUSED_CODE, LensLink  # noqa: E402
-from cloth_task.spectacles_session import TIMEOUT_S, Session  # noqa: E402
+from cloth_task.spectacles_session import BASE_STALE_S, TIMEOUT_S, Session  # noqa: E402
 
 
 def _rebot():
@@ -25,14 +26,14 @@ K, C = _rebot()
 Q0 = np.radians([10.0, 50.0, 70.0, -20.0, 10.0, 5.0])
 
 
-def teleop(seq, arm=False):
+def teleop(seq, arm=False, base=False):
     return json.dumps(
         {
             "v": 1,
             "type": "teleop",
             "seq": seq,
             "timestamp": 0.0,
-            "base": {"engaged": False, "vx": 0.0, "wz": 0.0},
+            "base": {"engaged": base, "vx": 0.1 if base else 0.0, "wz": 0.0},
             "arm": {
                 "engaged": arm,
                 "position": [0.0, 0.0, 0.0],
@@ -44,9 +45,17 @@ def teleop(seq, arm=False):
 
 
 class Rig:
-    def __init__(self, teleop_mode=True):
+    def __init__(self, teleop_mode=True, rover=False):
         self.joints = []
-        self.session = Session(K, C.JOINT_LIMITS_RAD, self.joints.append, lambda g: None)
+        self.base = []
+        self.session = Session(
+            K,
+            C.JOINT_LIMITS_RAD,
+            self.joints.append,
+            lambda g: None,
+            send_base=lambda vx, wz: self.base.append((vx, wz)),
+            rover=rover,
+        )
         self.session.on_joint_state(Q0)
         self.session.on_teleop_mode(teleop_mode)
         self.link = LensLink(self.session, threading.Lock(), port=0, status_hz=20.0, log=str)
@@ -145,3 +154,27 @@ def test_a_new_lens_replaces_the_old_one():
                 assert len(rig.joints) == 1
 
     run(Rig(), scenario)
+
+
+def test_closing_the_lens_stops_a_driving_base_at_once():
+    async def scenario(rig):
+        with rig.link.lock:
+            rig.session.on_odometry()  # the rover is present when the lens connects
+        async with websockets.connect(rig.url) as ws:
+            await ws.send(teleop(0, base=True))
+            st = await recv_status(ws)
+            while st["echoSeq"] is None:  # a push from before the teleop
+                st = await recv_status(ws)
+            assert st["base"] == "driving"
+            with rig.link.lock:
+                rig.session.tick()
+            assert rig.base == [(0.1, 0.0)]
+        closed = time.monotonic()
+        while len(rig.base) < 2 and time.monotonic() - closed < TIMEOUT_S:
+            await asyncio.sleep(0.005)
+
+        # before base stale (and the link timeout) could have stopped it
+        assert time.monotonic() - closed < BASE_STALE_S
+        assert rig.base == [(0.1, 0.0), (0.0, 0.0)]
+
+    run(Rig(rover=True), scenario)

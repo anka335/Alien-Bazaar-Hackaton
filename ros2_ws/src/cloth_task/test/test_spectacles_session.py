@@ -5,7 +5,15 @@ import sys
 import numpy as np
 import pytest
 
-from cloth_task.spectacles_session import MEAS_TIMEOUT_S, TIMEOUT_S, Session, quat_to_R, rotvec
+from cloth_task.spectacles_session import (
+    BASE_STALE_S,
+    MEAS_TIMEOUT_S,
+    ROVER_ABSENT_S,
+    TIMEOUT_S,
+    Session,
+    quat_to_R,
+    rotvec,
+)
 
 
 def _rebot():
@@ -445,3 +453,372 @@ def test_refused_teleop_mode_never_accepts_a_socket(clock):
     assert not s.on_connect()
     s.on_teleop(teleop(0, arm=True))
     assert s.status()["echoSeq"] is None
+
+
+# Mobile base (left clutch): ADRs 0013 (base stale) and 0014 (rover presence) in the lens repo
+
+ZERO = (0.0, 0.0)
+CMD = (0.15, -0.3)  # inside the first-run limits
+
+
+def drive(seq, vx=CMD[0], wz=CMD[1], *, engaged=True, arm=False, position=(0.0, 0.0, 0.0)):
+    msg = teleop(seq, arm=arm, position=position)
+    msg["base"] = {"engaged": engaged, "vx": vx, "wz": wz}
+    return msg
+
+
+class Base:
+    """A fake send_base: every (vx, wz) sent."""
+
+    def __init__(self):
+        self.sent: list[tuple[float, float]] = []
+
+    def __call__(self, vx, wz):
+        self.sent.append((vx, wz))
+
+
+def rover_session(clock, *, rover=True, odometry=True):
+    motor, base = Motor(), Base()
+    s = Session(
+        K,
+        C.JOINT_LIMITS_RAD,
+        motor.joints.append,
+        motor.gripper.append,
+        clock,
+        send_base=base,
+        rover=rover,
+        max_vx=0.20,
+        max_reverse=0.10,
+        max_wz=0.6,
+    )
+    s.on_joint_state(Q0)
+    s.on_teleop_mode(True)
+    if odometry:
+        s.on_odometry()
+    assert s.on_connect()
+    return s, motor, base
+
+
+@pytest.fixture
+def rover(clock):
+    return rover_session(clock)
+
+
+def step(s, clock, dt=0.02, *, odometry=True):
+    """Time passes with the arm and (unless odometry=False) the rover reporting."""
+    clock.t += dt
+    s.on_joint_state(Q0)
+    if odometry:
+        s.on_odometry()
+
+
+def driving(rover, clock):
+    s, motor, base = rover
+    s.on_teleop(drive(0))
+    step(s, clock)
+    s.tick()
+    assert base.sent == [CMD]
+    assert link(s) == {"base": "driving", "arm": "holding", "fault": None}
+    base.sent.clear()
+    return s, base
+
+
+def assert_one_zero_then_silence(s, base, clock):
+    assert base.sent == [ZERO]
+    for _ in range(5):
+        step(s, clock)
+        s.tick()
+    assert base.sent == [ZERO]
+    assert s.status()["base"] in ("idle", "fault")
+
+
+def test_driving_sends_the_latest_command_on_each_tick(rover, clock):
+    s, _, base = rover
+    s.on_teleop(drive(0))
+    assert base.sent == []  # the tick publishes, not the teleop
+    step(s, clock)
+    s.tick()
+    s.on_teleop(drive(1, 0.05, 0.1))
+    step(s, clock)
+    s.tick()
+    step(s, clock)
+    s.tick()
+
+    assert base.sent == [CMD, (0.05, 0.1), (0.05, 0.1)]
+    assert s.status()["base"] == "driving"
+
+
+@pytest.mark.parametrize(
+    "vx, wz, sent",
+    [
+        (0.35, 0.8, (0.20, 0.6)),  # protocol v1 full scale, clamped to the first-run limits
+        (-0.15, -0.8, (-0.10, -0.6)),
+        (0.0, 0.0, (0.0, 0.0)),  # a pinch inside the dead zone drives at zero
+        (0.12, -0.5, (0.12, -0.5)),
+    ],
+)
+def test_the_command_is_clamped_to_the_limits(rover, clock, vx, wz, sent):
+    s, _, base = rover
+    s.on_teleop(drive(0, vx, wz))
+    s.tick()
+    assert base.sent == [sent]
+    assert s.status()["base"] == "driving"
+
+
+def test_a_disabled_rover_never_drives(clock):
+    s, _, base = rover_session(clock, rover=False)
+    for seq in range(5):
+        s.on_teleop(drive(seq))
+        step(s, clock)
+        s.tick()
+
+    assert base.sent == []
+    assert link(s) == {"base": "idle", "arm": "holding", "fault": None}
+
+
+def test_the_default_session_has_the_rover_disabled(clock):
+    s = Session(K, C.JOINT_LIMITS_RAD, lambda q: None, lambda g: None, clock)
+    s.on_joint_state(Q0)
+    s.on_teleop_mode(True)
+    s.on_odometry()
+    s.on_connect()
+    s.on_teleop(drive(0))
+    s.tick()
+    assert s.status()["base"] == "idle"
+
+
+def test_a_rover_absent_before_any_odometry_never_drives(clock):
+    s, _, base = rover_session(clock, odometry=False)
+    for seq in range(5):
+        s.on_teleop(drive(seq))
+        step(s, clock, odometry=False)
+        s.tick()
+
+    assert base.sent == []
+    assert s.status()["base"] == "idle"
+
+
+def test_a_pinch_held_when_the_rover_first_appears_waits_for_a_left_release(clock):
+    s, _, base = rover_session(clock, odometry=False)
+    s.on_teleop(drive(0))
+    step(s, clock)  # the first odometry
+    s.on_teleop(drive(1))
+    s.tick()
+    assert base.sent == []
+    assert s.status()["base"] == "idle"
+
+    s.on_teleop(drive(2, engaged=False))
+    s.on_teleop(drive(3))
+    s.tick()
+    assert base.sent == [CMD]
+
+
+def test_release_sends_one_zero(rover, clock):
+    s, base = driving(rover, clock)
+    s.on_teleop(drive(1, engaged=False))
+    assert_one_zero_then_silence(s, base, clock)
+    assert link(s) == {"base": "idle", "arm": "holding", "fault": None}
+
+
+def test_base_stale_is_seen_by_tick_and_sends_one_zero(rover, clock):
+    s, base = driving(rover, clock)
+    step(s, clock, BASE_STALE_S - 0.03)  # 0.02 s already passed since the teleop
+    s.tick()
+    assert base.sent == [CMD]
+    base.sent.clear()
+    step(s, clock, 0.02)
+    s.tick()
+    assert_one_zero_then_silence(s, base, clock)
+    assert link(s) == {"base": "idle", "arm": "holding", "fault": None}
+
+
+def test_base_stale_resumes_on_the_next_engaged_teleop_without_release(rover, clock):
+    s, base = driving(rover, clock)
+    step(s, clock, BASE_STALE_S + 0.1)
+    s.tick()
+    assert base.sent == [ZERO]
+    s.on_teleop(drive(1, 0.1, 0.0))
+    s.tick()
+
+    assert base.sent == [ZERO, (0.1, 0.0)]
+    assert link(s) == {"base": "driving", "arm": "holding", "fault": None}
+
+
+def test_malformed_teleop_does_not_keep_the_base_driving(rover, clock):
+    s, base = driving(rover, clock)
+    bad = drive(1)
+    bad["base"]["vx"] = "fast"
+    for _ in range(4):
+        step(s, clock, 0.1)
+        s.on_teleop(bad)
+        s.tick()
+    assert ZERO in base.sent
+    assert s.status()["base"] == "idle"
+
+
+def test_disconnect_sends_one_zero(rover, clock):
+    s, base = driving(rover, clock)
+    s.on_disconnect()
+    assert_one_zero_then_silence(s, base, clock)
+
+
+def test_no_teleop_drives_after_the_socket_closed(rover, clock):
+    s, _, base = rover
+    s.on_disconnect()
+    s.on_teleop(drive(0))
+    s.tick()
+    assert base.sent == []
+    assert s.status()["base"] == "idle"
+
+
+def test_a_replacement_socket_sends_one_zero_and_needs_both_hands_open(rover, clock):
+    s, base = driving(rover, clock)
+    assert s.on_connect()
+    assert_one_zero_then_silence(s, base, clock)
+
+    s.on_teleop(drive(0))
+    s.tick()
+    assert base.sent == [ZERO]
+    s.on_teleop(drive(1, engaged=False))
+    s.on_teleop(drive(2))
+    s.tick()
+    assert base.sent == [ZERO, CMD]
+
+
+def test_link_timeout_sends_one_zero_and_reports_base_fault(rover, clock):
+    s, base = driving(rover, clock)
+    step(s, clock, TIMEOUT_S + 0.1)
+    s.tick()
+    assert_one_zero_then_silence(s, base, clock)
+    assert link(s) == TIMED_OUT
+
+
+def test_after_a_link_timeout_both_hands_must_release_before_the_base_drives(rover, clock):
+    s, base = driving(rover, clock)
+    step(s, clock, TIMEOUT_S + 0.1)
+    s.tick()
+    s.on_teleop(drive(1))  # clears the fault, left still held
+    s.on_teleop(drive(2, engaged=False, arm=True))  # left open, right held
+    s.on_teleop(drive(3))
+    s.tick()
+    assert base.sent == [ZERO]
+    assert link(s) == {"base": "idle", "arm": "holding", "fault": None}
+
+    s.on_teleop(drive(4, engaged=False))
+    s.on_teleop(drive(5))
+    s.tick()
+    assert base.sent == [ZERO, CMD]
+    assert s.status()["base"] == "driving"
+
+
+def lapse_odometry(s, clock, seq0=1):
+    """Engaged teleops keep arriving every 0.1 s while the rover's odometry stops."""
+    seq = seq0
+    for _ in range(round(ROVER_ABSENT_S / 0.1) + 1):
+        step(s, clock, 0.1, odometry=False)
+        s.on_teleop(drive(seq))
+        s.tick()
+        seq += 1
+    return seq
+
+
+def test_rover_absent_sends_one_zero_and_reports_idle(rover, clock):
+    s, base = driving(rover, clock)
+    lapse_odometry(s, clock)
+    assert base.sent.count(ZERO) == 1
+    assert base.sent[-1] == ZERO
+    assert link(s) == {"base": "idle", "arm": "holding", "fault": None}
+
+
+def test_rover_absent_just_under_the_limit_keeps_driving(rover, clock):
+    s, base = driving(rover, clock)
+    for seq in range(1, 5):
+        step(s, clock, 0.1, odometry=False)
+        s.on_teleop(drive(seq))
+        s.tick()
+    step(s, clock, ROVER_ABSENT_S - 0.43, odometry=False)  # 0.47 s since the last odometry
+    s.on_teleop(drive(5))
+    s.tick()
+    assert base.sent == [CMD] * 5
+    assert s.status()["base"] == "driving"
+
+
+def test_after_the_rover_returns_the_left_hand_must_be_seen_open(rover, clock):
+    s, base = driving(rover, clock)
+    seq = lapse_odometry(s, clock)
+    assert base.sent[-1] == ZERO
+    base.sent.clear()
+    s.on_teleop(drive(seq, engaged=False))  # open while still absent: does not count
+    step(s, clock)  # the rover is back
+    s.on_teleop(drive(seq + 1))
+    s.tick()
+    assert base.sent == []
+    assert s.status()["base"] == "idle"
+
+    s.on_teleop(drive(seq + 2, engaged=False))
+    s.on_teleop(drive(seq + 3))
+    s.tick()
+    assert base.sent == [CMD]
+    assert s.status()["base"] == "driving"
+
+
+def test_on_shutdown_sends_one_zero_while_driving(rover, clock):
+    s, base = driving(rover, clock)
+    s.on_shutdown()
+    assert_one_zero_then_silence(s, base, clock)
+
+
+def test_on_shutdown_sends_one_zero_while_idle(clock):
+    s, _, base = rover_session(clock, rover=False)
+    s.on_shutdown()
+    assert base.sent == [ZERO]
+
+
+def test_the_arm_tracks_on_while_the_rover_is_absent(rover, clock):
+    s, motor, _ = rover
+    s.on_teleop(drive(0, arm=True))
+    for seq in range(1, 10):
+        step(s, clock, 0.1, odometry=False)
+        s.on_teleop(drive(seq, arm=True, position=[0.001 * seq, 0.0, 0.0]))
+        s.tick()
+
+    assert len(motor.joints) == 10
+    assert link(s) == {"base": "idle", "arm": "tracking", "fault": None}
+
+
+def test_base_stale_does_not_stop_the_arm(rover, clock):
+    s, motor, base = rover
+    s.on_teleop(drive(0, arm=True))
+    step(s, clock, BASE_STALE_S + 0.2)
+    s.tick()
+    assert base.sent == [ZERO]
+    assert link(s) == {"base": "idle", "arm": "tracking", "fault": None}
+    s.on_teleop(drive(1, arm=True, engaged=False, position=[0.01, 0.0, 0.0]))
+
+    assert len(motor.joints) == 2
+    assert s.status()["arm"] == "tracking"
+
+
+def test_releasing_the_left_clutch_leaves_the_arm_tracking(rover, clock):
+    s, motor, base = rover
+    s.on_teleop(drive(0, arm=True))
+    s.tick()
+    s.on_teleop(drive(1, arm=True, engaged=False, position=[0.01, 0.0, 0.0]))
+
+    assert base.sent == [CMD, ZERO]
+    assert len(motor.joints) == 2
+    assert link(s) == {"base": "idle", "arm": "tracking", "fault": None}
+
+
+def test_disconnect_keeps_the_arm_and_the_link_timeout_as_before(rover, clock):
+    s, motor, _ = rover
+    s.on_teleop(drive(0, arm=True))
+    s.on_disconnect()
+    assert s.status()["arm"] == "tracking"
+    step(s, clock, TIMEOUT_S + 0.1)
+    s.tick()
+    assert link(s) == TIMED_OUT
+
+    s.on_connect()  # a replacement: the right hand must be seen open again
+    s.on_teleop(drive(0, arm=True, engaged=False))
+    assert len(motor.joints) == 1

@@ -8,14 +8,23 @@ rebot_b601's TCP) in the arm base frame. Each later engaged sample asks for
 `p = p_ee + position`, `R = R(orientation) · R_ee`, solved for the full pose from the measured
 joints (damped least squares, no restarts). A solve that misses 1 mm / 3° publishes nothing and
 the arm report stays tracking. Releasing the clutch stops publishing: `arm_bridge` holds the
-setpoint it already committed. The left clutch is never accepted: there is no mobile base.
+setpoint it already committed.
+
+Left clutch (mobile base): accepted only while the rover is enabled and present (odometry within
+ROVER_ABSENT_S, ADR 0014), the socket is open, the hands are not blocked (below), and the left
+hand has been seen open since the rover was last absent while connected. The base is driving
+while the left clutch is accepted and the latest valid teleop, under BASE_STALE_S old, has it
+engaged (ADR 0013): each `tick()` then sends that teleop's `vx`, `wz`, clamped to the limits.
+The call on which driving ends sends exactly one zero; nothing is sent otherwise. Base stale
+needs no release: the next engaged teleop drives again. The arm ignores all of this.
 
 Link: once a socket is accepted, TIMEOUT_S without a valid teleop on the bridge's receive clock
 (not the lens timestamp) stops publishing and reports both arm and base as fault, fault timeout.
-The next valid teleop clears it. A replacement socket stops the arm and starts with fault null.
-After a timeout or a replacement, each hand must be seen open (a clutch held while blocked
-consumes that hand's release) before either can command again. The first socket of a session
-accepts the first right clutch straight away.
+The next valid teleop clears it. A replacement socket stops the arm and base and starts with
+fault null. After a timeout or a replacement, each hand must be seen open (a clutch held while
+blocked consumes that hand's release) before either can command again. The first socket of a
+session accepts the first right clutch straight away. A closed socket stops the base at once;
+the arm and the later link timeout are unaffected by the close.
 
 Driver: a driver-fault flag, or no joint measurement for MEAS_TIMEOUT_S, stops publishing and
 reports the arm holding with fault null (the lens sees the disagreement). Tracking resumes only
@@ -43,6 +52,10 @@ MIN_QUAT_NORM = 1e-6
 TIMEOUT_S = 2.0
 # Generous: the driver itself faults after 0.3 s of failed motor reads
 MEAS_TIMEOUT_S = 0.5
+# ADR 0013: at 0.35 m/s the 2 s link timeout is ~70 cm of run-on, so the base stops sooner
+BASE_STALE_S = 0.3
+# ADR 0014: /leo/merged_odom arrives at 100 Hz
+ROVER_ABSENT_S = 0.5
 HANDS = frozenset({"arm", "base"})
 
 
@@ -54,6 +67,8 @@ class Teleop:
     orientation: np.ndarray  # (4,) x, y, z, w, unit
     gripper: float  # 0 closed .. 1 open, clamped
     base_engaged: bool
+    vx: float  # m/s, + forward, unclamped
+    wz: float  # rad/s, + left (counter-clockwise), unclamped
 
 
 def _number(v: Any) -> bool:
@@ -94,6 +109,8 @@ def parse_teleop(msg: Any) -> Teleop | None:
         orientation=q / norm,
         gripper=min(max(float(grip), 0.0), 1.0),
         base_engaged=base["engaged"],
+        vx=float(base["vx"]),
+        wz=float(base["wz"]),
     )
 
 
@@ -172,10 +189,15 @@ def solve_pose(
 class Session:
     """One lens session. `send_joints(q)` gets joint1..6 targets (rad), `send_gripper(opening)`
     the gripper opening 0..1; both are only called while the right clutch is accepted.
+    `send_base(vx, wz)` gets the base command (m/s, rad/s) on each `tick()` while driving and
+    one zero when driving ends; with `rover` false it only gets the zero from `on_shutdown()`.
+    `max_vx`, `max_reverse` (positive) and `max_wz` clamp the base command.
     `clock()` is the bridge's receive clock, s. Report the result of enabling teleop mode with
-    `on_teleop_mode()` and the driver-fault flag with `on_driver_fault()`. Call `on_connect()`
-    for each socket and close it if refused, and `tick()` periodically (well under
-    MEAS_TIMEOUT_S) so a silent link or a stale measurement is noticed."""
+    `on_teleop_mode()`, the driver-fault flag with `on_driver_fault()` and each rover odometry
+    message with `on_odometry()`. Call `on_connect()` for each socket and close it if refused,
+    `on_disconnect()` when the accepted socket closes, `on_shutdown()` last, and `tick()`
+    periodically (well under BASE_STALE_S) so a silent link, a stale measurement or an absent
+    rover is noticed."""
 
     def __init__(
         self,
@@ -184,12 +206,28 @@ class Session:
         send_joints: Callable[[np.ndarray], None],
         send_gripper: Callable[[float], None],
         clock: Callable[[], float] = time.monotonic,
+        *,
+        send_base: Callable[[float, float], None] = lambda vx, wz: None,
+        rover: bool = False,
+        max_vx: float = 0.20,
+        max_reverse: float = 0.10,
+        max_wz: float = 0.6,
     ):
         self._K = kinematics
         self._limits = np.asarray(limits, dtype=float)
         self._send_joints = send_joints
         self._send_gripper = send_gripper
         self._clock = clock
+        self._send_base = send_base
+        self._rover = bool(rover)
+        self._max_vx, self._max_reverse, self._max_wz = max_vx, max_reverse, max_wz
+        self._t_odom: float | None = None
+        self._socket_open = False
+        self._shut_down = False
+        self._base_engaged = False  # in the latest valid teleop of this socket
+        self._base_cmd = (0.0, 0.0)  # its clamped (vx, wz)
+        self._base_need_release = False
+        self._driving = False
         self._q_meas: np.ndarray | None = None
         self._latch: tuple[np.ndarray, np.ndarray] | None = None  # (p_ee, R_ee)
         self._echo_seq: int | None = None
@@ -215,7 +253,12 @@ class Session:
     def on_driver_fault(self, faulted: bool) -> None:
         """The driver-fault flag; it stays true until the arm is connected again."""
         self._driver_fault = bool(faulted)
-        self.tick()
+        self._update()
+
+    def on_odometry(self) -> None:
+        """A rover odometry message arrived; its content is not used."""
+        self._t_odom = self._clock()
+        self._update()
 
     def on_connect(self) -> bool:
         """A lens socket arrived. Accepted only once teleop mode is on and a joint measurement
@@ -225,10 +268,26 @@ class Session:
         if self._connected:
             self._block()
         self._connected = True
+        self._socket_open = True
         self._fault = None
         self._echo_seq = None
         self._last_valid = self._clock()
+        self._base_engaged = False
+        self._update()
         return True
+
+    def on_disconnect(self) -> None:
+        """The accepted socket closed: the base stops at once. The arm, the fault and the link
+        timeout carry on as if the socket had gone silent."""
+        self._socket_open = False
+        self._update()
+
+    def on_shutdown(self) -> None:
+        """The bridge is stopping: sends one zero base command, whatever the state, and never
+        drives again."""
+        self._shut_down = True
+        self._driving = False
+        self._send_base(0.0, 0.0)
 
     def _arm_ok(self) -> bool:
         return (
@@ -237,19 +296,45 @@ class Session:
             and self._clock() - self._t_meas < MEAS_TIMEOUT_S
         )
 
+    def _rover_present(self) -> bool:
+        return self._t_odom is not None and self._clock() - self._t_odom < ROVER_ABSENT_S
+
     def tick(self) -> None:
-        """Stops the arm on a driver fault or a stale measurement, and times the link out after
-        TIMEOUT_S without a valid teleop."""
-        if not self._connected:
-            return
-        if not self._arm_ok():
-            self._latch = None
-            self._need_release = True
-        if self._fault is not None:
-            return
-        if self._clock() - self._last_valid >= TIMEOUT_S:
-            self._fault = "timeout"
-            self._block()
+        """Stops the arm on a driver fault or a stale measurement, times the link out after
+        TIMEOUT_S without a valid teleop, stops the base on base stale or an absent rover, and
+        sends the base command while driving."""
+        self._update()
+        if self._driving:
+            self._send_base(*self._base_cmd)
+
+    def _update(self) -> None:
+        if self._connected:
+            if not self._arm_ok():
+                self._latch = None
+                self._need_release = True
+            if self._fault is None and self._clock() - self._last_valid >= TIMEOUT_S:
+                self._fault = "timeout"
+                self._block()
+        self._update_base()
+
+    def _update_base(self) -> None:
+        """Re-evaluates driving after any change; sends the one zero when it ends."""
+        present = self._rover_present()
+        if self._socket_open and not present:
+            self._base_need_release = True
+        driving = (
+            self._rover
+            and present
+            and self._socket_open
+            and not self._shut_down
+            and not self._blocked
+            and not self._base_need_release
+            and self._base_engaged
+            and self._clock() - self._last_valid < BASE_STALE_S
+        )
+        if self._driving and not driving:
+            self._send_base(0.0, 0.0)
+        self._driving = driving
 
     def _block(self) -> None:
         self._latch = None
@@ -259,7 +344,7 @@ class Session:
     def on_teleop(self, msg: Any) -> None:
         """A decoded teleop v1 message from the accepted socket. Malformed ones change nothing
         and do not refresh the link timer."""
-        self.tick()
+        self._update()
         t = parse_teleop(msg)
         if t is None or not self._connected:
             return
@@ -273,6 +358,14 @@ class Session:
                 else:
                     self._released.add(hand)
             self._blocked = self._released != HANDS
+        if self._base_need_release and self._rover_present() and not t.base_engaged:
+            self._base_need_release = False
+        self._base_engaged = t.base_engaged
+        self._base_cmd = (
+            min(max(t.vx, -self._max_reverse), self._max_vx),
+            min(max(t.wz, -self._max_wz), self._max_wz),
+        )
+        self._update_base()
         if self._need_release and self._arm_ok() and not t.arm_engaged:
             self._need_release = False
         if self._blocked or self._need_release or not t.arm_engaged:
@@ -295,11 +388,12 @@ class Session:
 
     def status(self) -> dict[str, Any]:
         """The status v1 message to send now."""
-        self.tick()
+        self._update()
         if self._fault is not None:
             base, arm = "fault", "fault"
         else:
-            base, arm = "idle", "tracking" if self._latch is not None else "holding"
+            base = "driving" if self._driving else "idle"
+            arm = "tracking" if self._latch is not None else "holding"
         return {
             "v": PROTOCOL_VERSION,
             "type": "status",
