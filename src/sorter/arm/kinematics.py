@@ -293,7 +293,7 @@ def camera_look(
     for h in heights_mm:
         for tilt in tilts_deg:
             tr = np.radians(tilt)
-            for daz in (0.0, -45.0, 45.0) if tilt else (0.0,):
+            for daz in (0.0, -45.0, 45.0, -90.0, 90.0, 180.0) if tilt else (0.0,):
                 az = back + np.radians(daz)
                 d = np.array([np.sin(tr) * np.cos(az), np.sin(tr) * np.sin(az), np.cos(tr)])
                 q = solve_camera(T_link5_cam, t + h * d, -d, seed)

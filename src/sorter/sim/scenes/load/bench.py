@@ -105,6 +105,12 @@ def summarize(scenes: list[dict[str, Any]]) -> dict[str, Any]:
     in_box = ends.get("cargo", 0)
     counted = sum(sum(sc["counted"].values()) for sc in scenes)
     boxed = sum(1 for s in socks if s["end"] == "cargo")
+    # colors: per scene, the counted socks of each color against those in the box (a sock
+    # counted under the wrong color shows up twice: one too many here, one too few there)
+    wrong = 0
+    for sc in scenes:
+        truth = Counter(s["color"] for s in sc["socks"] if s["end"] == "cargo")
+        wrong += sum(max(n - truth.get(c, 0), 0) for c, n in sc["counted"].items())
     return {
         "scenes": len(scenes),
         "socks": len(socks),
@@ -114,6 +120,8 @@ def summarize(scenes: list[dict[str, Any]]) -> dict[str, Any]:
         "unreachable_end": dict(Counter(s["end"] for s in socks if not s["reachable"])),
         "counted": counted,
         "counted_minus_in_box": counted - boxed,  # > 0: counted what didn't land; < 0: missed
+        "counted_wrong_color_or_extra": wrong,
+        "color_ok_pct": round(100 * (1 - wrong / max(counted, 1)), 1),
         "ends": dict(Counter(sc["end"].split(":")[0] for sc in scenes)),
         "sim_s_per_sock": round(sum(sc["sim_s"] for sc in scenes) / max(boxed, 1), 1),
         "wall_s": round(sum(sc["wall_s"] for sc in scenes), 1),

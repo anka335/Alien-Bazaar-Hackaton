@@ -19,7 +19,8 @@ Single source of truth for the contracts between the stages. The shared types ar
 | deck plate | x −90..120, y −95..95, top z = 0 |
 | equipment (`equipment`) | electronics case x −200..−55, z −75..−5; power supply and power strip on it, up to z 35 |
 | cargo box, inside | x −125..25, y 125..275, floor z −35, rim z 25, walls 4 mm |
-| floor view (what `look_floor` frames; pick zone) | 280 × 240 centered at (310, 0) |
+| floor view (what `look_floor` frames) | 280 × 240 centered at (310, 0) |
+| floor pick zone (`zones.floor`, computed) | the ring the arm reaches: ~250–430 mm out, −138° … +138° (not behind the rover, not under the box) |
 | laundry bins | 220 mm square, 150 high, at (−140, −330) light, (100, −330) dark, (340, −300) colored |
 
 ## Components
@@ -48,7 +49,7 @@ Single source of truth for the contracts between the stages. The shared types ar
 | Camera | mm | Optical frame (x right, y down, z forward). **Depth values are Z along the optical axis** |
 | Camera link | mm | URDF `link5`: joint 6 turns the gripper, not the camera ([D-027](decisions.md)). `ee_pose()` returns `T_base_link5` |
 | TCP | mm | URDF `gripper_end`, the fingertips; +x is the approach axis, the fingers open along +y |
-| Arm base | mm | Origin at the arm's base on the deck (deck top z = 0), +x forward, +y left, z up. The floor is at `sim.layout.floor_z_mm` (−200) |
+| Arm base | mm | Origin at the arm's base on the deck (deck top z = 0), +x forward, +y left, z up. The floor is at `sim.layout.floor_z_mm` (−160) |
 
 - `Pose` = `np.ndarray` 4×4 float64, translation in **mm**. Joint angles in **rad**. Time is `time.monotonic()`.
 - Only `sorter.arm.kinematics` and the arm driver convert to `rebot_b601` units (m, rad).
@@ -59,11 +60,11 @@ Single source of truth for the contracts between the stages. The shared types ar
 
 `sorter.orchestrator.state_machine.StateMachine` is the part both loops share: commands, hold, errors, status, run log. At `START` it takes the loop of the operator mode (`LOAD` → `LoadLoop`, `UNLOAD` → `UnloadLoop`). `STARTING` (arm on, home) and `DONE` (home, idle) are shared; every other phase is a method `_<phase>` of the loop that returns the next phase. A loop keeps its own memory (`reset()` at the start of a run) and uses the shared run state on `sm`: `counters`, `failures`, `obs`, `cycle`, `new_cycle()`, `decide(result, overlay, summary, next_phase)` (publishes the decision frame and writes the run log).
 
-**Load (stage A), baseline:** observation-driven ([D-008](decisions.md)): a sock is counted once the next look shows one fewer.
+**Load (stage A)** ([D-036](decisions.md)): the arm looks at the floor from the scan poses `scan_1` … `scan_7` (a ring around it) one after another and picks the nearest sock as soon as a view has one. A sock cut off by the frame or far off-center gets a closer look first (`AIM`: the camera aimed at it). After the drop, `CHECK_LOAD` looks at the spot (the sock must be gone) and into the box from `look_cargo` (its surface must have risen where the sock landed, or one more sock is told apart there): only then is it counted. A sock that fails `load.max_attempts` times is left and its spot avoided. A whole round of views without a sock (`load.empty_rounds`) → `DONE`.
 
 ```text
-STARTING → SCAN → SENSE_FLOOR ─sock─► PICK_FROM_FLOOR → DROP_TO_CARGO(color) → SCAN …
-                      └─no sock × empty_confirmations─► DONE
+STARTING → SCAN(k) → SENSE_FLOOR ─sock─► [AIM] → PICK_FROM_FLOOR → DROP_TO_CARGO → CHECK_LOAD → SCAN(k) …
+                         └─no sock─► SCAN(k + 1) … every view empty → DONE
 ```
 
 **Unload (stage B), baseline:** the depth box detector on each compartment's image area (the compartment rectangle projected from `look_cargo`), the first grasp found; the sock goes to that compartment's bin, fingers along the compartment's long side (yaw π/2).
@@ -73,7 +74,7 @@ STARTING → LOOK_CARGO → SENSE_CARGO ─grasp in c─► PICK_FROM_CARGO → 
                              └─all empty × empty_confirmations─► DONE
 ```
 
-The baselines are starting points, not the goal: stages A and B replace them. The unload baseline walks the compartments; with the one box of [D-035](decisions.md) it finds none.
+The unload loop is still the stage 0 baseline: it walks the compartments, and with the one box of [D-035](decisions.md) it finds none.
 
 **Shared rules for both loops:**
 
@@ -148,7 +149,8 @@ The real backend is `RealSenseCamera` (`pyrealsense2`, the `camera` extra). The 
 ```python
 Observation(frame, zone, T_base_cam: Pose | None, joints: tuple[float, ...] | None)
 
-Observer(camera, arm, calibration).observe(zone)  # arm.look(zone), camera.fresh(), cam pose
+Observer(camera, arm, calibration).observe(zone, pose=None)  # look pose (or `pose`), fresh frame
+Observer.observe_point(zone, target: ArmPoint, heights_mm)  # the camera aimed at target, or None
 ```
 
 ### Vision: shared types
@@ -163,16 +165,16 @@ class Sock:
     color: ColorClass
     confidence: float  # 0..1, of the color
     grasp: GraspPoint
-    grasp_angle_rad: float | None  # gripper yaw across the sock, image frame; None = any
+    grasp_angle_rad: float | None  # gripper yaw across the sock at the grasp, image frame
     area_px: int
-    touches_roi_edge: bool  # partly outside the view
+    touches_roi_edge: bool  # cut off by the frame or by pixels without depth
     mask: np.ndarray | None  # HxW bool
     stats: dict[str, float]
 
 
 @dataclass
 class FloorResult:
-    socks: list[Sock]  # best target first; [] = no sock in view
+    socks: list[Sock]  # nearest the image center first; [] = no sock in view
     overlay: Overlay
 
 
@@ -180,7 +182,7 @@ class FloorDetector(Protocol):
     def detect(self, frame: Frame, avoid: Sequence[PixelPoint] = ()) -> FloorResult: ...
 ```
 
-Stateless: failed grasps are passed as `avoid`. The baseline `ClassifierFloorDetector` wraps the color classifier over `views.floor.roi` (no grasp angle, no mask).
+Stateless: failed grasps are passed as `avoid`. `SockDetector(cfg.floor_detector, classifier)` searches the whole frame: the classifier's segmentation (SAM3 / the render) gives the masks; a mask is a sock if its area and length in mm (pixels scaled by the depth) are sock-like; the color is the classifier's; the grasp is the pixel deepest inside the mask (its widest part); the yaw is across the sock there (PCA of the mask within `local_axis_mm` of the grasp). Whether a sock lies on the floor, in reach, is the loop's business (arm coordinates): if the grasp is out of reach, the loop takes the mask's deepest pixel that is in reach.
 
 ### Box detector (stage B)
 
@@ -210,7 +212,7 @@ class Calibration(Protocol):
 ```
 
 - The hand-eye result `T_link5_cam` is in `config/hand_eye.yaml` (committed, [D-007](decisions.md)).
-- Two ways to compute it: the **calibration page** (tape marks on the floor view, [D-026](decisions.md)), or `python -m sorter.calibration.hand_eye` (a ChArUco board on the floor under `look_floor`, its top at `calibration.board_z_mm` = −184, [D-028](decisions.md)).
+- Two ways to compute it: the **calibration page** (tape marks on the floor view, [D-026](decisions.md)), or `python -m sorter.calibration.hand_eye` (a ChArUco board on the floor under `look_floor`, its top at `calibration.board_z_mm` = −144, [D-028](decisions.md)).
 
 ### Arm controller
 
@@ -222,8 +224,11 @@ class ArmController(Protocol):
     def shutdown(self) -> None: ...   # rest pose, then disable motors
     def home(self) -> None: ...
     def look(self, zone: Zone) -> None: ...  # look_floor / look_cargo; no-op if already there
+    def go_to(self, name: str) -> None: ...  # a named pose (scan_k)
+    def aim_camera(self, T_link5_cam, target, heights_mm, tilts_deg=(0, 10, 20, 30)) -> float | None:
+        ...  # the camera at `target` from the highest safe height; None and no motion if none
     def pick(self, target: ArmPoint, zone: Zone, yaw_rad: float | None = None) -> PickResult: ...
-    def drop_to_cargo(self, color: ColorClass) -> None: ...    # via home → cargo_<color>, open, home
+    def drop_to_cargo(self, color: ColorClass) -> None: ...    # via home → cargo_<color>, settle, open, home
     def drop_to_laundry(self, color: ColorClass) -> None: ...  # via home → laundry_<color>, open, home
     def ee_pose(self) -> Pose: ...    # T_base_link5
     def joints(self) -> tuple[float, ...]: ...
@@ -232,8 +237,10 @@ class ArmController(Protocol):
 ```
 
 - **Blocking:** every motion returns once the arm is still.
-- **`pick(target, zone, yaw_rad)`**, `target` = the cloth surface point: rejected with no motion (`TargetRejected`) if `target` XY is outside `zones.<zone>.workspace_mm` or any of the three moves fails to plan. Then: to `target.z + approach_mm` with the gripper down (turned to `yaw_rad` by joint 6 if given), open, straight down to `max(target.z − grasp_depth_mm, z_floor_mm)`, close, straight up to `lift_z_mm`.
-- **Every planned path** is checked against the floor (`arm.z_min_mm`, = floor + 3) and the **keep-out boxes** (`arm.keep_out_mm`: the rover's middle below the deck, the wheels, the equipment behind the arm, the cargo box's walls, grown by `arm.keep_out_margin_mm`). Points are sampled along the links and on the gripper. A move to a named pose that would hit something goes via `home`.
+- **`pick(target, zone, yaw_rad)`**, `target` = the cloth surface point: rejected with no motion (`TargetRejected`) if `target` XY is outside `zones.<zone>.workspace_mm` or any of the three moves fails to plan. Then: to `target.z + approach_mm` with the gripper down (turned to `yaw_rad` by joint 6 if given), open, straight down to `max(target.z − grasp_depth_mm, z_floor_mm)`, close, straight up to `lift_z_mm`. The IK above the target is seeded from where the arm is, else elbow up towards the target.
+- **Every planned path** is checked against the floor (`arm.z_min_mm`, = floor + 3) and the **keep-out boxes** (`arm.keep_out_mm`: the rover's middle below the deck, the wheels, the equipment behind the arm, the cargo box's walls, grown by `arm.keep_out_margin_mm`). Points are sampled along the links, on the gripper and on the camera's body (`arm.link5_points_mm`, from the hand-eye mount; also checked against the floor). A joint move (`plan_move`) goes straight if that's clear, else turns joint 1 first or last, else the same way via `home`.
+- **Drops** hold still `arm.drop_settle_s` over the drop pose before opening: the hanging sock stops swinging.
+- **The camera's poses** (`kin.camera_look`): the optical axis through a target from the highest safe height, up to 30° off vertical (the camera is ~100 mm off the gripper's axis: straight down, it can't get high over every spot).
 - **Hold vs disable:** disabling the motors makes the arm fall; the software stop is `hold()` ([D-009](decisions.md)).
 - **Driver faults** latch until `clear_fault()` ([D-025](decisions.md)).
 - Beyond the protocol, `Controller` has `plan_pick`, `gripper_opening()`, and for the dashboard's setup modes and speed control `held`, `at`, `go_to`, `move_joints`, `move_tcp`, `lift`, `set_gripper`, `release`, `fault`, `clear_fault`, `set_pose`, `speed_scale`, `max_speed_scale`, `set_speed_scale`.
@@ -243,7 +250,7 @@ class ArmController(Protocol):
 ```python
 class Phase(StrEnum):
     IDLE, STARTING,
-    SCAN, SENSE_FLOOR, PICK_FROM_FLOOR, DROP_TO_CARGO,              # load
+    SCAN, SENSE_FLOOR, AIM, PICK_FROM_FLOOR, DROP_TO_CARGO, CHECK_LOAD,  # load
     LOOK_CARGO, SENSE_CARGO, PICK_FROM_CARGO, DROP_TO_LAUNDRY,      # unload
     DONE, HELD, ERROR
 
@@ -287,7 +294,7 @@ One Python process ([D-005](decisions.md)): camera capture thread (on the sim, i
 
 ## Wiring
 
-`sorter.app.build_system(cfg, sim=False) -> System` creates every component per `backends` (`camera`, `arm`, `calibration`, `box_detector`, `floor_detector`: `real` | `sim`). `sim=True` makes the camera and the arm sim (MuJoCo); the rest run their real code on the rendered frames, except that calibration uses the sim's exact camera mount and the floor detector the render's segmentation (unless `sim.use_sam3`). `System` holds `cfg`, `camera`, `arm`, `calibration`, `box_detector`, `floor_detector`, `observer`, `hub`, `world` (the `PhysicsWorld` or `None`).
+`sorter.app.build_system(cfg, sim=False) -> System` creates every component per `backends` (`camera`, `arm`, `calibration`, `box_detector`, `floor_detector`: `real` | `sim`). `sim=True` makes the camera and the arm sim (MuJoCo); the rest run their real code on the rendered frames, except that calibration uses the sim's exact camera mount (= the real hand-eye result, see Simulator) and the floor detector the render's segmentation (unless `sim.use_sam3`). `System` holds `cfg`, `camera`, `arm`, `calibration`, `box_detector`, `floor_detector`, `observer`, `hub`, `world` (the `PhysicsWorld` or `None`).
 
 Real backends: `sorter.<package>.backend.create(cfg)`. Package `__init__.py` files stay empty. Import driver SDKs inside `backend.create`.
 
@@ -298,19 +305,21 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 | Key | Owner | Content |
 | --- | --- | --- |
 | `backends` | shared | `real` \| `sim` per component |
-| `sim` | shared; `load`: A, `unload`: B | `realtime` (0 = as fast as possible), `seed`, `scenes` (which scene files add to the base), `load` (`socks`, `area` reach / view, `reach_mm`, `reach_deg`, `margin_mm`, `sock_mm`, `bunched_prob`), `unload` (`cargo`: socks per color, in the box), `miss_prob`, `use_sam3`, `board`, `marks`, image size, `focal_px`, `camera_mount_mm`, `layout` (`floor_z_mm`, `body`, `wheel_radius_mm`, `wheel_width_mm`, `deck`, `equipment`, `cargo`, `floor_view`, `laundry`) |
+| `sim` | shared; `load`: A, `unload`: B | `realtime` (0 = as fast as possible), `seed`, `scenes` (which scene files add to the base), `load` (`socks`, `area` reach / view, `reach_mm`, `reach_deg`, `margin_mm`, `sock_mm`, `bunched_prob`), `unload` (`cargo`: socks per color, in the box), `miss_prob`, `use_sam3`, `board`, `marks`, image size, `focal_px`, `camera_mount_mm` (the nominal mount), `camera_T_link5_cam` (default: the hand-eye result), `layout` (`floor_z_mm`, `body`, `wheel_radius_mm`, `wheel_width_mm`, `deck`, `equipment`, `cargo`, `floor_view`, `laundry`) |
 | `camera` | shared | the D435i's settings |
 | `views.<zone>.roi` | layout tool | pixel polygon of the zone from its look pose (`rig.yaml`) |
 | `calibration` | shared | `hand_eye`, the board tool's `poses`, `tilt_deg`, `shift_mm`, `board_z_mm`; `marks_z_mm` (the floor) |
 | `box_detector` | B | depth thresholds and margins |
 | `color_classifier` | A | the SAM3 service (`sam`, API key in `local.yaml` or `SAM3_API_KEY`) and the color thresholds |
-| `arm` | shared | `speed_scale` (at start; `POST /api/speed` changes it), `max_speed_scale` (at most `speed_ceiling()` ≈ 1.43, the motors' velocity limit, [D-033](decisions.md)), `approach`, `safe_z_mm`, `z_min_mm`, `drop_height_mm`, `keep_out_mm`, `keep_out_margin_mm`, gripper |
-| `poses` | layout tool | `rest`, `home`, `look_floor`, `look_cargo`, `cargo_<color>`, `laundry_<color>` (`rig.yaml`) |
+| `floor_detector` | A | `min_area_mm2`, `max_area_mm2`, `max_length_mm`, `edge_px`, `avoid_radius_px`, `local_axis_mm` |
+| `load` | A | the load loop: `max_attempts`, `empty_rounds`, `aim_off_center`, `aim_heights_mm`, `same_sock_mm`, `max_sock_height_mm`, `raised_mm`, `min_raised_mm2`, `cargo_margin_mm` |
+| `arm` | shared | `speed_scale` (at start; `POST /api/speed` changes it), `max_speed_scale` (at most `speed_ceiling()` ≈ 1.43, the motors' velocity limit, [D-033](decisions.md)), `approach`, `safe_z_mm`, `z_min_mm`, `drop_height_mm`, `drop_settle_s`, `keep_out_mm`, `keep_out_margin_mm`, `link5_points_mm`, gripper |
+| `poses` | layout tool | `rest`, `home`, `look_floor`, `look_cargo`, `scan_1` … `scan_7`, `cargo_<color>`, `laundry_<color>` (`rig.yaml`) |
 | `zones.<zone>` | layout tool | `floor`, `cargo`: `workspace_mm`, `z_floor_mm`, `grasp_depth_mm`, `approach_mm`, `lift_z_mm` (`rig.yaml`) |
 | `state_machine` | shared | `empty_confirmations`, `max_consecutive_failures`, `low_confidence`, `save_runs`, `runs_dir` |
 | `dashboard` | shared | `host`, `port`, `stream_fps`, `jpeg_quality`, `status_hz` |
 
-`rig.yaml` is computed: `uv run python -m sorter.sim.layout --write` after any change to `sim.layout` or `arm.drop_height_mm` (it prints the poses and checks every pick and move; 0 problems or it exits 1). The rig's `arm.z_min_mm` and `arm.keep_out_mm` come from there too.
+`rig.yaml` is computed: `uv run python -m sorter.sim.layout --write` after any change to `sim.layout`, `arm.drop_height_mm` or the hand-eye result (it prints the poses and checks every pick and move; 0 problems or it exits 1). The rig's `arm.z_min_mm`, `arm.keep_out_mm` and `arm.link5_points_mm` come from there too. The floor zone is mapped: picks at 4 yaws on a 30 mm grid, the reached region as a polygon, cells taken out where a pick on a 20 mm grid inside it fails (minutes the first time; cached in `data/cache/`). The scan poses aim the camera along that ring, from the middle outwards, each seeded by its neighbour, each reachable from `home`.
 
 ## Recording format
 
@@ -325,6 +334,8 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 - **Grip:** when a close stalls the fingers on cloth touching both pads, the vertices between them are attached to the gripper until an open (a stand-in for friction). `sim.miss_prob` makes a close catch nothing.
 - `PhysicsWorld`: `step`, `teleport_arm`, `joints`, `tcp`, `looking_at`, `vertices(item)`, `location(item)` → `gripper` / `cargo` + color (None: one box) / `laundry` + color / `floor` / `other`, `at(location, color=None)`.
 - The arm: `rebot_b601.arm.Arm` runs unchanged on `MujocoBackend`; `PhysicsCamera` renders the D435i (depth noise, no depth under 175 mm) and `segment()` gives MuJoCo's segmentation as SAM3-style instances.
+- **The camera sits where the real one was calibrated:** `sim.camera_T_link5_cam`, filled by the config loader from `config/hand_eye.yaml` ([D-036](decisions.md)); the nominal `camera_mount_mm` only without a hand-eye result. So the look poses, ROIs and pixel → arm math the sim runs are the rig's.
+- **The load benchmark:** `uv run python -m sorter.sim.scenes.load.bench -n 50 [--socks 1-4] [--workers 3]`: seeded scenes through the real load loop, headless, `realtime: 0`; `data/bench/<run_id>/` gets `scenes.jsonl` and `summary.json` (socks in the box / on the floor / elsewhere, counted vs in the box, sim time per sock).
 - `sorter.sim.layout` computes the rig (poses, zones, views, keep-out) with the arm's IK and checks it; `sorter.sim.rig` has the sim camera mount.
 
 ## Repo layout

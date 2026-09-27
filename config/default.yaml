@@ -23,6 +23,7 @@ sim:
   unload:            # stage B's scene: the laundry bins, socks in the cargo box
     cargo: {light: 1, dark: 1, colored: 1}
   miss_prob: 0.0     # a closing gripper catches nothing (the sim's grip is optimistic)
+  cloth_collisions: true  # cloth on cloth lies on top (a pile ~5x slower); false: piles pass through
   width: 640
   height: 480
   focal_px: 615                   # D435i color at 640x480
@@ -65,7 +66,9 @@ color_classifier:    # stage A: the floor detector's segmentation + color (D-013
   max_area_frac: 0.8           # a blob covering more of the ROI is the background itself
   overlap_max: 0.5             # drop an instance this much covered by a better-scored one
   erode_px: 5                  # erode the mask before color stats (shadows, edges)
-  lightness_dark: 22           # median L* below → dark whatever the chroma (navy, dark brown)
+  lightness_dark: 22           # median L* below → dark whatever the chroma
+  lightness_dim: 35            # median L* below and chroma below chroma_muted → dark too:
+  chroma_muted: 35             #   a dim, muted color (navy, dark brown) under a lamp
   chroma_colored: 20           # median Lab chroma at or above → colored
   lightness_light: 55          # else median L* at or above → light, below → dark
   confidence_margin: 10        # distance from the deciding threshold that gives confidence 1

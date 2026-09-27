@@ -150,6 +150,8 @@ class SimConfig(BaseModel):
     load: LoadSceneConfig = Field(default_factory=LoadSceneConfig)  # stage A's scene
     unload: UnloadSceneConfig = Field(default_factory=UnloadSceneConfig)  # stage B's scene
     miss_prob: float = 0.0  # a closing gripper catches nothing although cloth is between the pads
+    # cloth collides with cloth: a sock dropped on others lies on top (a pile costs ~5x the step)
+    cloth_collisions: bool = True
     width: int = 640
     height: int = 480
     focal_px: float = 615.0  # RealSense D435i color at 640x480

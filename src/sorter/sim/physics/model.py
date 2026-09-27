@@ -381,7 +381,9 @@ def tray(
         box(parent, f"{name}_wall{k}", (*lo, base_z), (*hi, rim_z), rgba, friction=CARDBOARD)
 
 
-def _cloth(parent: ET.Element, it: ItemSpec, rng: np.random.Generator) -> None:
+def _cloth(
+    parent: ET.Element, it: ItemSpec, rng: np.random.Generator, collide: bool = True
+) -> None:
     if it.rest_m is not None:
         pts, tris = np.array(it.rest_m).reshape(-1, 3), grid_triangles()
     else:
@@ -411,8 +413,9 @@ def _cloth(parent: ET.Element, it: ItemSpec, rng: np.random.Generator) -> None:
         damping="0.002",
         elastic2d="both",
     )
-    # cloth touches the floor, the rover, the boxes and the fingers, but not other cloth:
-    # flex-flex contacts cost ~10x the rest of the step, so items in a pile pass through each other
+    # cloth touches the floor, the rover, the boxes, the fingers and (`collide`) other cloth: a
+    # sock dropped on others lies on top, as a camera looking into the box sees it. Cloth apart
+    # costs nothing; a pile costs ~5x the rest of the step. Without, piles pass through
     ET.SubElement(
         f,
         "contact",
@@ -421,7 +424,7 @@ def _cloth(parent: ET.Element, it: ItemSpec, rng: np.random.Generator) -> None:
         selfcollide="none",
         solref="0.004 1",
         contype="2",
-        conaffinity="1",
+        conaffinity="3" if collide else "1",
     )
 
 
@@ -665,7 +668,7 @@ def build(cfg: SimConfig, board: bool = False, board_z_mm: float = 1.0) -> Scene
     items = [replace(it, id=i) for i, it in enumerate(items)]
     rng = np.random.default_rng(cfg.seed + 1000)
     for it in items:
-        _cloth(world, it, rng)
+        _cloth(world, it, rng, cfg.cloth_collisions)
 
     contact = ET.SubElement(root, "contact")
     ET.SubElement(contact, "exclude", body1="finger_left", body2="finger_right")

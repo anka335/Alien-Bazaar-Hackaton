@@ -28,6 +28,6 @@ class LoadConfig(BaseModel):
     aim_heights_mm: list[float] = Field(default_factory=lambda: [300.0, 270.0, 240.0, 210.0])
     same_sock_mm: float = 70.0  # grasp points this close are the same sock
     max_sock_height_mm: float = 80.0  # a grasp point higher above the floor is not on the floor
-    min_sock_volume_mm3: float = 15000.0  # a drop adds at least this much cloth to the box
-    cloth_min_mm: float = 4.0  # the box's floor: lower is depth noise, not cloth
+    raised_mm: float = 4.0  # the box's surface rose by this much where a dropped sock lies
+    min_raised_mm2: float = 1500.0  # … over at least this area (a sock is ~180 cm² flat)
     cargo_margin_mm: float = 8.0  # the box's walls: measured this far inside them

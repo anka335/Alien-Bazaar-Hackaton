@@ -66,14 +66,22 @@ class Spot:
 
 
 @dataclass
+class BoxView:
+    """The cargo box seen from `look_cargo` (a fixed pose: the pixels line up between looks)."""
+
+    height_mm: np.ndarray  # HxW: the surface above the box floor; NaN outside the box / no depth
+    footprint_mm2: np.ndarray  # HxW: the floor area a pixel covers
+    socks: int  # socks the floor detector tells apart in the box
+
+
+@dataclass
 class _Run:
     scan_k: int = 0  # the scan pose to look from next
     empty_views: int = 0  # views in a row without a sock
     target: Target | None = None
     tries: dict[tuple[int, int], int] = field(default_factory=dict)  # attempts per 50 mm cell
     given_up: list[Spot] = field(default_factory=list)
-    cargo_cloth: float | None = None  # cloth in the box (mm³ above its floor), last check
-    cargo_socks: int = 0  # socks the camera tells apart in the box, last check
+    box: BoxView | None = None  # the cargo box from `look_cargo`, last check
 
 
 class LoadLoop(Loop):
@@ -92,14 +100,9 @@ class LoadLoop(Loop):
 
     def _scan(self) -> Phase:
         sm, r = self.sm, self.r
-        if r.cargo_cloth is None:  # the box's contents at the start: what a drop adds to
-            box = self.s.observer.observe(Zone.CARGO)
-            r.cargo_cloth, r.cargo_socks = self.cargo_contents(box)
-            log.info(
-                "cargo box at the start: %.0f cm³ of cloth, %d sock(s)",
-                r.cargo_cloth / 1000,
-                r.cargo_socks,
-            )
+        if r.box is None:  # the box at the start: what a drop is compared with
+            r.box = self.box_view(self.s.observer.observe(Zone.CARGO))
+            log.info("cargo box at the start: %d sock(s)", r.box.socks)
         pose = SCAN_POSES[self.r.scan_k % len(SCAN_POSES)]
         sm.obs = self.scan_obs = self.s.observer.observe(Zone.FLOOR, pose)
         return Phase.SENSE_FLOOR
@@ -201,27 +204,32 @@ class LoadLoop(Loop):
                 sm.obs = obs
                 sm.decide(floor, floor.overlay, "still on the floor", Phase.SCAN)
                 return self._failed(t, "still on the floor")
-        box = self.s.observer.observe(Zone.CARGO)
-        sm.obs = box
-        cloth, n_socks = self.cargo_contents(box)
-        gained = cloth - (r.cargo_cloth or 0.0)
-        more = n_socks - r.cargo_socks
-        r.cargo_cloth, r.cargo_socks = cloth, n_socks
-        # a sock on top of others adds little volume, one that slid into a gap no new mask:
-        # either sign will do
-        if gained >= self.cfg.min_sock_volume_mm3 or more > 0:
+        sm.obs = box_obs = self.s.observer.observe(Zone.CARGO)
+        before, after = r.box, self.box_view(box_obs)
+        r.box = after
+        # a new sock lies on top: where it landed the surface rose (the socks under it may have
+        # settled elsewhere, so the volume says little); or it slid into a gap: one more sock
+        raised = np.zeros(after.height_mm.shape, dtype=bool)
+        if before is not None:
+            with np.errstate(invalid="ignore"):
+                raised = after.height_mm - before.height_mm >= self.cfg.raised_mm
+        area = float(after.footprint_mm2[raised].sum())
+        more = after.socks - (before.socks if before is not None else 0)
+        overlay = Overlay(mask=raised)
+        if area >= self.cfg.min_raised_mm2 or more > 0:
             sm.counters[t.color] += 1
             sm.failures = 0
             r.tries.pop(self._cell(t), None)
-            summary = f"verified: {t.color} in the box ({gained / 1000:+.0f} cm³, {more:+d} sock)"
+            summary = f"verified: {t.color} in the box ({area / 100:.0f} cm² rose, {more:+d} sock)"
         else:
             # it left the spot but didn't reach the box: on the rover or elsewhere on the floor,
             # where a later look finds it
-            log.warning("the sock left the floor but isn't seen in the box (%+.0f mm³)", gained)
+            log.warning("the sock left the floor but isn't seen in the box (%.0f mm² rose)", area)
             sm.failures += 1
-            summary = f"not in the box ({gained / 1000:+.0f} cm³)"
+            summary = f"not in the box ({area / 100:.0f} cm² rose)"
+        overlay.text.append(summary)
         r.target = None
-        return sm.decide(None, _box_overlay(summary), summary, Phase.SCAN)
+        return sm.decide(None, overlay, summary, Phase.SCAN)
 
     def _failed(self, t: Target, why: str) -> Phase:
         r, sm = self.r, self.sm
@@ -321,19 +329,9 @@ class LoadLoop(Loop):
         p1 = self.s.calibration.to_arm(obs, GraspPoint(px, g.depth_mm))
         return math.atan2(p1.y - p0.y, p1.x - p0.x)
 
-    def cargo_contents(self, obs: Observation) -> tuple[float, int]:
-        """What the camera sees in the cargo box: the cloth's volume (mm³) and the socks the
-        floor detector tells apart there."""
-        cargo = self.s.cfg.sim.layout.cargo
-        n = 0
-        for sock in self.s.floor_detector.detect(obs.frame).socks:
-            p = self.s.calibration.to_arm(obs, sock.grasp)
-            n += cargo.contains(p.x, p.y) and p.z < cargo.rim_z_mm
-        return self.cargo_cloth(obs), n
-
-    def cargo_cloth(self, obs: Observation) -> float:
-        """Cloth in the cargo box, mm³: every pixel whose 3D point lies inside the box (a margin
-        in from the walls) counts with its height above the box floor times its footprint."""
+    def box_view(self, obs: Observation) -> BoxView:
+        """The cargo box in `obs` (from `look_cargo`): the surface's height above the box floor
+        per pixel inside the box (a margin in from its walls), and the socks in it."""
         cargo = self.s.cfg.sim.layout.cargo  # the rover layout the rig is computed from
         assert obs.T_base_cam is not None
         k = obs.frame.intrinsics
@@ -344,11 +342,11 @@ class LoadLoop(Loop):
         p = obs.T_base_cam @ cam
         x0, x1, y0, y1 = cargo.bounds(-self.cfg.cargo_margin_mm)
         inside = (p[0] > x0) & (p[0] < x1) & (p[1] > y0) & (p[1] < y1)
-        hgt = np.clip(p[2][inside] - cargo.floor_z_mm, 0, cargo.wall_mm)
-        hgt[hgt < self.cfg.cloth_min_mm] = 0
-        footprint = (zz[inside] / k.fx) ** 2  # mm² a pixel covers at that depth
-        return float((hgt * footprint).sum())
-
-
-def _box_overlay(summary: str) -> Overlay:
-    return Overlay(text=[summary])
+        height = np.full(z.shape, np.nan)
+        height[v[inside], u[inside]] = p[2][inside] - cargo.floor_z_mm
+        footprint = (z / k.fx) ** 2  # mm² a pixel covers at that depth
+        n = 0
+        for sock in self.s.floor_detector.detect(obs.frame).socks:
+            q = self.s.calibration.to_arm(obs, sock.grasp)
+            n += cargo.contains(q.x, q.y) and q.z < cargo.rim_z_mm
+        return BoxView(height, footprint, n)

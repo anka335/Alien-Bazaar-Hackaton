@@ -1,22 +1,10 @@
-"""Color classifier on rendered sim frames, with a SAM3 stand-in: items = depth above the mat."""
+"""Color classifier: the floor detector's colors on the rendered floor scene (parquet, the wrist
+camera's noise), and its building blocks on synthetic frames."""
 
-# ruff: noqa: E402
-import pytest
-
-pytest.skip(
-    "rover stage 0: used the kinematic table sim; rewrite on the floor scene (stage A, A2)",
-    allow_module_level=True,
-)
-
-import time
-
-import cv2
 import numpy as np
 import pytest
-from sorter.sim.world import BG_ITEM_HEIGHT_MM
 
 from sorter.app import build_system
-from sorter.color_classifier import classifier as clf
 from sorter.color_classifier.classifier import (
     Sam3ColorClassifier,
     color_stats,
@@ -24,77 +12,43 @@ from sorter.color_classifier.classifier import (
     regrasp_point,
 )
 from sorter.color_classifier.config import ColorClassifierConfig
-from sorter.color_classifier.segmenter import Instance, SamSegmenter
-from sorter.core.config import Backend
-from sorter.core.types import ColorClass, Command, Frame, Intrinsics, Phase, Zone
-from sorter.orchestrator.state_machine import StateMachine
+from sorter.color_classifier.segmenter import Instance
+from sorter.core.types import ColorClass, Frame, Intrinsics, Zone
 
 
-def depth_segmenter(frame_depth: dict):
-    """Instances = connected regions standing out of the mat in depth. Reads the frame's depth."""
-
-    def segment(color: np.ndarray) -> list[Instance]:
-        d = frame_depth["d"]
-        valid = d > 0
-        mat = np.median(d[valid])
-        up = (valid & (d < mat - 10)).astype(np.uint8)
-        n, labels = cv2.connectedComponents(up)
-        return [Instance(labels == i, 0.9) for i in range(1, n)]
-
-    return segment
-
-
-def sim_frame(sim_config, colors: list[ColorClass], seed: int = 0) -> tuple[Frame, list]:
-    sim_config.sim.seed = seed
-    sim_config.sim.items = [c.value for c in colors] or ["light"]
-    system = build_system(sim_config, sim=True)
-    world = system.world
-    placed = []
-    for it in world.at("box")[: len(colors)]:
-        it.x, it.y = world.free_point_on_background()
-        it.location, it.height_mm = "background", BG_ITEM_HEIGHT_MM
-        placed.append(it)
+def _floor_socks(sim_config, colors: list[ColorClass], seed: int):
+    """Socks of `colors` in the floor view, seen from `look_floor` and detected."""
+    cfg = sim_config.model_copy(deep=True)
+    cfg.sim.scenes = ["load"]
+    cfg.sim.seed = seed
+    cfg.sim.load.socks = colors
+    cfg.sim.load.area = "view"
+    system = build_system(cfg, sim=True)
+    system.camera.start()
     system.arm.start()
-    system.arm.look(Zone.BACKGROUND)
-    return system.camera.fresh(), placed
-
-
-def classify(frame: Frame, cfg: ColorClassifierConfig | None = None, roi=()):
-    c = Sam3ColorClassifier(
-        cfg or ColorClassifierConfig(), depth_segmenter({"d": frame.depth_mm}), roi
-    )
-    return c.classify(frame)
-
-
-@pytest.mark.parametrize("seed", range(4))
-@pytest.mark.parametrize("color", list(ColorClass))
-def test_each_class(sim_config, color, seed):
-    frame, placed = sim_frame(sim_config, [color], seed)
-    bg = classify(frame)
-    assert [it.color for it in bg.items] == [color], [it.stats for it in bg.items]
-    it = bg.items[0]
-    assert 0.5 <= it.confidence <= 1.0
-    assert it.grasp.depth_mm > 0
-    assert frame.depth_mm[it.grasp.px.v, it.grasp.px.u] > 0
-    assert {"L", "a", "b", "chroma"} <= it.stats.keys()
-
-
-def test_empty_background(sim_config):
-    frame, _ = sim_frame(sim_config, [])
-    bg = classify(frame)
-    assert bg.items == []
+    try:
+        obs = system.observer.observe(Zone.FLOOR)
+        return system.floor_detector.detect(obs.frame)
+    finally:
+        system.camera.close()
+        system.world.stop()
 
 
 @pytest.mark.parametrize("seed", range(3))
-def test_three_items_largest_first(sim_config, seed):
+@pytest.mark.parametrize("color", list(ColorClass))
+def test_each_class_on_the_floor(sim_config, color, seed):
+    result = _floor_socks(sim_config, [color], seed)
+    assert [s.color for s in result.socks] == [color], [s.stats for s in result.socks]
+    sock = result.socks[0]
+    assert 0.5 <= sock.confidence <= 1.0
+    assert {"L", "a", "b", "chroma", "area_mm2"} <= sock.stats.keys()
+
+
+def test_three_socks_on_the_floor(sim_config):
     colors = [ColorClass.LIGHT, ColorClass.DARK, ColorClass.COLORED]
-    frame, placed = sim_frame(sim_config, colors, seed)
-    bg = classify(frame)
-    assert sorted(it.color for it in bg.items) == sorted(colors)
-    areas = [it.area_px for it in bg.items]
-    assert areas == sorted(areas, reverse=True)
-    assert bg.overlay.mask is not None and bg.overlay.mask.any()
-    assert len(bg.overlay.markers) == 3 and len(bg.overlay.polygons) == 3
+    result = _floor_socks(sim_config, colors, 1)
+    assert sorted(s.color for s in result.socks) == sorted(colors)
+    assert result.overlay.mask is not None and result.overlay.mask.any()
 
 
 def _synthetic(depth_fn=None) -> Frame:
@@ -171,6 +125,8 @@ def test_regrasp_on_flat_cloth_is_central():
         ((200, 220, 235), ColorClass.LIGHT),  # cream
         ((30, 30, 30), ColorClass.DARK),
         ((70, 40, 20), ColorClass.DARK),  # navy
+        ((95, 58, 33), ColorClass.DARK),  # navy under a lamp: L* ~25, chroma ~25
+        ((30, 30, 140), ColorClass.COLORED),  # a deep red: dim but bold
         ((40, 40, 200), ColorClass.COLORED),
         ((40, 200, 230), ColorClass.COLORED),  # yellow
     ],
@@ -179,33 +135,3 @@ def test_decide(bgr, expected):
     color = np.full((20, 20, 3), bgr, np.uint8)
     stats = color_stats(color, np.ones((20, 20), bool), erode_px=2)
     assert decide(stats, ColorClassifierConfig())[0] is expected
-
-
-@pytest.mark.parametrize("seed", [0, 1])
-def test_loop_with_real_classifier(sim_config, monkeypatch, seed):
-    sim_config.sim.seed = seed
-    sim_config.backends.color_classifier = Backend.REAL
-    sim_config.color_classifier.sam.api_key = "test"
-    last = {}
-    monkeypatch.setattr(SamSegmenter, "segment", lambda self, color: depth_segmenter(last)(color))
-    real_classify = clf.Sam3ColorClassifier.classify
-
-    def classify(self, frame):
-        last["d"] = frame.depth_mm
-        return real_classify(self, frame)
-
-    monkeypatch.setattr(clf.Sam3ColorClassifier, "classify", classify)
-
-    system = build_system(sim_config)
-    assert isinstance(system.color_classifier, clf.Sam3ColorClassifier)
-    sm = StateMachine(system)
-    system.hub.send(Command.START)
-    deadline = time.monotonic() + 30
-    while time.monotonic() < deadline and sm.phase not in (Phase.DONE, Phase.ERROR):
-        sm.poll()
-
-    status = system.hub.status()
-    assert status.phase is Phase.DONE, status.error
-    assert all(it.location == "bin" and it.bin is it.color for it in system.world.items)
-    expected = {c: sum(it.color is c for it in system.world.items) for c in ColorClass}
-    assert status.counters == expected

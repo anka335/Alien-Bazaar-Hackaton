@@ -51,7 +51,8 @@ def color_stats(color: np.ndarray, mask: np.ndarray, erode_px: int) -> dict[str,
 
 
 def decide(stats: dict[str, float], cfg: ColorClassifierConfig) -> tuple[ColorClass, float]:
-    """Very dark → dark; high chroma → colored; otherwise L* splits light / dark.
+    """Very dark → dark; dim and muted (navy, dark brown) → dark; high chroma → colored;
+    otherwise L* splits light / dark.
 
     Confidence grows with the distance from the threshold that decided (0.5 on it, 1 a margin away).
     """
@@ -60,6 +61,10 @@ def decide(stats: dict[str, float], cfg: ColorClassifierConfig) -> tuple[ColorCl
     d_chroma = stats["chroma"] - cfg.chroma_colored
     if d_dark > 0:
         return ColorClass.DARK, _conf(d_dark, margin)
+    d_dim = cfg.lightness_dim - stats["L"]
+    d_muted = cfg.chroma_muted - stats["chroma"]
+    if d_dim > 0 and d_muted > 0:
+        return ColorClass.DARK, min(_conf(d_dim, margin), _conf(d_muted, margin))
     if d_chroma >= 0:
         return ColorClass.COLORED, min(_conf(d_chroma, margin), _conf(-d_dark, margin))
     d_light = stats["L"] - cfg.lightness_light
