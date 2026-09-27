@@ -1,0 +1,19 @@
+# The laundry boxes' ArUco markers (box_detector, D-045). Boxes left → right: dark, colored, light.
+box_detector:
+  ros__parameters:
+    marker_size_m: 0.04        # the black square, edge to edge
+    # Marker ids per box. Empty: boxes are labelled by their left-to-right order, which needs all
+    # three in view. The detector logs every marker it sees (dictionary + id): fill them in here.
+    ids_dark: [-1]             # -1 = not set (ROS parameters can't be empty lists)
+    ids_colored: [-1]
+    ids_light: [-1]
+    # Tried in this order; a square decoded by several dictionaries counts once. Once the ids are
+    # known, keep only their dictionary (fewer false detections, less CPU).
+    dictionaries: [DICT_4X4_50, DICT_5X5_100, DICT_6X6_250, DICT_ARUCO_ORIGINAL]
+    camera: oak                # oak (rover front) or wrist (the arm's D435i)
+    base_frame: leo/base_link  # boxes are published in this frame
+    front_m: 0.27              # rover front ahead of base_frame's origin (footprint in nav2.yaml)
+    rate_hz: 5.0               # detections per second
+    target_box: ""             # dark / colored / light: that box's distance → /boxes/target_distance
+    use_depth: true            # distance from the aligned depth image (the 4 cm marker's own size
+                               # gives ~4-10 % too long beyond 0.5 m)

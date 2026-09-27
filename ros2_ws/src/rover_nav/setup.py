@@ -26,6 +26,7 @@ setup(
     entry_points={
         "console_scripts": [
             "make_keepout = rover_nav.keepout:main",
+            "box_detector = rover_nav.box_detector:main",
         ],
     },
 )

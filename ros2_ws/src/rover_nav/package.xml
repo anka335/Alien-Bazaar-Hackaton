@@ -32,6 +32,9 @@
   <!-- <exec_depend>realsense2_camera</exec_depend> -->
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>message_filters</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
 
   <test_depend>python3-pytest</test_depend>
 

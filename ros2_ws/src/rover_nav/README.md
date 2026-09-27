@@ -107,10 +107,25 @@ RViz: wait until the rover appears on the map (RTAB-Map has to recognise a place
 
 Stop: Ctrl+C the launch; the rover stops 0.5 s after `/leo/cmd_vel` goes quiet (firmware `controller.input_timeout`). Keep a hand near the rover's power switch on the first runs.
 
+## The laundry boxes from their ArUco markers ([D-045](../../../docs/decisions.md))
+
+Three boxes, left → right: **dark** (black clothes), **colored**, **light** (white), each with a 4 cm ArUco marker. `box_detector` finds them in the OAK-D's image, takes the distance from its depth image, and publishes each box in the rover's frame.
+
+```bash
+ros2 launch rover_nav boxes.launch.py                   # OAK-D + box_detector
+ros2 launch rover_nav boxes.launch.py camera:=false     # an OAK-D already running
+ros2 launch rover_nav boxes.launch.py target_box:=dark  # also that box's distance on /boxes/target_distance
+```
+
+- **First, read the ids off the log:** point the OAK-D at the boxes; it logs e.g. `dark (order 3): 0.62 m ahead of the front, +0.25 m left …` and `not assigned to a box: DICT_4X4_50 id 11 …`. Put the ids into `config/boxes.yaml` (`ids_dark`, `ids_colored`, `ids_light`) and keep only their dictionary. Without ids the boxes are labelled by their left-to-right order, which needs all three in view.
+- Outputs: `/boxes/dark`, `/boxes/colored`, `/boxes/light` (`geometry_msgs/PoseStamped` in `leo/base_link`), `/boxes/markers` (RViz), `/boxes/target_distance` (`std_msgs/Float32`, with `target_box`: distance ahead of the rover's front).
+- **Range:** a 4 cm marker is recognised to about 1 m (it's ~20 px wide at 0.9 m). Bigger markers reach further.
+
 ## Config
 
 | File | What |
 | --- | --- |
+| `config/boxes.yaml` | The boxes' markers: size (4 cm), ids per box, dictionaries, camera, target box |
 | `config/mounts.yaml` | OAK-D and arm on the rover; wrist camera in the drive pose. Placeholders |
 | `config/oak.yaml` | DepthAI driver: color 640×360 at 15 fps, 400p stereo with extended disparity, depth aligned to color, synced, no IMU / NN |
 | `config/nav2.yaml` | Nav2: speeds (0.2 m/s, 0.6 rad/s), footprint (placeholder), costmaps (obstacles from depth 5–90 cm above the floor), keepout filter |
