@@ -23,7 +23,7 @@ import numpy as np
 
 from sorter.box_detector.cargo import CargoView, SockSeen, SockTarget, find_sock, taken
 from sorter.box_detector.geometry import points
-from sorter.box_detector.held import SHOW_POSE, HeldView, find_held, show_pose, side_class
+from sorter.box_detector.held import SHOW_POSE, HeldView, find_held, show_pose
 from sorter.box_detector.station import BinFit, find_bin
 from sorter.core.errors import ArmError, SorterError, TargetRejected
 from sorter.core.types import ArmPoint, ColorClass, Observation, Overlay, Phase, Zone
@@ -301,16 +301,9 @@ class UnloadLoop(Loop):
             self.avoid.append(target)
             sm.failures += 1
             return Phase.LOOK_CARGO
-        if len(gone) != 1 or held.count > 1:
-            # none seen go: the held sock was hidden under others, its color unknown; back on
-            # top of the pile it shows next time. Several: a neighbor came along, pinched or
-            # stuck to a finger, and would fall anywhere
-            n = max(len(gone), held.count)
-            summary = (
-                f"{n} socks came out: back into the box"
-                if n > 1
-                else "holding a sock nobody saw go: back on top of the pile"
-            )
+        color, why = self._held_color(held, gone)
+        if color is None:
+            summary = f"{why}: back into the box"
             log.warning(summary)
             self._publish(obs, held, held.overlay, summary)
             self._put_back()
@@ -318,24 +311,29 @@ class UnloadLoop(Loop):
             if self.put_backs > MAX_PUT_BACKS:  # not getting anywhere with this pile
                 sm.failures += 1
             return Phase.LOOK_CARGO
-        hanging = side_class(held.stats) if held.count == 1 else None
-        if hanging is not None and hanging is not gone[0].color:
-            # the held sock was hidden, the one gone from the box was dragged out of it
-            summary = f"a {gone[0].color} sock went, a {hanging} one hangs: back into the box"
-            log.warning(summary)
-            self._publish(obs, held, held.overlay, summary)
-            self._put_back()
-            self.put_backs += 1
-            if self.put_backs > MAX_PUT_BACKS:
-                sm.failures += 1
-            return Phase.LOOK_CARGO
-        self.color = gone[0].color
+        self.color = color
         self.next_obs = after_obs
-        summary = f"holding a {self.color} sock (gone from the box)"
-        if self.color is not t.color:
+        summary = f"holding a {color} sock ({why})"
+        if color is not t.color:
             log.info("%s; the target was a %s one", summary, t.color)
         self._publish(obs, held, held.overlay, summary)
         return Phase.DROP_TO_LAUNDRY
+
+    @staticmethod
+    def _held_color(held: HeldView, gone: list[SockSeen]) -> tuple[ColorClass | None, str]:
+        """The held sock's color, and why. First what hangs from the fingers, seen from the
+        show pose (side-lit: its own thresholds, `side_class`); socks of different classes
+        hanging there → none. Else the one sock gone from the box (lit from above; a pile
+        that settles anew once a sock is pulled out of it can hide others, so only one
+        counts). Else none: the color is unknown."""
+        classes = {c for c in held.classes or [] if c is not None}
+        if len(classes) > 1:
+            return None, f"{held.count} socks of different colors hang from the fingers"
+        if classes:
+            return classes.pop(), "seen hanging"
+        if len(gone) == 1:
+            return gone[0].color, "gone from the box"
+        return None, "holding a sock of a color nobody saw"
 
     def _put_back(self) -> None:
         """Everything in the gripper back into the middle of the cargo box."""

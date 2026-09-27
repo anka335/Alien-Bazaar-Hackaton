@@ -26,7 +26,10 @@ ELECTRONICS_MM = (-280.0, -90.0, -125.0, 20.0, 0.0, 70.0)  # power strip and ada
 BRACKET_MM = (-210.0, -50.0, 120.0, 280.0, -24.0, -20.0)  # holds the cargo box beside the deck
 CARDBOARD_RGBA = "0.66 0.5 0.34 1"
 Place = tuple[float, float, float]  # x, y (mm), yaw (rad)
-PILE_STEP_MM = 35.0  # socks in one box start this much above each other
+# socks in one box start this much above each other: cloth passes through cloth in the sim, so
+# a sock dropped from higher up lands on nothing and stands up against a wall; low, they settle
+# overlapping on the bottom like a loose pile
+PILE_STEP_MM = 6.0
 
 
 def station(cfg: SimConfig, rng: np.random.Generator) -> dict[ColorClass, Place]:
@@ -109,7 +112,7 @@ def add(world: ET.Element, asset: ET.Element, cfg: SimConfig, rng: np.random.Gen
                 dx, dy = rng.uniform(-5, 5), rng.uniform(-20, 20)
                 yaw = rng.choice([0.0, np.pi / 2]) + rng.uniform(-0.1, 0.1)
             else:  # near the middle: the gathered sheet still has to fit between the walls
-                dx, dy = rng.uniform(-0.15, 0.15) * w, rng.uniform(-0.15, 0.15) * h
+                dx, dy = rng.uniform(-0.2, 0.2) * w, rng.uniform(-0.2, 0.2) * h
                 yaw = rng.uniform(0, np.pi)
             pos = ((cx + dx) / 1000, (cy + dy) / 1000, z / 1000)
             items.append(ItemSpec(color, palette_rgb(color, rng), pos, float(yaw), sheet))

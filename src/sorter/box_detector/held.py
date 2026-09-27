@@ -45,6 +45,7 @@ class HeldView:
     overlay: Overlay
     count: int = 0  # socks seen hanging: more than one, a neighbor came along
     stats: dict[str, float] | None = None  # color statistics of the held sock (side-lit)
+    classes: list[ColorClass | None] | None = None  # each hanging sock's side-lit class
 
 
 def find_held(
@@ -60,12 +61,14 @@ def find_held(
     held = near & up
     best = None
     count = 0
+    classes: list[ColorClass | None] = []
     for inst in segment(frame.color):
         m = inst.mask
         area = int(m.sum())
         if area < MIN_HELD_PX or held[m].mean() < 0.6:
             continue
         count += 1
+        classes.append(side_class(color_stats(frame.color, m, classifier.erode_px)))
         if best is None or area > best[1]:
             best = (m, area)
     if best is None:
@@ -74,7 +77,7 @@ def find_held(
     stats = color_stats(frame.color, m, classifier.erode_px)
     color, conf = decide(stats, classifier)
     text = f"holding a {color} sock ({conf:.2f}), {area} px, {count} in view"
-    return HeldView(color, conf, area, Overlay(mask=m, text=[text]), count, stats)
+    return HeldView(color, conf, area, Overlay(mask=m, text=[text]), count, stats, classes)
 
 
 def side_class(stats: dict[str, float] | None) -> ColorClass | None:
