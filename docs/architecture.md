@@ -10,7 +10,7 @@ Single source of truth for the contracts between the stages. The shared types ar
 - **Camera:** Intel RealSense D435i RGB-D on the wrist, fixed to link5, looking along the gripper ([D-006](decisions.md), [D-027](decisions.md)).
 - **Cargo box:** one cardboard box, 190 × 190 mm outside and 75 deep, to the arm's left and a bit behind, its underside 45 mm below the deck; every sock goes into it, not split by color ([D-040](decisions.md)). `sim.layout.cargo.compartments` can still split it along x.
 - **Behind the arm** on the rover: the electronics case, the power supply and a power strip (keep-out).
-- **Unload station:** 3 laundry bins on the floor to the rover's right, one per color.
+- **Unload station:** 3 laundry bins (cardboard boxes like the cargo box) on the floor in a row in front of the rover, one per color ([D-043](decisions.md)); the rover parks there within a tolerance, the loop finds each bin with the camera.
 - The layout is `sim.layout` (arm base frame, mm), measured on the rover except the equipment and the box's position ([D-042](decisions.md)):
 
 | Part | Where |
@@ -22,7 +22,8 @@ Single source of truth for the contracts between the stages. The shared types ar
 | cargo box, inside | 182 × 182 (190 outside): x −141..41, y 109..291, floor z −41 (underside −45), rim z 34, walls 4 mm |
 | floor view (what `look_floor` frames) | 280 × 240 centered at (310, 0) |
 | floor pick zone (`zones.floor`, computed) | the ring the arm reaches: ~150–490 mm out, −146° … +140° (not behind the rover, not under the box) |
-| laundry bins | 220 mm square, 150 high, at (−140, −330) light, (100, −330) dark, (340, −300) colored |
+| cargo pick zone (`zones.cargo`, computed) | the box's inside 16 mm off the walls, corners cut by 45 mm; a pick plans with the fingers at 0, 90, 45 or 135° |
+| laundry bins (not measured) | 190 mm square outside, 75 high, walls 4 mm, at (290, 220) light, (290, 0) dark, (290, −220) colored |
 
 ## Components
 
@@ -68,14 +69,14 @@ STARTING → SCAN(k) → SENSE_FLOOR ─sock─► [AIM] → PICK_FROM_FLOOR →
                          └─no sock─► SCAN(k + 1) … every view empty → DONE
 ```
 
-**Unload (stage B), baseline:** the depth box detector on each compartment's image area (the compartment rectangle projected from `look_cargo`), the first grasp found; the sock goes to that compartment's bin, fingers along the compartment's long side (yaw π/2).
+**Unload (stage B):** only the wrist camera tells where things are ([D-043](decisions.md)). Once per run the bins are found (a look at each bin's layout place, a second one centered on the estimate if the bin was cut by the image edge). Per sock: the sock on top of the pile, its grasp and finger directions (the open fingers kept off other socks); after the pick a second look into the box (it is also the next cycle's look), the `show_held` pose (is anything held, and its color from how it hangs); the color from the sock seen hanging, else the box's best match ([D-044](decisions.md): the one sock gone, of several the one nearest the grasp, none gone the grasp's target); socks of different colors hanging: everything back into the box, and again; the drop into the found bin via home, then a look into the bin: only a seen drop is counted.
 
 ```text
-STARTING → LOOK_CARGO → SENSE_CARGO ─grasp in c─► PICK_FROM_CARGO → DROP_TO_LAUNDRY(c) → LOOK_CARGO …
-                             └─all empty × empty_confirmations─► DONE
+STARTING → LOOK_CARGO (the bins, once) → SENSE_CARGO ─sock─► PICK_FROM_CARGO → DROP_TO_LAUNDRY(color) → LOOK_CARGO …
+                                              └─box empty × empty_confirmations─► DONE
 ```
 
-The unload loop is still the stage 0 baseline: it walks the compartments, and with the one box of [D-040](decisions.md) it finds none.
+The unload loop takes the socks out of the one box with the wrist camera only and tells each one's color on the way ([D-043](decisions.md)).
 
 **Shared rules for both loops:**
 
@@ -197,6 +198,12 @@ class BoxDetector(Protocol):
 
 `DepthBoxDetector(cfg, roi)`: the floor is a high percentile of the ROI depth, cloth is what stands `cloth_height_mm` above it, the grasp is the top of the smoothed height map, `wall_margin_mm` inside the ROI. It sees walls and dividers as cloth, so its ROI must be one compartment.
 
+The unload loop's vision works on arm-frame points (depth + camera pose, `box_detector.geometry.points`), not on image heuristics:
+
+- `cargo.find_sock(obs, box, floor_z, rim_z, workspace, classifier_cfg, segment, avoid) -> CargoView(target: SockTarget | None, cloth_px, seen: list[SockSeen], overlay)`: cloth is what stands over the box floor inside its walls; socks are the segmentation's instances; the target is the top of the pile, grasped at its highest point inside the workspace, with finger directions to try. `taken(before, after)`: the socks of one view missing in a later one from the same pose (matched by color and pixel overlap).
+- `station.find_bin(obs, guess, floor_z, size, height, wall) -> BinFit(center, yaw, score, seen, complete, overlay)`: a square ring of the bin's size matched to the wall points on a top-down grid.
+- `held.find_held(frame, segment, classifier_cfg) -> HeldView(color | None, …)`: the instance mostly nearer than 330 mm (or without depth) from `show_held`; `show_pose(...)` searches that pose.
+
 ### Color classifier (library, used by A)
 
 `ColorClassifier.classify(frame) -> BackgroundResult(items: list[ItemResult], overlay)`; `ItemResult(color, confidence, grasp, area_px, touches_roi_edge, stats)`. `Sam3ColorClassifier(cfg.color_classifier, segment, roi)`: masks from `segment(bgr)` (the SAM3 service, [D-013](decisions.md), or the sim's render), color from Lab statistics of the eroded mask. A failing service raises `SegmentationError` (a `SorterError`).
@@ -286,7 +293,7 @@ Decision(phase, obs, overlay, summary)
 | `GET` / `POST /api/manual` | manual control: named poses, a tour `look_floor → look_cargo → cargo_* → laundry_* → home`, jog, gripper, save a pose into `rig.yaml`, release, clear fault |
 | `GET` / `POST /api/calibrate` | the calibration page: marks on the floor view, clicks, the mount fit, look poses (`look_floor`, `look_cargo`) |
 
-**The front end is not updated yet**: it still has an "Auto" tab and draws the table from the old layout JSON. Updating it (tabs Load / Unload, the 3D view from `parts`) is task A6; B adds its panel on top (B5).
+**The front end is updated only in part**: its tabs are Load / Unload (one run page, the tab says which loop it switches to), Manual, Calibrate, 3D view; the run page's phase strip and the 3D view are still the table's (the old layout JSON). The rest (the 3D view from `parts`, the rover phases, the load panel) is task A6; B adds its panel on top (B5).
 
 ## Threads and process
 
@@ -316,7 +323,7 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 | `floor_detector` | A | `min_area_mm2`, `max_area_mm2`, `max_length_mm`, `edge_px`, `avoid_radius_px`, `local_axis_mm` |
 | `load` | A | the load loop: `max_attempts`, `empty_rounds`, `aim_off_center`, `aim_heights_mm`, `same_sock_mm`, `max_sock_height_mm`, `raised_mm`, `min_raised_mm2`, `cargo_margin_mm` |
 | `arm` | shared | `speed_scale` (at start; `POST /api/speed` changes it), `max_speed_scale` (at most `speed_ceiling()` ≈ 1.43, the motors' velocity limit, [D-033](decisions.md)), `approach`, `safe_z_mm`, `z_min_mm`, `drop_height_mm`, `drop_settle_s`, `cargo_drop_above_mm` / `_tilt_deg` / `_back_mm` / `_depth_mm`, `keep_out_mm`, `keep_out_margin_mm`, `link5_points_mm`, gripper |
-| `poses` | layout tool | `rest`, `home`, `look_floor`, `look_cargo`, `scan_1` … `scan_7`, `cargo_<color>`, `laundry_<color>` (`rig.yaml`) |
+| `poses` | layout tool | `rest`, `home`, `look_floor`, `look_cargo`, `scan_1` … `scan_7`, `cargo_<color>`, `laundry_<color>`, `show_held` (`rig.yaml`) |
 | `zones.<zone>` | layout tool | `floor`, `cargo`: `workspace_mm`, `z_floor_mm`, `grasp_depth_mm`, `approach_mm`, `lift_z_mm` (`rig.yaml`) |
 | `state_machine` | shared | `empty_confirmations`, `max_consecutive_failures`, `low_confidence`, `save_runs`, `runs_dir` |
 | `dashboard` | shared | `host`, `port`, `stream_fps`, `jpeg_quality`, `status_hz` |
@@ -331,14 +338,15 @@ YAML, deep-merged: `config/default.yaml` → `config/rig.yaml` → `config/hand_
 
 `--sim` simulates the **hardware only** ([D-021](decisions.md)), in MuJoCo (`sorter.sim.physics`); there is no other engine.
 
-- **Scene** (`sorter.sim.physics.model.build(cfg.sim) -> Scene(xml, items)`): the **base** (floor plane with herringbone parquet, the rover's wheels, rails and battery, the deck plate, the equipment behind the arm, the cardboard cargo box, the arm from its URDF with the wrist camera; the calibration board and tape marks when asked), then each scene in `sim.scenes` in order: `sorter.sim.scenes.<name>.scene.add(world, asset, cfg, rng) -> list[ItemSpec]` may add geoms and assets and returns the cloth items to add. `load` (A) scatters sock-shaped `sim.load.socks` over the floor the arm reaches (or the floor view); `unload` (B) adds the laundry bins and `sim.unload.cargo` socks in the box. Helpers for scenes: `box`, `tray`, `palette_rgb`, `ItemSpec(color, rgb, pos, yaw, sheet_m, gather, fold_m, rest_m)`.
+- **Scene** (`sorter.sim.physics.model.build(cfg.sim) -> Scene(xml, items)`): the **base** (floor plane with herringbone parquet, the rover's wheels, rails and battery, the deck plate, the equipment behind the arm, the cardboard cargo box, the arm from its URDF with the wrist camera; the calibration board and tape marks when asked), then each scene in `sim.scenes` in order: `sorter.sim.scenes.<name>.scene.add(world, asset, cfg, rng) -> list[ItemSpec]` may add geoms and assets and returns the cloth items to add. `load` (A) scatters sock-shaped `sim.load.socks` over the floor the arm reaches (or the floor view); `unload` (B) adds the laundry bins, moved off their layout places by `sim.unload.station_mm` / `station_deg` (the whole row: parking) and `bin_mm` / `bin_deg` (each bin), by seed, and `sim.unload.cargo` socks piled in the box, each a limp `sim.unload.sock_mm` sheet (`sock_young` / `sock_thickness_mm`, [D-044](decisions.md)). Helpers for scenes: `box`, `tray`, `palette_rgb`, `ItemSpec(color, rgb, pos, yaw, sheet_m, gather, young, thickness_m, fold_m, rest_m)`.
 - **Cloth:** 8 × 8 flex grids with a crumpled rest shape, or a scene's own (`rest_m`: the load scene's sock outline); they don't collide with each other (cost). Cloth is expensive: 3 socks run at ~2.6× real time, 6 at ~1.3×.
 - **Grip:** when a close stalls the fingers on cloth touching both pads, the vertices between them are attached to the gripper until an open (a stand-in for friction). `sim.miss_prob` makes a close catch nothing.
 - `PhysicsWorld`: `step`, `teleport_arm`, `joints`, `tcp`, `looking_at`, `vertices(item)`, `location(item)` → `gripper` / `cargo` + color (None: one box) / `laundry` + color / `floor` / `other`, `at(location, color=None)`.
 - The arm: `rebot_b601.arm.Arm` runs unchanged on `MujocoBackend`; `PhysicsCamera` renders the D435i (depth noise, no depth under 175 mm) and `segment()` gives MuJoCo's segmentation as SAM3-style instances.
 - **The camera sits where the real one was calibrated:** `sim.camera_T_link5_cam`, filled by the config loader from `config/hand_eye.yaml` ([D-041](decisions.md)); the nominal `camera_mount_mm` only without a hand-eye result. So the look poses, ROIs and pixel → arm math the sim runs are the rig's.
 - **The load benchmark:** `uv run python -m sorter.sim.scenes.load.bench -n 50 [--socks 1-4] [--workers 3]`: seeded scenes through the real load loop, headless, `realtime: 0`; `data/bench/<run_id>/` gets `scenes.jsonl` and `summary.json` (socks in the box / on the floor / elsewhere, counted vs in the box, sim time per sock).
-- `sorter.sim.layout` computes the rig (poses, zones, views, keep-out) with the arm's IK and checks it; `sorter.sim.rig` has the sim camera mount.
+- `sorter.sim.layout` computes the rig (poses, zones, views, keep-out) with the arm's IK and checks it, B's too: the cargo pick zone and `show_held` ([D-043](decisions.md)); `sorter.sim.rig` has the sim camera mount.
+- **The unload benchmark:** `uv run python -m sorter.sim.scenes.unload.bench -n 20`: seeded scenarios through the real unload loop, the station off its place, judged by the simulator's ground truth; report in `data/bench/unload-<run_id>/`.
 
 ## Rover navigation (ROS 2 track)
 

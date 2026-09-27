@@ -64,20 +64,21 @@ class CargoLayout(RectConfig):
 
 
 class LaundryLayout(BaseModel):
-    """The unload station's laundry bins, on the floor, where the rover parks next to them."""
+    """The unload station's laundry bins: cardboard boxes like the cargo box, on the floor in a
+    row across the front of the rover, where it parks next to them (D-043)."""
 
     model_config = ConfigDict(extra="forbid")
 
     centers_mm: dict[ColorClass, tuple[float, float]] = Field(
         default_factory=lambda: {
-            ColorClass.LIGHT: (-140.0, -330.0),
-            ColorClass.DARK: (100.0, -330.0),
-            ColorClass.COLORED: (340.0, -300.0),
+            ColorClass.LIGHT: (290.0, 220.0),
+            ColorClass.DARK: (290.0, 0.0),
+            ColorClass.COLORED: (290.0, -220.0),
         }
     )
-    size_mm: float = 220.0  # square, outside
-    height_mm: float = 150.0  # rim above the floor
-    wall_t_mm: float = 10.0
+    size_mm: float = 190.0  # square, outside
+    height_mm: float = 75.0  # rim above the floor
+    wall_t_mm: float = 4.0
 
 
 class Block(BaseModel):

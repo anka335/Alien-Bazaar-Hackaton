@@ -26,7 +26,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | --- | --- | --- | --- | --- |
 | [0: Preparation](rover/0-preparation.md) | done | Softjey + Claude | `stage/0-preparation` | contracts, base scene, rig on the rover, wiring; known issues handed to A and B |
 | [A: Loading](rover/a-loading.md) | in progress | Softjey + Claude | `claude/pensive-banach-a6b5d1` | scene, scan-all-around loop, detector, benchmark ([D-040](decisions.md), [D-041](decisions.md)); known issues in the brief |
-| [B: Unloading](rover/b-unloading.md) | todo | — | — | the cargo box into the laundry bins; color sorting open ([D-040](decisions.md)) |
+| [B: Unloading](rover/b-unloading.md) | in progress | Softjey + Claude | `claude/b-unloading-stage-d746d4` | vision-only loop and benchmark on the measured rover, station in front; tuning ([D-043](decisions.md)) |
 | [F: Far detection](rover/f-far-detection.md) | todo | — | — | socks seen 0.5–3 m away from a search pose, as targets on the floor |
 | [N: Navigation](rover/n-navigation.md) | todo | — | — | driving rover: to F's targets, stop within reach, dock at the station |
 | [C: Full mission](rover/c-mission.md) | todo | — | — | needs A, B, F, N: rover interface, stow, mission loop, benchmark |

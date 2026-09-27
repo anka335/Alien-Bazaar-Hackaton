@@ -5,8 +5,9 @@
 
 The look poses point the wrist camera straight down over the zone center, as high as the arm
 can hold the gripper vertical. The drop poses hold the TCP `arm.drop_height_mm` over the rim of
-a cargo compartment / laundry bin. The check plans a full pick (above, down, up) on a grid over
-each zone workspace and every move between the named poses, against the floor and the keep-out.
+a cargo compartment / laundry bin. `show_held` shows the camera what hangs from the gripper
+(stage B). The check plans a full pick (above, down, up) on a grid over each zone workspace and
+every move between the named poses, against the floor and the keep-out.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ import yaml
 
 from sorter.arm import kinematics as kin
 from sorter.arm.config import LOOK_POSES, POSE_NAMES, SCAN_POSES, ArmConfig, ZoneConfig
+from sorter.box_detector.held import SHOW_POSE, show_pose
 from sorter.core.config import DEFAULT_CONFIG_DIR, Config, load_config
 from sorter.core.errors import SorterError
 from sorter.core.types import ArmPoint, ColorClass, Zone
@@ -39,7 +41,13 @@ SCAN_VIEW_MM = 270.0  # the floor a scan view covers across (the camera ~350 mm 
 FLOOR_MARGIN_MM = 20.0
 # the grasp stays this far from a compartment's walls: across the fingers, and along them (the
 # open gripper is ~60 mm wide, + the keep-out margin)
-CARGO_MARGIN_MM = (30.0, 50.0)
+# the cargo pick zone (stage B picks the socks out of the box): this far from the walls, and
+# the corners cut. The box is small: a sock against a wall is still graspable with the fingers
+# along the wall (the pick's keep-out check says which yaw fits); at a corner both walls are close
+CARGO_MARGIN_MM = 16.0
+CARGO_CORNER_CUT_MM = 45.0
+CARGO_GRASP_DEPTH_MM = 8.0  # a shallow pinch at the pile's top: deeper catches the socks under it
+CARGO_PICK_YAWS_DEG = (0.0, 90.0, 45.0, 135.0)  # a cargo pick must plan with one of these
 FLOOR_CLEARANCE_MM = 3.0  # arm.z_min_mm: this far above the floor
 HOME_TCP_MM = (220.0, 0.0, 200.0)
 HOME_APPROACH = (1.0, 0.0, -1.0)  # 45° down, forward
@@ -408,6 +416,73 @@ def _drop_pose(arm: ArmConfig, xyz: tuple[float, float, float], name: str) -> np
     raise SystemExit(f"{name} ({x:.0f}, {y:.0f}, {xyz[2]:.0f}) is not reachable")
 
 
+def chamfer(square: Sequence[tuple[float, float]], cut: float) -> list[tuple[float, float]]:
+    """The axis-aligned rectangle `square` (4 corners) with its corners cut by `cut` mm."""
+    xs, ys = [p[0] for p in square], [p[1] for p in square]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    return [
+        (x0 + cut, y0), (x1 - cut, y0), (x1, y0 + cut), (x1, y1 - cut),
+        (x1 - cut, y1), (x0 + cut, y1), (x0, y1 - cut), (x0, y0 + cut),
+    ]  # fmt: skip
+
+
+def collision_check(sim: SimConfig, clearance_mm: float = 10.0):
+    """`collides(q)`: the arm at `q` comes within `clearance_mm` of itself or the scene (the
+    MuJoCo model: no socks, the station where the layout puts it), past the contacts the arm
+    always has."""
+    import mujoco
+
+    from sorter.sim.physics.model import ARM_JOINTS, build
+
+    nominal = {"cargo": {}, "station_mm": 0.0, "station_deg": 0.0, "bin_mm": 0.0, "bin_deg": 0.0}
+    empty = sim.model_copy(
+        update={"scenes": ["unload"], "unload": sim.unload.model_copy(update=nominal)}
+    )
+    m = mujoco.MjModel.from_xml_string(build(empty).xml)
+    m.geom_margin[:] = clearance_mm / 1000
+    d = mujoco.MjData(m)
+    adr = [m.jnt_qposadr[m.joint(j).id] for j in ARM_JOINTS]
+    arm = {m.body(n).id for n in ("link2", "link3", "link4", "link5", "link6", "gripper_end")}
+
+    def contacts(q) -> set[tuple[int, int]]:
+        d.qpos[adr] = q
+        mujoco.mj_forward(m, d)
+        out = set()
+        for c in d.contact[: d.ncon]:
+            b = (int(m.geom_bodyid[c.geom1]), int(m.geom_bodyid[c.geom2]))
+            if b[0] in arm or b[1] in arm:
+                out.add((min(c.geom1, c.geom2), max(c.geom1, c.geom2)))
+        return out
+
+    always = contacts(np.zeros(len(ARM_JOINTS)))  # e.g. the fingers' pads on each other
+
+    def collides(q) -> bool:
+        return bool(contacts(q) - always)
+
+    return collides
+
+
+def held_pose(sim: SimConfig, arm: ArmConfig, home: Sequence[float]) -> np.ndarray:
+    """`show_held`: the camera sees what hangs from the gripper (stage B), checked for
+    collisions against the MuJoCo model of the layout."""
+    q = show_pose(
+        np.asarray(home, dtype=float),
+        camera_mount(sim),
+        arm.keep_out_mm,
+        arm.keep_out_margin_mm,
+        arm.z_min_mm,
+        sim.layout.body.bounds()[1],
+        sim.layout.floor_z_mm,
+        sim.focal_px,
+        (sim.width, sim.height),
+        link5_points=arm.link5_points_mm,
+        collides=collision_check(sim),
+    )
+    if q is None:
+        raise SystemExit("no pose shows the camera what the gripper holds")
+    return q
+
+
 def compute_poses(
     sim: SimConfig, arm: ArmConfig, floor_workspace: Sequence[tuple[float, float]]
 ) -> dict[str, list[float]]:
@@ -442,7 +517,8 @@ def compute_poses(
         x, y = bins.centers_mm[color]
         z = lay.floor_z_mm + bins.height_mm + arm.drop_height_mm
         poses[f"laundry_{color.value}"] = _drop_pose(arm, (x, y, z), f"laundry_{color.value}")
-    return {name: [round(float(v), 4) for v in poses[name]] for name in POSE_NAMES}
+    poses[SHOW_POSE] = held_pose(sim, arm, home)
+    return {name: [round(float(v), 4) for v in poses[name]] for name in (*POSE_NAMES, SHOW_POSE)}
 
 
 def compute_zones(
@@ -461,8 +537,9 @@ def compute_zones(
             lift_z_mm=lay.floor_z_mm + 150.0,
         ),
         Zone.CARGO: ZoneConfig(
-            workspace_mm=rect_polygon(cargo, CARGO_MARGIN_MM[0]),
+            workspace_mm=chamfer(rect_polygon(cargo, CARGO_MARGIN_MM), CARGO_CORNER_CUT_MM),
             z_floor_mm=cargo.floor_z_mm + 5.0,
+            grasp_depth_mm=CARGO_GRASP_DEPTH_MM,
             approach_mm=60.0,  # the move to above the grasp stays over the rim
             lift_z_mm=cargo.rim_z_mm + 30.0,
         ),
@@ -486,7 +563,8 @@ def check(cfg: Config, step_mm: float = 20.0) -> list[str]:
     problems = []
     arm = Controller(_PlanOnly(), cfg.arm, cfg.poses, cfg.zones)  # type: ignore[arg-type]
     q = {n: np.asarray(v) for n, v in cfg.poses.items()}
-    moves = [("rest", "home"), *((p, "home") for p in POSE_NAMES if p not in ("rest", "home"))]
+    named = [p for p in (*POSE_NAMES, SHOW_POSE) if p in q and p not in ("rest", "home")]
+    moves = [("rest", "home"), *((p, "home") for p in named)]
     moves += list(zip(SCAN_POSES, SCAN_POSES[1:], strict=False))  # the scan sweeps along the ring
     for a, b in moves:
         try:
@@ -496,28 +574,28 @@ def check(cfg: Config, step_mm: float = 20.0) -> list[str]:
             problems.append(f"move {a} ↔ {b}: {e}")
     lay = cfg.sim.layout
     cargo = lay.cargo
-    # where picks must work: the floor zone with any yaw; the box or each compartment (less the
-    # margin), the fingers opening along its long side
-    along_y = cargo.size_mm[1] >= cargo.insides()[0].size_mm[0]
-    across, along = CARGO_MARGIN_MM
-    regions = [(Zone.FLOOR, cfg.zones[Zone.FLOOR].workspace_mm, [lay.floor_z_mm + 15.0], None)]
-    regions += [
-        (
-            Zone.CARGO,
-            rect_polygon(r, *((across, along) if along_y else (along, across))),
-            [cargo.floor_z_mm + h for h in (15, 35)],
-            math.pi / 2 if along_y else 0.0,
-        )
-        for r in cargo.insides()
+    # where picks must work: the floor zone with any yaw; the cargo zone with one of
+    # CARGO_PICK_YAWS_DEG (near a wall only some fit)
+    yaws = [math.radians(a) for a in CARGO_PICK_YAWS_DEG]
+    regions = [
+        (Zone.FLOOR, [lay.floor_z_mm + 15.0], [None]),
+        (Zone.CARGO, [cargo.floor_z_mm + h for h in (15, 35)], yaws),
     ]
-    for zone, poly, heights, yaw in regions:
+    for zone, heights, zone_yaws in regions:
         look = q[LOOK_POSES[zone]]
+        poly = cfg.zones[zone].workspace_mm
         for (x, y), h in itertools.product(grid(poly, step_mm), heights):
-            try:
-                _, _, up = arm.plan_pick(ArmPoint(float(x), float(y), h), zone, yaw, q0=look)
-                arm._plan_joints(up[-1], q["home"])  # and on to a drop, via home
-            except SorterError as e:
-                problems.append(f"pick {zone} ({x:.0f}, {y:.0f}, {h:.0f}): {e}")
+            errors = []
+            for yaw in zone_yaws:
+                try:
+                    p = ArmPoint(float(x), float(y), h)
+                    _, _, up = arm.plan_pick(p, zone, yaw, q0=look)
+                    arm._plan_joints(up[-1], q["home"])  # and on to a drop, via home
+                    break
+                except SorterError as e:
+                    errors.append(str(e))
+            else:
+                problems.append(f"pick {zone} ({x:.0f}, {y:.0f}, {h:.0f}): {errors[0]}")
     return problems
 
 

@@ -59,6 +59,10 @@ CLOTH_N = 8  # vertices per side, every item
 CLOTH_SHEET_M = (0.14, 0.14)  # the flat sheet, default size
 CLOTH_GATHER = 0.6  # the rest shape is the sheet gathered to this fraction, with folds
 CLOTH_FOLD_M = 0.03  # height of the folds
+# the cloth's stiffness: Young's modulus (Pa) and thickness (m). The default holds its crumpled
+# shape: pinched in the middle it hangs ~65 mm; 1e4 Pa and 1 mm, ~100 mm, like a limp sock
+CLOTH_YOUNG = 1e5
+CLOTH_THICKNESS_M = 0.004
 
 
 @dataclass(frozen=True)
@@ -71,6 +75,8 @@ class ItemSpec:
     yaw: float
     sheet_m: tuple[float, float] = CLOTH_SHEET_M  # the flat sheet, before it is gathered
     gather: float = CLOTH_GATHER
+    young: float = CLOTH_YOUNG
+    thickness_m: float = CLOTH_THICKNESS_M
     fold_m: float = CLOTH_FOLD_M  # height of the folds
     # the rest shape instead of a gathered sheet: CLOTH_N² points (x, y, z in m, flattened, in
     # the order of `crumpled_sheet`: row by row, a row along x), its lowest point at z = 0
@@ -407,9 +413,9 @@ def _cloth(
     ET.SubElement(
         f,
         "elasticity",
-        young="1e5",
+        young=f"{it.young:g}",
         poisson="0.2",
-        thickness="0.004",
+        thickness=f"{it.thickness_m:g}",
         damping="0.002",
         elastic2d="both",
     )

@@ -41,10 +41,11 @@ sim:
       wall_mm: 75                                             # the rim is 34 above the deck
       wall_t_mm: 4
     floor_view: {center_mm: [310, 0], size_mm: [280, 240]}   # the floor look_floor frames
-    laundry:                                                  # the unload station's bins
-      centers_mm: {light: [-140, -330], dark: [100, -330], colored: [340, -300]}
-      size_mm: 220
-      height_mm: 150
+    laundry:            # the unload station: boxes like the cargo box on the floor in front (D-043)
+      centers_mm: {light: [290, 220], dark: [290, 0], colored: [290, -220]}   # not measured
+      size_mm: 190                                            # outside
+      height_mm: 75
+      wall_t_mm: 4
 
 camera: {}           # shared
 calibration:         # shared

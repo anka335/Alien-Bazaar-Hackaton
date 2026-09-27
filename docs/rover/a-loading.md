@@ -80,7 +80,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 
 ### A6: Dashboard
 
-- The front end (`frontend/`) still has the table's "Auto" tab and 3D table. Update the shared parts (`api.ts` modes, `TopBar` tabs `/load`, `/unload`, the 3D view drawing `parts` generically, the phases), then the load panel. Tell B when the shared part is merged: B's panel builds on it.
+- The front end (`frontend/`) has the `load` / `unload` modes and the tabs `/load`, `/unload` (both on the old run page, `AutoPage`), but still the table's 3D view and phase strip. Update the rest of the shared parts (the 3D view drawing `parts` generically, the phases), then the load panel. Tell B when the shared part is merged: B's panel builds on it.
 - Rewrite the skipped `tests/dashboard/test_server.py` and `test_calibrate.py` (calibration now on the floor view).
 
 ### A7: Benchmark
@@ -108,3 +108,6 @@ A0–A7 done on the sim.
 - 2026-09-27: the load loop scanning a ring around the arm, the sock detector, the camera from the hand-eye result, the benchmark and the watch tool ([D-041](../decisions.md)); shared: `ArmController.go_to` / `aim_camera`, `Observer.observe(zone, pose)` / `observe_point`, `plan_move`, `arm.link5_points_mm`, `arm.drop_settle_s`, phases `AIM` / `CHECK_LOAD`, scan poses in `rig.yaml`, `sim.cloth_collisions` (noted in B's Log).
 - 2026-09-27: the rover measured ([D-042](../decisions.md)): deck 200 mm high, arm at the front edge, the box 190 mm outside; `rig.yaml` recomputed. The benchmark numbers above are from the old layout.
 - 2026-09-27: stages N (navigation), C (full mission), D (sim-to-real) added ([D-035](../decisions.md)): repositioning and the rover interface are C's, N hands over at the stop requirement.
+- 2026-09-27 (from B): shared front end: the `auto` mode replaced by `load` / `unload` (the back end's modes since stage 0; `/` crashed on `TAB_MODES["unload"]`), tabs Load / Unload both on the old run page `AutoPage`, `isRunMode()` in `api.ts`. The 3D view, the phase strip and the load panel are still A6's.
+- 2026-09-27 (from B): shared `ItemSpec` takes the cloth's `young` and `thickness_m`; the defaults are the base's (1e5 Pa, 4 mm), so your scene is unchanged. B's socks are limp (1e4 Pa, 1 mm) so a held one hangs into the camera's view ([D-044](../decisions.md)); worth trying for A's too if the held sock matters to you.
+- 2026-09-27 (from B, [D-043](../decisions.md)): shared `sim.layout` tool: the cargo zone is B's pick zone (16 mm off the walls, corners cut by 45 mm, `grasp_depth_mm` 8; the check plans a pick at 0/90/45/135° and needs one), and `rig.yaml` has `show_held` (found with a MuJoCo collision check, `layout.collision_check`). The station (`sim.layout.laundry`) moved in front of the rover: 190 mm boxes at x 290, y ±220 / 0, so with both scenes (`run --sim`'s default) the bins stand in your floor ring; your bench and watch use only `load`. B's `sim.camera_mount_T` is gone in favor of your `camera_T_link5_cam`.

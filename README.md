@@ -14,7 +14,7 @@ Everything is built and accepted on a MuJoCo simulator first ([D-032](docs/decis
 | Robot arm | Seeed reBot Arm B601-RS (RobStride motors): 6 DoF + parallel gripper, driven through [`rebot_b601/`](rebot_b601/README.md) |
 | Camera | Intel RealSense D435i RGB-D on the arm's wrist (eye-in-hand), USB 3 |
 | Cargo box | one cardboard box, 150 × 150 × 60 mm, left of the arm and a bit behind, over the rear left wheel |
-| Unload station | 3 laundry bins on the floor, right of the rover |
+| Unload station | 3 laundry bins (boxes like the cargo box) on the floor in front of the rover |
 
 ## Project plan
 
@@ -39,7 +39,7 @@ uv run python -m sorter run --sim               # load mode on the simulator; --
 uv run pytest                                   # tests
 ```
 
-`run --sim` starts the state machine and the dashboard at <http://127.0.0.1:8000> ([D-031](docs/decisions.md)). The operator modes are `load`, `unload` (the state machine runs that loop; Start / Pause / Step / Stop / Reset) and the setup modes `manual`, `calibrate`; `--mode` picks the one to start in, `--autostart` presses Start. The mode changes between runs. Hold (the red button, Space / Esc) freezes the arm; Reset continues; Ctrl+C holds, goes to rest and turns the motors off. Other flags: `--no-dashboard`, `--config-dir`, `-v`. Every run is logged to `data/runs/<run_id>/` (`state_machine.save_runs: false` to turn off). The front end still shows the table-era "Auto" tab and 3D table until stage A updates it (A6).
+`run --sim` starts the state machine and the dashboard at <http://127.0.0.1:8000> ([D-031](docs/decisions.md)). The operator modes are `load`, `unload` (the state machine runs that loop; Start / Pause / Step / Stop / Reset) and the setup modes `manual`, `calibrate`; `--mode` picks the one to start in, `--autostart` presses Start. The mode changes between runs. Hold (the red button, Space / Esc) freezes the arm; Reset continues; Ctrl+C holds, goes to rest and turns the motors off. Other flags: `--no-dashboard`, `--config-dir`, `-v`. Every run is logged to `data/runs/<run_id>/` (`state_machine.save_runs: false` to turn off). The front end has the Load / Unload tabs but still the table-era phase strip and 3D view until stage A updates it (A6).
 
 ## The simulator
 
@@ -51,7 +51,15 @@ uv run pytest                                   # tests
 - Watch one load run: `uv run mjpython -m sorter.sim.scenes.load.watch [--seed 3] [--socks 4]` (live in the MuJoCo viewer; `mjpython` on macOS), or `uv run python -m sorter.sim.scenes.load.watch --no-viewer --record run.mp4` (a video). The load benchmark: `uv run python -m sorter.sim.scenes.load.bench -n 50 --workers 3` (report in `data/bench/`).
 - The floor detector uses the render's segmentation instead of SAM3 (`sim.use_sam3: true` to call the service). `sim.miss_prob` makes grasps miss on purpose.
 
-**Rover layout** (`sim.layout` in `config/default.yaml`, arm base at the origin on the deck, +x forward, +y left, mm; estimated from photos until the rover is measured, [D-040](docs/decisions.md)): the floor at z −160; the body 360 × 350 with Ø120 wheels at its corners; the electronics, power supply and power strip behind the arm; the cargo box inside 150 × 150 around (−50, 200), rim 25 above the deck; the floor view (the floor pick zone) 280 × 240 around (310, 0); the laundry bins (220 mm, 150 high) at (−140, −330), (100, −330), (340, −300). The arm's joint 1 turns ±145° and the gripper held down reaches ~100 mm above the deck, which is why the box is beside the arm, not behind it, and the bins are low. After changing the layout recompute the rig: `uv run python -m sorter.sim.layout --write` writes the poses, zones, ROIs and the arm's keep-out into `config/rig.yaml` and checks every pick and move (it must report 0 problems).
+**Unload** (stage B, [D-043](docs/decisions.md)): the socks piled in the cargo box, the three bins in front of the rover off their places by seed (parking); the loop finds everything with the wrist camera.
+
+```bash
+uv run mjpython -m sorter.sim.scenes.unload.demo      # one scenario, live in the MuJoCo viewer (--no-viewer --dashboard: the browser)
+uv run python -m sorter.sim.scenes.unload.preview     # render the scene (--view: the MuJoCo viewer)
+uv run python -m sorter.sim.scenes.unload.bench -n 20 # seeded scenarios, judged by the sim; report in data/bench/
+```
+
+**Rover layout** (`sim.layout` in `config/default.yaml`, arm base at the origin on the deck, +x forward, +y left, mm; measured, [D-042](docs/decisions.md), except the equipment, the box's center and the station): the floor at z −200; the deck 300 × 185 with the arm at its front edge; the body 420 × 420 with wheels 130 wide at its corners; the electronics, power supply and power strip behind the arm; the cargo box inside 182 × 182 around (−50, 200), rim 34 above the deck; the floor view 280 × 240 around (310, 0); the laundry bins (190 mm, 75 high) at (290, 220) light, (290, 0) dark, (290, −220) colored. The arm's joint 1 turns ±145° and the gripper held down reaches ~100 mm above the deck, which is why the box is beside the arm, not behind it, and the bins are low. After changing the layout recompute the rig: `uv run python -m sorter.sim.layout --write` writes the poses, zones, ROIs and the arm's keep-out into `config/rig.yaml` and checks every pick and move (it must report 0 problems).
 
 ## Setup on the rig
 

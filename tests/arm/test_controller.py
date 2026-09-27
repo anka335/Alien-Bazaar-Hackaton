@@ -119,7 +119,7 @@ def test_pick_goes_above_down_and_up(arm, cfg):
 
 
 def test_grasp_stops_above_the_floor(arm, cfg):
-    arm.pick(ArmPoint(300, 0, -155), Zone.FLOOR)
+    arm.pick(ArmPoint(300, 0, cfg.sim.layout.floor_z_mm + 5), Zone.FLOOR)
     z_floor = cfg.zones[Zone.FLOOR].z_floor_mm
     assert z_floor > cfg.sim.layout.floor_z_mm
     assert tcp_z(arm.driver.paths[1][-1]) == pytest.approx(z_floor, abs=1.5)
@@ -136,7 +136,7 @@ def test_pick_turns_the_fingers_to_the_yaw(arm, yaw):
 def test_pick_from_the_cargo_box(cfg):
     arm = Controller(FakeDriver(cfg.poses["look_cargo"]), cfg.arm, cfg.poses, cfg.zones)
     x, y = cfg.sim.layout.cargo.compartment(ColorClass.DARK).center_mm
-    arm.pick(ArmPoint(x, y, cfg.sim.layout.cargo.floor_z_mm + 20), Zone.CARGO, math.pi / 2)
+    arm.pick(ArmPoint(x, y, cfg.sim.layout.cargo.floor_z_mm + 10), Zone.CARGO, math.pi / 2)
     assert tcp_z(arm.driver.paths[1][-1]) == pytest.approx(cfg.zones[Zone.CARGO].z_floor_mm, abs=2)
 
 

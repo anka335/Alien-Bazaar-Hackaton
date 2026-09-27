@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { MODE_LABELS, postJSON, type ManualState, type OperatorMode } from "../api";
+import { MODE_LABELS, isRunMode, postJSON, type ManualState, type OperatorMode } from "../api";
 import { useSorter } from "../sorter";
 
 /** An MJPEG stream; it ends when the server restarts, so it reconnects. */
@@ -23,7 +23,7 @@ export function ModeGate({ modes, what, children }: { modes: OperatorMode[]; wha
   if (modes.includes(status.operator)) return <>{children}</>;
   const target = modes[0];
   const available = meta === null || meta.modes.includes(target);
-  const running = status.operator === "auto" && status.mode !== "idle";
+  const running = isRunMode(status.operator) && status.mode !== "idle";
   return (
     <div className="gate">
       <div className="gate-card">
@@ -35,7 +35,7 @@ export function ModeGate({ modes, what, children }: { modes: OperatorMode[]; wha
           <p className="gate-text">A run is going. Stop it on the Sorting tab first: the arm finishes its step and goes home.</p>
         ) : (
           <p className="gate-text">
-            {target === "auto"
+            {isRunMode(target)
               ? "The state machine takes the arm; the manual controls turn off."
               : "The state machine lets go of the arm; it moves only on your buttons."}
           </p>
