@@ -124,6 +124,15 @@ Simulated run with the arm twin: the driver's simulated arm (no CAN) and RViz sh
 ros2 launch cloth_task task.launch.py hardware:=real driver_sim:=true enable_motors:=true run_task:=false spectacles:=true use_rviz:=true
 ```
 
+Mobile manipulator in the morning (#45): `run_spectacles_rover.sh` at the repo root starts one stage in the foreground from this checkout's own `ros2_ws/install`, on the default ROS domain and discovery range (it sets neither and prints them) and port 9100. All stages use `hardware:=real enable_motors:=true run_task:=false spectacles:=true use_rviz:=true`. The B stages refuse to start unless `ip -br link show can0` reports `UP`, and name the `sudo` CAN steps of `rebot_b601/README.md`.
+
+```bash
+./run_spectacles_rover.sh stage-a           # real rover, simulated arm (driver_sim:=true rover:=true)
+./run_spectacles_rover.sh stage-b1          # real arm, no rover (driver_sim:=false rover:=false)
+./run_spectacles_rover.sh stage-b2          # real arm and rover (driver_sim:=false rover:=true)
+./run_spectacles_rover.sh --print stage-b2  # print the command, launch nothing
+```
+
 - `enable_motors:=true` is needed even with the simulated arm: without it `arm_bridge` refuses teleop mode and every lens is closed with 1013.
 - Stop the Lens Studio Preview before testing on the glasses: each new socket replaces the previous one (closed with 1000), so the Preview and the glasses keep replacing each other.
 
