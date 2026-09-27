@@ -23,7 +23,7 @@ Single source of truth for the contracts between the stages. The shared types ar
 | floor view (what `look_floor` frames) | 280 × 240 centered at (310, 0) |
 | floor pick zone (`zones.floor`, computed) | the ring the arm reaches: ~150–490 mm out, −146° … +140° (not behind the rover, not under the box) |
 | cargo pick zone (`zones.cargo`, computed) | the box's inside 16 mm off the walls, corners cut by 45 mm; a pick plans with the fingers at 0, 90, 45 or 135° |
-| laundry bins (not measured) | 190 mm square outside, 75 high, walls 4 mm, at (290, 220) light, (290, 0) dark, (290, −220) colored |
+| laundry bins (not measured) | square, 75 high, walls 4 mm: 190 mm outside at (290, 260) light and (290, −260) colored, 270 mm (the middle one) at (310, 0) dark; `sim.layout.laundry.sizes_mm` per color over `size_mm` |
 
 ## Components
 

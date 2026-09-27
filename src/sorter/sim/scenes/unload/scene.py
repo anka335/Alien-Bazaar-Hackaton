@@ -66,8 +66,8 @@ def add(world: ET.Element, asset: ET.Element, cfg: SimConfig, rng: np.random.Gen
     fz = lay.floor_z_mm / 1000
     bins = lay.laundry
     t = bins.wall_t_mm / 1000
-    half = bins.size_mm / 2000 - t
     for color, (x, y, yaw) in station(cfg, rng).items():
+        half = bins.size(color) / 2000 - t
         part = ET.Element("part")
         tray(
             part,

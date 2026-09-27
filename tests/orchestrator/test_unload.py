@@ -82,7 +82,10 @@ def _held(*classes):
     ("held", "gone", "target", "want"),
     [
         # seen hanging wins over the box
-        ((ColorClass.DARK,), [ColorClass.LIGHT], ColorClass.LIGHT, ColorClass.DARK),
+        ((ColorClass.DARK,), [ColorClass.DARK], ColorClass.LIGHT, ColorClass.DARK),
+        ((ColorClass.DARK,), [], ColorClass.LIGHT, ColorClass.DARK),
+        # one seen, two of two colors gone: both may hang as one, back into the box
+        ((ColorClass.DARK,), [ColorClass.DARK, ColorClass.LIGHT], ColorClass.DARK, None),
         # different colors hanging: back into the box
         ((ColorClass.DARK, ColorClass.LIGHT), [], ColorClass.DARK, None),
         # not in view: the one sock gone from the box

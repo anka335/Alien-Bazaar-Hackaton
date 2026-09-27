@@ -32,6 +32,8 @@ from sorter.sim.physics.model import ARM_JOINTS, ItemSpec, build
 
 log = logging.getLogger(__name__)
 
+RELEASE_SHED_S = 0.5  # after a release the hand touches no cloth this long: it falls off
+HELD_BIT = 4  # contype bit of the hand while it holds: only the held cloth has it as affinity
 SETTLE_S = 1.5  # the items settle before anything else happens
 GRIP_CATCH_NM = 0.5  # motor 7 torque that means "closing" (rebot_b601 holds a grip with 1 N·m)
 GRIP_RELEASE_NM = 0.5  # and "opening"
@@ -77,6 +79,15 @@ class PhysicsWorld:
             self._vert_item[a : a + n] = it.id
         self._gripper_body = m.body("gripper_end").id
         self._pads = (m.geom("pad_left").id, m.geom("pad_right").id)
+        # while an item is held the gripper touches it but no other cloth: the others of the
+        # pile, which pass through the held one, would stay wedged between the pads and ride
+        # along unheld. (Touching none, the held one wraps through the fingers and, let go,
+        # stays hooked on them.) The hand's contype becomes a bit only the held item's affinity
+        # has; the world still meets the hand through its own contype and the hand's affinity
+        self._hand = np.array([m.geom("palm").id, *self._pads])
+        self._hand_bits = (m.geom_contype[self._hand].copy(), m.geom_conaffinity[self._hand].copy())
+        self._flex_affinity = m.flex_conaffinity.copy()
+        self._shed_until: float | None = None  # sim time the hand touches cloth again
         # the grip constraint of every cloth vertex, in flexvert order
         self._grip_eq = np.array(
             [
@@ -168,9 +179,16 @@ class PhysicsWorld:
         if held:
             if not self.enabled or torque > GRIP_RELEASE_NM:
                 d.eq_active[self._grip_eq[self._grip_idx]] = 0
+                # the fingers kept closing through the held cloth: it may be threaded round a
+                # pad. For a moment the hand touches no cloth, so it falls off, not hooked
+                m.flex_conaffinity[:] = self._flex_affinity
+                self._shed_until = d.time + RELEASE_SHED_S
                 log.debug("grip: released %d vertices", len(self._grip_idx))
                 self._grip_idx = np.zeros(0, int)
             return
+        if self._shed_until is not None and d.time >= self._shed_until:
+            m.geom_contype[self._hand], m.geom_conaffinity[self._hand] = self._hand_bits
+            self._shed_until = None
         if not self.enabled or torque > -GRIP_CATCH_NM:
             self._closing_since = None
             return
@@ -215,6 +233,10 @@ class PhysicsWorld:
         eq = self._grip_eq[idx]
         m.eq_data[eq, 3:6] = local_g  # hold each vertex where it is now, in the gripper_end frame
         d.eq_active[eq] = 1
+        m.geom_contype[self._hand] = HELD_BIT
+        m.geom_conaffinity[self._hand] = 1
+        for i in pinched:
+            m.flex_conaffinity[self.item_flex[int(i)]] |= HELD_BIT
         self._grip_idx = idx
         log.debug(
             "grip: caught %d vertices of items %s, finger %.1f mm",
@@ -343,8 +365,8 @@ class PhysicsWorld:
                 if cargo.compartment(color).contains(x, y):
                     return "cargo", color
         bins = lay.laundry
-        half = bins.size_mm / 2
         for color, (bx, by) in bins.centers_mm.items() if "unload" in self.cfg.scenes else ():
+            half = bins.size(color) / 2
             if abs(x - bx) <= half and abs(y - by) <= half and z < lay.floor_z_mm + bins.height_mm:
                 return "laundry", color
         if z < lay.floor_z_mm + 40:

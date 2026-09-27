@@ -42,8 +42,9 @@ sim:
       wall_t_mm: 4
     floor_view: {center_mm: [310, 0], size_mm: [280, 240]}   # the floor look_floor frames
     laundry:            # the unload station: boxes like the cargo box on the floor in front (D-043)
-      centers_mm: {light: [290, 220], dark: [290, 0], colored: [290, -220]}   # not measured
+      centers_mm: {light: [290, 260], dark: [310, 0], colored: [290, -260]}   # not measured
       size_mm: 190                                            # outside
+      sizes_mm: {dark: 270}                                   # the middle one is bigger
       height_mm: 75
       wall_t_mm: 4
 

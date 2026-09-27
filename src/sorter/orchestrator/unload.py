@@ -36,12 +36,18 @@ FINGER_TRAVEL_MM = 50.0  # each finger from the middle, the gripper all open (re
 SHAKE_MM = 12.0  # sideways, twice, right after a pick
 MAX_PUT_BACKS = 6  # in a row before each more counts as a failure
 RELOCATE_MM = 20.0  # a bin found this far from where the look was centered: look again there
-DROP_IN_MM = 20.0  # the TCP this far below the bin's rim to let go (the bin is 140 mm inside)
-DROP_ABOVE_MM = 90.0  # over the rim before going down to the drop height (the sock hangs)
+# the TCP this far below the bin's rim to let go, 25 mm over its floor: the pinched middle of
+# the sock lies on the floor then; let go higher, it stays draped over a finger and the lift
+# drags it back out over the wall
+DROP_IN_MM = 50.0
+# over the rim before going down to the drop height, the highest the arm reaches there: a limp
+# sock hangs up to ~150 mm below the fingers, lower it drags over the bins' walls on the way
+DROP_ABOVE_MM = (170.0, 150.0, 130.0, 90.0)
 # the depth over an empty bin floor is off by up to ~5 mm (sim noise, like the D435i's): only
 # what stands higher counts as cloth; a sock lying in a bin stands 10–17 mm
 CLOTH_ABOVE_MM = 6.0
-LANDED_MM = 0.3  # the mean cloth height over the bin floor a sock adds, at least
+# the cloth volume a sock adds to a bin, at least (a sock: 12–30 cm³ seen; the noise left: < 2)
+LANDED_MM3 = 8000.0
 BIN_FLOOR_MM = 5.0  # the bin's inside floor above the floor
 
 
@@ -51,7 +57,8 @@ class Bin:
     yaw: float
     look: np.ndarray  # joints of the look pose centered on it
     found: bool  # seen (else: the layout's place)
-    cloth: float = 0.0  # cloth seen in it at the last look (mean height over its floor, mm)
+    size_mm: float = 190.0  # outside
+    cloth: float = 0.0  # cloth seen in it at the last look (volume over its floor, mm³)
 
 
 class UnloadLoop(Loop):
@@ -160,10 +167,11 @@ class UnloadLoop(Loop):
         bins = self.s.cfg.sim.layout.laundry
         floor = self.s.cfg.sim.layout.floor_z_mm
         center, look = guess, self._look_pose(guess)
+        size = bins.size(color)
         best: tuple[float, BinFit, Observation, np.ndarray] | None = None
         for _ in range(3):
             obs = self._observe(look, Zone.LAUNDRY)
-            fit = find_bin(obs, center, floor, bins.size_mm, bins.height_mm, bins.wall_t_mm)
+            fit = find_bin(obs, center, floor, size, bins.height_mm, bins.wall_t_mm)
             self._publish(obs, fit, fit.overlay, f"{color} bin: " + fit.overlay.text[-1])
             if fit.center is None:
                 break
@@ -175,10 +183,10 @@ class UnloadLoop(Loop):
             center, look = fit.center, self._look_pose(fit.center)  # look again, centered
         if best is None:
             log.warning("%s bin not found: using its place in the layout", color)
-            return Bin(guess, 0.0, self._look_pose(guess), False), fit, obs
+            return Bin(guess, 0.0, self._look_pose(guess), False, size), fit, obs
         _, fit, obs, look = best
         assert fit.center is not None
-        return Bin(fit.center, fit.yaw, look, True), fit, obs
+        return Bin(fit.center, fit.yaw, look, True, size), fit, obs
 
     def _locate_bins(self) -> dict[ColorClass, Bin]:
         out = {}
@@ -190,21 +198,22 @@ class UnloadLoop(Loop):
         return out
 
     def _cloth_in(self, obs: Observation, b: Bin) -> float:
-        """Cloth inside bin `b`: its height over the bin floor where it stands above the depth
-        noise, averaged over the whole floor in view (mm; the same for any look distance)."""
+        """Cloth inside bin `b`: its volume over the bin floor where it stands above the depth
+        noise (mm³): the mean height over the floor in view times the floor's area, the same for
+        any look distance and any bin size."""
         lay = self.s.cfg.sim.layout
         bins = lay.laundry
         p = points(obs)
         c, s = math.cos(-b.yaw), math.sin(-b.yaw)
         dx, dy = p[..., 0] - b.center[0], p[..., 1] - b.center[1]
         u, v = c * dx - s * dy, s * dx + c * dy  # in the bin's own axes
-        half = bins.size_mm / 2 - bins.wall_t_mm - 8.0  # off the walls
+        half = b.size_mm / 2 - bins.wall_t_mm - 8.0  # off the walls
         h = p[..., 2] - (lay.floor_z_mm + BIN_FLOOR_MM)
         with np.errstate(invalid="ignore"):
             floor = (np.abs(u) < half) & (np.abs(v) < half) & np.isfinite(h)
             cloth = floor & (h > CLOTH_ABOVE_MM) & (h < bins.height_mm + 60)
         n = int(floor.sum())
-        return float(np.where(cloth, h, 0.0).sum() / n) if n else 0.0
+        return float(np.where(cloth, h, 0.0).sum() / n * (2 * half) ** 2) if n else 0.0
 
     # --- the phases ---
 
@@ -306,12 +315,16 @@ class UnloadLoop(Loop):
         cfg = self.s.cfg
         held = find_held(obs, self.segment(), cfg.color_classifier, cfg.sim.layout.floor_z_mm)
         self.held = held
-        if held.color is None and not gone and result.likely_empty:
-            summary = f"nothing in the gripper (opening {result.gripper_opening:.2f})"
+        if not held.count and not gone:
+            # nothing hangs in view and no sock left the box: a miss. (A sock bunched whole in
+            # the fingers hangs out of view too, but then one is gone from the box: D-044.) Let
+            # go over the box all the same, in case one came along unseen
+            summary = f"nothing seen in the gripper (opening {result.gripper_opening:.2f})"
             log.warning(summary)
             self._publish(obs, held, held.overlay, summary)
             self.avoid.append(target)
             sm.failures += 1
+            self._put_back()
             return Phase.LOOK_CARGO
         color, why = self._held_color(held, gone, t)
         if color is None:
@@ -324,7 +337,8 @@ class UnloadLoop(Loop):
                 sm.failures += 1
             return Phase.LOOK_CARGO
         self.color = color
-        self.next_obs = after_obs
+        # not for the next cycle: the sock hung from the fingers into that look (the TCP is over
+        # the box's wall there), so it would be taken for one still in the box
         summary = f"holding a {color} sock ({why})"
         if color is not t.color:
             log.info("%s; the target was a %s one", summary, t.color)
@@ -337,7 +351,9 @@ class UnloadLoop(Loop):
     ) -> tuple[ColorClass | None, str]:
         """The held sock's color, and why. First what hangs from the fingers, seen from the
         show pose (side-lit: its own thresholds, `side_class`); socks of different classes
-        hanging there → none. A sock bunched at the fingers is out of the camera's view, so
+        hanging there → none; one class seen, but more socks gone from the box than hang in
+        view and one of another color among them (two socks hanging together look like one)
+        → none. A sock bunched at the fingers is out of the camera's view, so
         then the box's best match (lit from above): the one sock gone from it; of several
         gone (a pile settles anew once a sock is pulled out of it), the one nearest the
         grasp; none gone (the pile hides the change), the grasp's target. Else none."""
@@ -345,7 +361,12 @@ class UnloadLoop(Loop):
         if len(classes) > 1:
             return None, f"{held.count} socks of different colors hang from the fingers"
         if classes:
-            return classes.pop(), "seen hanging"
+            color = classes.pop()
+            others = {g.color for g in gone} - {color}
+            if others and len(gone) > held.count:
+                other = sorted(c.value for c in others)[0]
+                return None, f"a {color} sock hangs, but a {other} one left the box too"
+            return color, "seen hanging"
         if len(gone) == 1:
             return gone[0].color, "gone from the box"
         if gone and target is not None:
@@ -373,19 +394,27 @@ class UnloadLoop(Loop):
         sm, arm = self.sm, self.s.arm
         assert self.color is not None and self.bins is not None
         color = self.color
-        # the look into the box after the pick stays true only if this drop goes as planned
-        box_obs, self.next_obs = self.next_obs, None
         b = self.bins[color]
         lay = self.s.cfg.sim.layout
         rim = lay.floor_z_mm + lay.laundry.height_mm
         x, y = b.center
         arm.home()  # from the show pose: a straight move from there swings the wrist into things
-        arm.move_tcp((x, y, rim + DROP_ABOVE_MM))  # type: ignore[attr-defined]
+        for above in DROP_ABOVE_MM:
+            try:
+                arm.move_tcp((x, y, rim + above))  # type: ignore[attr-defined]
+                break
+            except TargetRejected:
+                if above == DROP_ABOVE_MM[-1]:
+                    raise
         # the fingers go into the bin: the sock hangs from them off to a side, released over the
         # rim it could land on it
         arm.move_tcp((x, y, rim - DROP_IN_MM), linear=True)  # type: ignore[attr-defined]
-        arm.set_gripper(self.s.cfg.arm.gripper.open)  # type: ignore[attr-defined]
-        arm.move_tcp((x, y, rim + DROP_ABOVE_MM), linear=True)  # type: ignore[attr-defined]
+        # wide open (no wall near in a bin) and a shake along the fingers before the lift: the
+        # released sock stays draped over a finger otherwise, and the lift carries it off
+        arm.set_gripper(1.0)  # type: ignore[attr-defined]
+        for dx in (SHAKE_MM, -SHAKE_MM, 0.0):
+            arm.move_tcp((x + dx, y, rim - DROP_IN_MM), linear=True)  # type: ignore[attr-defined]
+        arm.move_tcp((x, y, rim + above), linear=True)  # type: ignore[attr-defined]
         self.avoid.clear()
         # did it land? look into the bin: its cloth must have grown
         obs = self._observe(b.look, Zone.LAUNDRY)
@@ -393,14 +422,13 @@ class UnloadLoop(Loop):
         grew = cloth - b.cloth
         b.cloth = cloth
         self.put_backs = 0
-        if grew >= LANDED_MM:
+        if grew >= LANDED_MM3:
             sm.counters[color] += 1
             sm.failures = 0
-            summary = f"{color} sock landed in its bin (+{grew:.2f} mm)"
+            summary = f"{color} sock landed in its bin (+{grew / 1000:.1f} cm³)"
         else:
             sm.failures += 1
-            summary = f"{color} sock not seen in its bin (+{grew:.2f} mm)"
+            summary = f"{color} sock not seen in its bin (+{grew / 1000:.1f} cm³)"
             log.warning(summary)
         self._publish(obs, None, Overlay(text=[summary]), summary)
-        self.next_obs = box_obs
         return Phase.LOOK_CARGO
