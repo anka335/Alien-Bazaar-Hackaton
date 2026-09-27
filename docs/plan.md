@@ -31,7 +31,7 @@ Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
 | [N: Navigation](rover/n-navigation.md) | todo | — | — | driving rover: to F's targets, stop within reach, dock at the station |
 | [C: Full mission](rover/c-mission.md) | todo | — | — | needs A, B, F, N: rover interface, stow, mission loop, benchmark |
 | [D: Sim-to-real](rover/d-sim-to-real.md) | todo | — | — | needs C: the benchmarks under rig-like errors |
-| Hardware | in progress | Softjey + Claude | `main` | first load runs on the rig: every session recorded (`run --record`); the arm's turn and lean on the rover measured ([D-047](decisions.md), [D-048](decisions.md)); faults, Stop and lost CAN feedback handled ([D-046](decisions.md)); one sock loaded in the auto mode. Next: the room's color gains, the cargo box's exact spot from `look_cargo` |
+| Hardware | in progress | Softjey + Claude | `main` | first load runs on the rig: every session recorded (`run --record`); the arm's turn and lean on the rover measured ([D-049](decisions.md), [D-050](decisions.md)); faults, Stop and lost CAN feedback handled ([D-048](decisions.md)); one sock loaded in the auto mode. Next: the room's color gains, the cargo box's exact spot from `look_cargo` |
 | [ROS 2: rover navigation](rover/ros2-navigation.md) | in progress | Slava + Claude | `block/09-rover-navigation` | outside the stages: RTAB-Map + Nav2 on the real Leo Rover (room mapped, mask made; first navigation run next); MuJoCo Leo Rover sim driven by jevomir (D-039), reusable for N1 |
 
 ## How the parallel stages stay out of each other's way

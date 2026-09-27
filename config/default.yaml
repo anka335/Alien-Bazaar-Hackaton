@@ -30,12 +30,12 @@ sim:
   camera_mount_mm: [-140, 0, 55]  # wrist camera in the TCP frame (x = approach), looks along x
   layout:            # the rover, arm base at the origin on the deck (z = 0), +x forward, +y left, mm
     # measured on the rover (D-042); the equipment behind the arm is still a photo estimate
-    floor_z_mm: -192                                          # the floor fit (calibration.level, D-048); 200 by tape
+    floor_z_mm: -192                                          # the floor fit (calibration.level, D-050); 200 by tape
     body: {center_mm: [-90, 0], size_mm: [420, 420]}         # chassis + wheels, from above
     wheel_width_mm: 130
     deck: {center_mm: [-90, 0], size_mm: [300, 185]}         # the plate; the arm at its front edge
     cargo:                                                    # one cardboard box, right of the arm (D-045)
-      center_mm: [-220, -190]                                 # right, behind the front wheel: from a photo (D-048)
+      center_mm: [-220, -190]                                 # right, behind the front wheel: from a photo (D-050)
       size_mm: [182, 182]                                     # inside (190 outside)
       floor_z_mm: -41                                         # inside floor; its underside 45 below the deck
       wall_mm: 75                                             # the rim is 34 above the deck
@@ -80,7 +80,7 @@ color_classifier:    # stage A: the floor detector's segmentation + color (D-013
 arm:                 # shared (D-019); z_min_mm and keep_out_mm come from rig.yaml
   dry_run: false     # real backend: rebot_b601's simulated motors instead of the CAN bus
   base_yaw_deg: -90  # joint 1 = 0 points to the rover's right (the arm stands turned on the deck)
-  base_tilt_deg: [1.2, 6.15]  # the base leans ~6° forward: from the floor the scans saw (D-048)
+  base_tilt_deg: [1.2, 6.15]  # the base leans ~6° forward: from the floor the scans saw (D-050)
   speed_scale: 1.0      # of rebot_b601's joint speeds at start; the dashboard changes it
   max_speed_scale: 1.4  # the dashboard's maximum; at most ~1.43, the motors' velocity limit
   safe_z_mm: 100     # recover() / shutdown() first lift the TCP to this height
