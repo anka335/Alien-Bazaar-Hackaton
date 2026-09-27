@@ -7,6 +7,20 @@ from pydantic import BaseModel, ConfigDict, Field
 from sorter.core.types import ColorClass
 
 
+class PlacedSock(BaseModel):
+    """A sock at a given spot (arm base frame), not a random one: the mission hands over the
+    socks the rover stopped next to."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    color: ColorClass
+    x_mm: float
+    y_mm: float
+    yaw_rad: float = 0.0
+    rgb: tuple[float, float, float] | None = None  # None: a random color of the class
+    bunched: bool = False
+
+
 class LoadSceneConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -25,3 +39,4 @@ class LoadSceneConfig(BaseModel):
     margin_mm: float = 40.0  # "view": a sock's center stays this far inside the floor view
     sock_mm: tuple[float, float] = (200.0, 90.0)  # a sock lying flat: length, width
     bunched_prob: float = 0.3  # a sock lies bunched up instead of flat
+    placed: list[PlacedSock] = Field(default_factory=list)  # given: these instead of `socks`

@@ -92,6 +92,18 @@ def sock_shape(rng: np.random.Generator, size_mm: tuple[float, float], bunched: 
 
 def add(world: ET.Element, asset: ET.Element, cfg: SimConfig, rng: np.random.Generator):
     sc, lay = cfg.load, cfg.layout
+    if sc.placed:
+        z = (lay.floor_z_mm + 8) / 1000
+        return [
+            ItemSpec(
+                p.color,
+                p.rgb or palette_rgb(p.color, rng),
+                (p.x_mm / 1000, p.y_mm / 1000, z),
+                p.yaw_rad,
+                rest_m=tuple(sock_shape(rng, sc.sock_mm, p.bunched).ravel()),
+            )
+            for p in sc.placed
+        ]
     placed: list[tuple[float, float]] = []
     items = []
     for color in sc.socks:

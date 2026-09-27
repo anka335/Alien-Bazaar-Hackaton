@@ -116,6 +116,7 @@ class BoxesConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tag_size_m: float = 0.035  # the tag's black square, edge to edge (measured by depth)
+    station_tag_m: float = 0.08  # the sim's unload station (scenario `mission`): its tags
     target_id: int = 13  # the box to drive to (the middle one of our three: 14 13 12)
     stop_m: float = 0.15  # front bumper to the tag at the stop
     memory: str = "data/nav_boxes.json"  # the remembered layout (`remember_boxes`)

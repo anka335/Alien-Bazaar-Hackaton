@@ -18,8 +18,8 @@ Single source of truth for the contracts between the stages. The shared types ar
 | floor | z = −192 (`floor_z_mm`, fitted to the floor the camera saw; 200 by tape) |
 | rover body (chassis + wheels, from above) | 420 × 420: x −300..120, y −210..210; wheels Ø120 (not measured) × 130 at its corners; below the deck (z < 0) |
 | deck plate | 300 × 185: x −240..60, y −92.5..92.5, top z = 0; the arm at its front edge |
-| equipment (`equipment`) | electronics case x −200..−55, z −75..−5; power supply (and the power strip under it) x −245..10, y 120..270, z −10..60 (photo) |
-| cargo box, inside | 182 × 182 (190 outside) around (−220, −190), behind the right front wheel (photo, [D-050](decisions.md)): x −311..−129, y −281..−99, floor z −41 (underside −45), rim z 34, walls 4 mm |
+| equipment (`equipment`) | electronics case x −200..−55, z −75..−5; power supply (and the power strip under it) x −245..10, y 120..270, z −10..60 (photo); the Leo's raised top cover x −300..−50, y ±128, up to z 50 (higher than the box's rim) |
+| cargo box, inside | 182 × 182 (190 outside) around (−185, −225), over the right rear wheel (its corner seen by the wrist camera, [D-050](decisions.md)): x −276..−94, y −316..−134, floor z −41 (underside −45), rim z 34, walls 4 mm |
 | floor view (what `look_floor` frames) | 280 × 240 centered at (310, 0) |
 | floor pick zone (`zones.floor`, computed) | the ring the arm reaches: ~150–490 mm out, from the rover's right side round the front to ~50° left of forward (joint 1's ±145° with the arm turned) |
 | cargo pick zone (`zones.cargo`, computed) | the box's inside 16 mm off the walls, corners cut by 45 mm; a pick plans with the fingers at 0, 90, 45 or 135° |

@@ -33,6 +33,7 @@ from sorter.sim.rig import camera_body_points, camera_mount, camera_pose
 
 LOOK_TCP_Z_MM = (100, -120)  # camera_over: the highest TCP height tried, then lower by 5 mm
 LOOK_HEIGHTS_MM = tuple(range(400, 174, -10))  # the camera above what it looks at, tried in turn
+UPRIGHT_MIN_MM = 200.0  # an upright look no lower than this (the D435i's depth needs ~180)
 REACH_EXTENT_MM = (-360.0, 540.0, -540.0, 540.0)  # x0, x1, y0, y1 of the floor reach map
 REACH_STEP_MM = 30.0
 REACH_CHECK_MM = 20.0  # the finer grid the floor zone is checked on (as `check` does)
@@ -128,11 +129,14 @@ def look_pose(
     surface_z: float,
     seed: Sequence[float] | None = None,
     home: Sequence[float] | None = None,
+    upright: bool = False,
 ) -> np.ndarray:
     """Joints that point the camera at `center` on the surface at `surface_z` from as high as
     the arm safely reaches (up to LOOK_HEIGHTS_MM[0] above it), leaning up to 30° off vertical,
-    and (with `home`) that a straight joint move from `home` reaches. The camera is on link5
-    (D-027): joint 6 doesn't turn the image."""
+    and (with `home`) that a straight joint move from `home` reaches. `upright`: first from
+    nearly straight above (≤ 10°, down to UPRIGHT_MIN_MM), lower rather than leaning: into a
+    box beside the rover's raised parts. The camera is on link5 (D-027): joint 6 doesn't turn
+    the image."""
     x, y = center[0], center[1]
 
     def from_home(q: np.ndarray) -> bool:
@@ -148,17 +152,31 @@ def look_pose(
             return False
         return True
 
-    found = kin.camera_look(
-        camera_mount(sim),
-        (x, y, surface_z),
-        _seed(x, y) if seed is None else seed,
-        heights_mm=LOOK_HEIGHTS_MM,
-        z_min_mm=arm.z_min_mm,
-        keep_out=arm.keep_out_mm,
-        keep_out_margin_mm=arm.keep_out_margin_mm,
-        link5_points=arm.link5_points_mm,
-        accept=None if home is None else from_home,
-    )
+    def look(heights: Sequence[float], tilts: Sequence[float], start=None):
+        return kin.camera_look(
+            camera_mount(sim),
+            (x, y, surface_z),
+            start if start is not None else _seed(x, y) if seed is None else seed,
+            heights_mm=heights,
+            tilts_deg=tilts,
+            z_min_mm=arm.z_min_mm,
+            keep_out=arm.keep_out_mm,
+            keep_out_margin_mm=arm.keep_out_margin_mm,
+            link5_points=arm.link5_points_mm,
+            accept=None if home is None else from_home,
+        )
+
+    found = None
+    if upright:
+        heights = [h for h in LOOK_HEIGHTS_MM if h >= UPRIGHT_MIN_MM]
+        # the IK from the gripper held down over the target: the camera straight above it
+        over = kin.solve((x, y, surface_z + 105.0), "down", _seed(x, y), arm.z_min_mm)
+        for start in (None, over) if over is not None else (None,):
+            found = look(heights, (0.0, 10.0), start)
+            if found is not None:
+                break
+    if found is None:
+        found = look(LOOK_HEIGHTS_MM, (0.0, 10.0, 20.0, 30.0))
     if found is None:
         raise SystemExit(f"no look pose points the camera at {tuple(center)}")
     return found[0]
@@ -497,7 +515,10 @@ def compute_poses(
         raise SystemExit(f"home {HOME_TCP_MM} is not reachable")
     poses["home"] = home
     for zone, (rect, z) in zone_surfaces(sim).items():
-        poses[LOOK_POSES[zone]] = look_pose(sim, arm, rect.center_mm, z, home=home)
+        # the cargo box from straight above: a leaning look over the rover's middle had its
+        # raised top cover in the way (D-050)
+        up = zone is Zone.CARGO
+        poses[LOOK_POSES[zone]] = look_pose(sim, arm, rect.center_mm, z, home=home, upright=up)
     # from the middle of the ring outwards, each seeded by its neighbour: the IK stays on one
     # branch (a fresh seed at the ends finds the arm upright, its tool by the base column)
     targets = scan_targets(floor_workspace)

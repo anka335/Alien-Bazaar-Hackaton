@@ -35,7 +35,7 @@ sim:
     wheel_width_mm: 130
     deck: {center_mm: [-90, 0], size_mm: [300, 185]}         # the plate; the arm at its front edge
     cargo:                                                    # one cardboard box, right of the arm (D-045)
-      center_mm: [-220, -190]                                 # right, behind the front wheel: from a photo (D-050)
+      center_mm: [-185, -225]                                 # right, over the rear wheel: its corner seen by the camera (D-050)
       size_mm: [182, 182]                                     # inside (190 outside)
       floor_z_mm: -41                                         # inside floor; its underside 45 below the deck
       wall_mm: 75                                             # the rim is 34 above the deck

@@ -315,6 +315,37 @@ def solve_camera(
     return None
 
 
+def sight_blocked(
+    camera_mm: Sequence[float],
+    target_mm: Sequence[float],
+    keep_out: Sequence[Box],
+    spread_mm: float = 50.0,
+    near_mm: float = 15.0,
+) -> bool:
+    """Whether a keep-out box stands between the camera and the target: the line of sight to
+    the target and to four points `spread_mm` around it (the view's middle, not just its
+    center), sampled every 5 mm, ending `near_mm` short of the surface."""
+    cam = np.asarray(camera_mm, dtype=float)[:3]
+    t = np.asarray(target_mm, dtype=float)[:3]
+    boxes = np.asarray(keep_out, dtype=float).reshape(-1, 6)
+    if not len(boxes):
+        return False
+    for dx, dy in ((0, 0), (spread_mm, 0), (-spread_mm, 0), (0, spread_mm), (0, -spread_mm)):
+        end = t + (dx, dy, 0.0)
+        ray = end - cam
+        n = np.linalg.norm(ray)
+        s = np.arange(0.0, max(n - near_mm, 0.0), 5.0)[:, None] / n
+        p = cam + s * ray
+        inside = (
+            (p[:, None, 0] > boxes[:, 0]) & (p[:, None, 0] < boxes[:, 1])
+            & (p[:, None, 1] > boxes[:, 2]) & (p[:, None, 1] < boxes[:, 3])
+            & (p[:, None, 2] > boxes[:, 4]) & (p[:, None, 2] < boxes[:, 5])
+        )  # fmt: skip
+        if inside.any():
+            return True
+    return False
+
+
 def camera_look(
     T_link5_cam: Pose,
     target_mm: Sequence[float],
@@ -335,6 +366,8 @@ def camera_look(
     tilt), or None."""
     x, y, _ = (float(v) for v in target_mm)
     back = np.arctan2(-y, -x) if np.hypot(x, y) > 1 else 0.0  # from the target to the base
+    # the line of sight past the rover's parts; not the target's own walls (a box it looks into)
+    walls = [b for b in keep_out if not (b[0] - 1 <= x <= b[1] + 1 and b[2] - 1 <= y <= b[3] + 1)]
     t = np.asarray(target_mm, dtype=float)
     for h in heights_mm:
         for tilt in tilts_deg:
@@ -350,6 +383,8 @@ def camera_look(
                     continue
                 hit = keep_out_hit(q, keep_out, keep_out_margin_mm, link5_points, z_min_mm)
                 if hit is not None:
+                    continue
+                if sight_blocked((fk_link5(q) @ T_link5_cam)[:3, 3], t, walls):
                     continue
                 if accept is not None and not accept(q):
                     continue

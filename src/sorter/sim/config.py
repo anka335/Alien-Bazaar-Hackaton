@@ -97,6 +97,9 @@ def _equipment() -> dict[str, Block]:
         "electronics": Block(box_mm=(-200, -55, -100, 95, -75, -5), rgba=(0.72, 0.73, 0.75, 1)),
         # the power supply on the rover's left, the power strip under it (photo from above)
         "psu": Block(box_mm=(-245, 10, 120, 270, -10, 60), rgba=(0.72, 0.73, 0.75, 1)),
+        # the Leo's raised top cover behind the arm, higher than the box's rim: it hid the box
+        # from a look over the rover's middle (seen by the wrist camera, D-050)
+        "leo_top": Block(box_mm=(-300, -50, -128, 128, -10, 50), rgba=(0.8, 0.8, 0.82, 1)),
     }
 
 

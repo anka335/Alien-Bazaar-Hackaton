@@ -413,3 +413,10 @@ def test_frozen_feedback_faults_and_holds_the_setpoint():
     assert np.degrees(held[0] - q0[0]) > 1  # the last setpoint, not a jump back to the frozen pose
     with pytest.raises(Exception, match="no motor feedback"):
         arm.clear_fault()
+
+
+def test_sight_blocked_by_a_part_between_camera_and_target():
+    plate = [-300, -50, -100, 100, -10, 50]  # a plate on the rover, the box beside it
+    box_floor = (-220, -190, -41)
+    assert kin.sight_blocked((-200, 0, 150), box_floor, [plate])  # from above the plate: no
+    assert not kin.sight_blocked((-220, -300, 250), box_floor, [plate])  # from outside: clear
