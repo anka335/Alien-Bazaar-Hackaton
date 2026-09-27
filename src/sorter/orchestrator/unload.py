@@ -5,8 +5,9 @@ parked at the station, but not exactly where the layout says, and the bins are p
 hand, so the loop first finds each bin (a look at its layout place, a second look centered on
 the estimate if the bin was cut by the image edge). Then, per sock: look into the cargo box,
 pick the sock on top of the pile, look into the box again (this look is also the next cycle's),
-show the gripper to the camera: the held sock's color from how it hangs, else from the one sock
-gone from the box; unknown → back into the box. Then drop into the bin found for that color, and
+show the gripper to the camera: the held sock's color from how it hangs, else the box's best
+match (the sock gone from it nearest the grasp, else the grasp's target); socks of different
+colors hanging → back into the box. Then drop into the bin found for that color, and
 look into that bin to see it landed: only a seen drop is counted.
 
     LOOK_CARGO (the bins, once) → SENSE_CARGO → PICK_FROM_CARGO → DROP_TO_LAUNDRY → LOOK_CARGO …
@@ -301,7 +302,7 @@ class UnloadLoop(Loop):
             self.avoid.append(target)
             sm.failures += 1
             return Phase.LOOK_CARGO
-        color, why = self._held_color(held, gone)
+        color, why = self._held_color(held, gone, t)
         if color is None:
             summary = f"{why}: back into the box"
             log.warning(summary)
@@ -320,12 +321,15 @@ class UnloadLoop(Loop):
         return Phase.DROP_TO_LAUNDRY
 
     @staticmethod
-    def _held_color(held: HeldView, gone: list[SockSeen]) -> tuple[ColorClass | None, str]:
+    def _held_color(
+        held: HeldView, gone: list[SockSeen], target: SockTarget | None
+    ) -> tuple[ColorClass | None, str]:
         """The held sock's color, and why. First what hangs from the fingers, seen from the
         show pose (side-lit: its own thresholds, `side_class`); socks of different classes
-        hanging there → none. Else the one sock gone from the box (lit from above; a pile
-        that settles anew once a sock is pulled out of it can hide others, so only one
-        counts). Else none: the color is unknown."""
+        hanging there → none. A sock bunched at the fingers is out of the camera's view, so
+        then the box's best match (lit from above): the one sock gone from it; of several
+        gone (a pile settles anew once a sock is pulled out of it), the one nearest the
+        grasp; none gone (the pile hides the change), the grasp's target. Else none."""
         classes = {c for c in held.classes or [] if c is not None}
         if len(classes) > 1:
             return None, f"{held.count} socks of different colors hang from the fingers"
@@ -333,6 +337,12 @@ class UnloadLoop(Loop):
             return classes.pop(), "seen hanging"
         if len(gone) == 1:
             return gone[0].color, "gone from the box"
+        if gone and target is not None:
+            p = target.point
+            near = min(gone, key=lambda g: math.dist(g.xy, (p.x, p.y)))
+            return near.color, f"best match: of {len(gone)} gone, the one nearest the grasp"
+        if target is not None:
+            return target.color, "best match: the grasp's target"
         return None, "holding a sock of a color nobody saw"
 
     def _put_back(self) -> None:

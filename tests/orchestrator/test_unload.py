@@ -55,3 +55,51 @@ def test_unloads_a_sock_into_its_bin_found_by_the_camera():
     finally:
         s.camera.close()
         world.stop()
+
+
+def _seen(color, xy):
+    from sorter.box_detector.cargo import SockSeen
+
+    return SockSeen(color, 1.0, (50.0, 0.0, 0.0), xy, 800)
+
+
+def _target(color, xy):
+    from sorter.box_detector.cargo import SockTarget
+    from sorter.core.types import ArmPoint, GraspPoint, PixelPoint
+
+    return SockTarget(
+        color, 1.0, GraspPoint(PixelPoint(0, 0), 300.0), ArmPoint(*xy, 0.0), [0.0], 20.0, 900
+    )
+
+
+def _held(*classes):
+    from sorter.box_detector.held import HeldView
+    from sorter.core.types import Overlay
+
+    return HeldView(None, 0.0, 0, Overlay(), len(classes), None, list(classes))
+
+
+@pytest.mark.parametrize(
+    ("held", "gone", "target", "want"),
+    [
+        # seen hanging wins over the box
+        ((ColorClass.DARK,), [ColorClass.LIGHT], ColorClass.LIGHT, ColorClass.DARK),
+        # different colors hanging: back into the box
+        ((ColorClass.DARK, ColorClass.LIGHT), [], ColorClass.DARK, None),
+        # not in view: the one sock gone from the box
+        ((), [ColorClass.COLORED], ColorClass.LIGHT, ColorClass.COLORED),
+        # several gone: the one nearest the grasp (the first gone sock lies at the grasp)
+        ((), [ColorClass.LIGHT, ColorClass.DARK], ColorClass.COLORED, ColorClass.LIGHT),
+        # none gone (the pile hid the change): the grasp's target
+        ((), [], ColorClass.COLORED, ColorClass.COLORED),
+        ((), [], None, None),
+    ],
+)
+def test_held_color_falls_back_to_the_box_best_match(held, gone, target, want):
+    from sorter.orchestrator.unload import UnloadLoop
+
+    at = (-100.0, 240.0)
+    seen = [_seen(c, (at[0] + 40.0 * k, at[1])) for k, c in enumerate(gone)]
+    t = _target(target, at) if target is not None else None
+    color, why = UnloadLoop._held_color(_held(*held), seen, t)
+    assert color == want, why

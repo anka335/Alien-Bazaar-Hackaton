@@ -35,6 +35,10 @@ def load_system(sim_config):
 @pytest.fixture
 def unload_system(sim_config):
     sim_config.sim.unload.cargo = {ColorClass.COLORED: 1}
+    # the base's stiff cloth: a limp sock hangs ~100 mm and, let go from `drop_height_mm` over
+    # the rim, catches on it (the unload loop lets go with the fingers inside the bin)
+    sim_config.sim.unload.sock_young = 1e5
+    sim_config.sim.unload.sock_thickness_mm = 4.0
     system = _system(sim_config, ["unload"])
     yield system
     system.camera.close()
