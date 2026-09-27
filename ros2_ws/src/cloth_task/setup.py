@@ -34,6 +34,7 @@ setup(
             "roi_tool = cloth_task.roi_tool:main",
             "status_web = cloth_task.status_web:main",
             "spectacles_bridge = cloth_task.spectacles_bridge:main",
+            "rover_standin = cloth_task.rover_standin:main",
         ],
     },
 )
