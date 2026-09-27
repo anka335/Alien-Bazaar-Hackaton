@@ -4,10 +4,10 @@ Only the wrist camera tells the loop where things are (D-036). The rover is
 parked at the station, but not exactly where the layout says, and the bins are put down by
 hand, so the loop first finds each bin (a look at its layout place, a second look centered on
 the estimate if the bin was cut by the image edge). Then, per sock: look into the cargo box,
-pick the sock on top of the pile, look into the box again (the sock gone from it gives the color:
-lit from above it shows it best; this look is also the next cycle's), show the gripper to the
-camera (anything held?), drop over the bin found for that color, and look into that bin to see
-it landed: only a seen drop is counted.
+pick the sock on top of the pile, look into the box again (this look is also the next cycle's),
+show the gripper to the camera: the held sock's color from how it hangs, else from the one sock
+gone from the box; unknown → back into the box. Then drop into the bin found for that color, and
+look into that bin to see it landed: only a seen drop is counted.
 
     LOOK_CARGO (the bins, once) → SENSE_CARGO → PICK_FROM_CARGO → DROP_TO_LAUNDRY → LOOK_CARGO …
     the box empty × N → DONE
