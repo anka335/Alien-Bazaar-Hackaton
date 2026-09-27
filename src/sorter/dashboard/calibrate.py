@@ -1,13 +1,13 @@
 """The camera calibration page (`/calibrate`, setup mode), without a printed board (D-026).
 
-1. **Marks.** The arm points its tip at spots around the mat center (`calibration.marks`), a
-   few mm above the mat; a small dark tape mark goes right under the tip.
+1. **Marks.** The arm points its tip at spots around the floor view's center
+   (`calibration.marks`), a few mm above the floor; a small dark tape mark goes right under it.
 2. **Camera mount.** From a few views, each mark is clicked in the live image; click + depth give
    the camera-frame point, and the fit of all clicks gives T_link5_cam. Saved to
    `config/hand_eye.yaml` and used at once (the 3D view, the overlay).
-3. **Look poses.** `look_box` / `look_bg` recomputed for that mount: the camera straight over
-   the zone, as low as it can still see the whole zone with depth. Saved to `config/rig.yaml`
-   with the zone ROIs.
+3. **Look poses.** `look_floor` / `look_cargo` recomputed for that mount: the camera straight
+   over the zone, as low as it can still see the whole zone with depth. Saved to
+   `config/rig.yaml` with the zone ROIs.
 
 The overlay (the marks and the zone outlines projected into the live image from where the arm
 is) shows at every step whether the camera, the mount and the tape agree. Motions go through
@@ -30,6 +30,7 @@ import numpy as np
 import yaml
 
 from sorter.arm import kinematics as kin
+from sorter.arm.config import LOOK_POSES
 from sorter.arm.controller import in_polygon
 from sorter.calibration.marks import (
     Click,
@@ -50,8 +51,8 @@ from sorter.calibration.marks import (
 from sorter.core.errors import TargetRejected
 from sorter.core.types import Intrinsics, Pose, Zone
 from sorter.dashboard.manual import Busy, ManualControl, write_pose
-from sorter.sim.layout import axis_hit, camera_over
-from sorter.sim.world import camera_mount
+from sorter.sim.layout import axis_hit, camera_over, zone_surfaces
+from sorter.sim.rig import camera_mount
 
 if TYPE_CHECKING:
     from sorter.core.config import Config
@@ -62,17 +63,15 @@ log = logging.getLogger(__name__)
 
 HOVER_MM = 5.0  # the tip stops this far above a mark
 MIN_DEPTH_MM = 200.0  # the D435i has no depth closer than ~18 cm at 640x480
-LOOK_TCP_Z_MM = (60, 200)  # look poses: the TCP heights tried, low to high, 10 mm steps
+# look poses: the TCP heights above the zone's surface tried, low to high, 10 mm steps
+LOOK_TCP_ABOVE_MM = (60, 300)
 # views for the clicks: (dx, dy) of the camera center from the marks' center (mm). No wrist turn:
 # the camera is on link5 and joint 6 doesn't turn it (D-027)
 VIEWS = ((0.0, 0.0), (35.0, 25.0), (-35.0, -25.0))
 # measured joints of one pose wander by a few mrad while the arm holds it: the same pose (view)
 SAME_POSE_RAD = 0.01
-VIEW_TCP_Z_MM = (160, 80)  # the highest TCP height tried for a view, then lower
-LOOKS = {
-    "look_box": Zone.BOX,
-    "look_bg": Zone.BACKGROUND,
-}
+VIEW_TCP_ABOVE_MM = (160, 80)  # the highest TCP height above the marks tried, then lower
+LOOKS = {name: zone for zone, name in LOOK_POSES.items()}
 
 
 def _same(a, b) -> bool:
@@ -145,7 +144,7 @@ class CalibrateControl:
         self.hand_eye_file = Path(hand_eye_file)
         self.true_mount = None if true_mount is None else np.asarray(true_mount, dtype=float)
         lay = cfg.sim.layout
-        ms = marks(lay.background.center_mm, cfg.calibration.marks_z_mm)
+        ms = marks(lay.floor_view.center_mm, cfg.calibration.marks_z_mm)
         self.marks = {m.name: m for m in ms}
         self.fixed_marks = fixed_marks
         # where the tip really stopped over each mark (FK of the measured joints): the arm sags
@@ -210,22 +209,21 @@ class CalibrateControl:
         if name not in self.marks:
             raise ValueError(f"unknown mark {name!r}")
         x, y, z = self.marks[name].xyz
-        ws = self.arm.zones[Zone.BACKGROUND].workspace_mm
+        ws = self.arm.zones[Zone.FLOOR].workspace_mm
         if not in_polygon(x, y, ws):
-            raise TargetRejected(f"mark {name} ({x:.0f}, {y:.0f}) is outside the mat workspace")
+            raise TargetRejected(f"mark {name} ({x:.0f}, {y:.0f}) is outside the floor workspace")
         # from above, as high as the arm can still hold the gripper vertical there
         zmin = self.cfg.arm.z_min_mm
         above = next(
             (
-                h
-                for h in (self.cfg.arm.safe_z_mm, 80.0, 60.0, 40.0)
-                if kin.solve((x, y, z + h), "down", None, zmin) is not None
+                top
+                for top in (self.cfg.arm.safe_z_mm, 60.0, 20.0, -20.0, -60.0, -100.0, -140.0)
+                if top - z >= 40.0 and kin.solve((x, y, top), "down", None, zmin) is not None
             ),
             None,
         )
         if above is None or kin.solve((x, y, z + HOVER_MM), "down", None, zmin) is None:
             raise TargetRejected(f"the tip can't reach mark {name} pointing down")
-        above += z
 
         def move() -> None:
             self.arm.lift()
@@ -263,8 +261,8 @@ class CalibrateControl:
         # from one view can be off enough to lose the marks); as close as the arm can
         X = self.prior if self.method == "nominal" else self.mount
         best = None  # (how far off the marks' center, joints)
-        for tcp_z in range(VIEW_TCP_Z_MM[0], VIEW_TCP_Z_MM[1] - 1, -10):
-            q = camera_over(self.cfg.arm, (cx, cy), tcp_z, X, z, exact=False)
+        for above in range(VIEW_TCP_ABOVE_MM[0], VIEW_TCP_ABOVE_MM[1] - 1, -10):
+            q = camera_over(self.cfg.arm, (cx, cy), z + above, X, z, exact=False)
             if q is None:
                 continue
             hit = axis_hit(kin.fk_link5(q) @ X, z)
@@ -488,14 +486,12 @@ class CalibrateControl:
 
     def _zone(self, zone: Zone) -> tuple[RectConfig, float, float]:
         """The zone's rectangle, its surface height, the ROI margin (mm)."""
-        lay = self.cfg.sim.layout
-        if zone is Zone.BOX:
-            return lay.box, lay.box.floor_z_mm, 0.0
-        return lay.background, self.cfg.calibration.marks_z_mm, 5.0
+        rect, surface = zone_surfaces(self.cfg.sim)[zone]
+        return rect, surface, 0.0
 
     def compute_look(self) -> dict[str, dict[str, Any]]:
-        """`look_box` / `look_bg` for the mount in use: over the zone center (or as close as the
-        arm can put the camera), the lowest TCP height at which the camera sees the whole zone
+        """`look_floor` / `look_cargo` for the mount in use: over the zone center (or as close as
+        the arm can put the camera), the lowest TCP height at which the camera sees the whole zone
         with depth, else the best one. Heights above the highest reachable one aren't tried: the
         IK search runs in the arm's process and a long one starves its control loop."""
         k = self._intrinsics()
@@ -507,7 +503,8 @@ class CalibrateControl:
             rect, surface, margin = self._zone(zone)
             corners = _corners(rect, surface, margin)
             best = None
-            for tcp_z in range(LOOK_TCP_Z_MM[0], LOOK_TCP_Z_MM[1] + 1, 10):
+            for above in range(LOOK_TCP_ABOVE_MM[0], LOOK_TCP_ABOVE_MM[1] + 1, 10):
+                tcp_z = surface + above
                 q = camera_over(self.cfg.arm, rect.center_mm, tcp_z, X, surface, exact=False)
                 if q is None:
                     if best is not None:
@@ -615,7 +612,7 @@ class CalibrateControl:
         names = list(self.marks)
         px = project(T_cam, k, [self._mark(n) for n in names])
         zones = {}
-        for zone in Zone:
+        for zone in LOOK_POSES:
             rect, surface, _ = self._zone(zone)
             corners = project(T_cam, k, _corners(rect, surface))
             if all(p is not None for p in corners):

@@ -3,10 +3,11 @@
     uv run python -m sorter.calibration.hand_eye            # the real rig → config/hand_eye.yaml
     uv run python -m sorter.calibration.hand_eye --sim      # the physics simulator (a check)
 
-Lay the printed board (`python -m sorter.calibration.board`) flat under `look_bg`. The tool
-moves the arm from `look_bg` through `calibration.poses` views, each shifted and tilted a little,
-detects the board in each, and solves AX = XB (Park's method). The views are only a little
-tilted (the arm can't tilt the camera much over the mat), which leaves Park's translation off by
+Lay the printed board (`python -m sorter.calibration.board`) flat on the floor under
+`look_floor`. The tool moves the arm from `look_floor` through `calibration.poses` views, each
+shifted and tilted a little, detects the board in each, and solves AX = XB (Park's method). The
+views are only a little tilted (the arm can't tilt the camera much), which leaves Park's
+translation off by
 ~1-2 cm; so that is only the start of a fit of every corner's reprojection over the mount and the
 board's pose, with the board flat at its measured height `calibration.board_z_mm`. `rmse_mm` is
 the spread of the board position computed through each view: small means consistent.
@@ -30,16 +31,16 @@ from sorter.calibration.marks import mount_change, plausible
 from sorter.core.config import DEFAULT_CONFIG_DIR, Config, load_config
 from sorter.core.errors import SorterError
 from sorter.core.types import Pose, Zone
-from sorter.sim.world import camera_mount
+from sorter.sim.rig import camera_mount
 
 log = logging.getLogger(__name__)
 
 
 def view_poses(cfg: Config, rng: np.random.Generator) -> list[np.ndarray]:
-    """Joint targets around `look_bg`: the TCP shifted, the gripper tilted. Not turned about its
+    """Joint targets around `look_floor`: the TCP shifted, the gripper tilted. Not turned about its
     axis: joint 6 doesn't turn the camera (D-027)."""
     c = cfg.calibration
-    q_look = np.asarray(cfg.poses["look_bg"], dtype=float)
+    q_look = np.asarray(cfg.poses["look_floor"], dtype=float)
     tcp = kin.fk_tcp(q_look)[:3, 3]
     out = []
     for _ in range(c.poses * 4):
@@ -59,14 +60,11 @@ def collect(system, cfg: Config, seed: int = 0) -> list[tuple[Pose, Detection]]:
     """(T_base_link5, the board's detection) for every view where the board was found."""
     arm = system.arm
     arm.start()
-    arm.look(Zone.BACKGROUND)
+    arm.look(Zone.FLOOR)
     pairs = []
     for i, q in enumerate(view_poses(cfg, np.random.default_rng(seed))):
         try:
-            arm.driver.execute(
-                kin.plan_joints(arm.driver.joints(), q, z_min_mm=cfg.arm.z_min_mm),
-                cfg.arm.speed_scale,
-            )
+            arm.move_joints(q)
         except SorterError as e:
             log.warning("view %d skipped: %s", i, e)
             continue

@@ -1,7 +1,8 @@
 """Hub: status, decision frames, and commands between the state machine and the dashboard.
 
 It also holds the operator mode (`OperatorMode`): run commands reach the state machine only in
-AUTO, and AUTO is left only while no run is going (the state machine idle, no command pending).
+a run mode (LOAD / UNLOAD, the loop it runs), and a run mode is left only while no run is going
+(the state machine idle, no command pending).
 """
 
 from __future__ import annotations
@@ -16,13 +17,14 @@ from typing import Any, Protocol
 
 from sorter.core.errors import WrongMode
 from sorter.core.protocols import Camera
-from sorter.core.types import Command, Decision, Event, Frame, OperatorMode, Status
+from sorter.core.types import RUN_MODES, Command, Decision, Event, Frame, OperatorMode, Status
 
 log = logging.getLogger(__name__)
 
 
 class TwinSource(Protocol):
-    """Data for the dashboard's 3D view: the table layout and the live arm (+ sim items)."""
+    """Data for the dashboard's 3D view: the scene's static parts and the live arm (+ sim
+    items)."""
 
     def layout(self) -> dict[str, Any]: ...
     def state(self) -> dict[str, Any]: ...
@@ -46,7 +48,7 @@ class Hub:
         max_events: int = 50,
         twin: TwinSource | None = None,
         speed: SpeedControl | None = None,
-        mode: OperatorMode = OperatorMode.AUTO,
+        mode: OperatorMode = OperatorMode.LOAD,
     ):
         self._camera = camera
         self._on_hold = on_hold
@@ -81,7 +83,7 @@ class Hub:
         except queue.Empty:
             return None
         with self._lock:
-            if self._mode is not OperatorMode.AUTO:  # the mode changed while it was queued
+            if self._mode not in RUN_MODES:  # the mode changed while it was queued
                 log.warning("command %s dropped: mode is %s", cmd, self._mode)
                 return None
             self._in_flight = True
@@ -108,15 +110,15 @@ class Hub:
 
     def send(self, cmd: Command | str) -> None:
         """HOLD calls on_hold() immediately, in the caller's thread, in any mode. Others are
-        queued, in AUTO only (WrongMode otherwise)."""
+        queued, in a run mode only (WrongMode otherwise)."""
         cmd = Command(cmd)
         if cmd is Command.HOLD:
             log.warning("HOLD requested")
             self._on_hold()
             return
         with self._lock:
-            if self._mode is not OperatorMode.AUTO:
-                raise WrongMode(f"{cmd} works in the auto mode; the mode is {self._mode}")
+            if self._mode not in RUN_MODES:
+                raise WrongMode(f"{cmd} works in the load / unload mode; the mode is {self._mode}")
             self._commands.put(cmd)
 
     # --- operator mode ---
@@ -126,14 +128,14 @@ class Hub:
             return self._mode
 
     def set_mode(self, mode: OperatorMode | str) -> None:
-        """Change the operator mode. Leaving AUTO needs the state machine idle (WrongMode
+        """Change the operator mode. Leaving a run mode needs the state machine idle (WrongMode
         otherwise): Stop the run first."""
         mode = OperatorMode(mode)
         with self._lock:
             if mode is self._mode:
                 return
-            leaving_auto = self._mode is OperatorMode.AUTO
-            if leaving_auto and (
+            leaving_run = self._mode in RUN_MODES
+            if leaving_run and (
                 self._status.mode != "idle" or self._in_flight or not self._commands.empty()
             ):
                 raise WrongMode("a run is going: press Stop first")

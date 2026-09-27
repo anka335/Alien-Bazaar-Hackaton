@@ -1,4 +1,5 @@
-"""The physics scene as MJCF: the arm from its URDF, the table from `sim.layout`, cloth items.
+"""The physics scene as MJCF: the base (floor, rover, cargo box, the arm from its URDF) from
+`sim.layout`, plus what each scene in `sim.scenes` adds (`sorter.sim.scenes.<name>.scene`).
 
 Everything physical lives here. The arm's joints carry position servos that stand in for the
 RobStride position loop (with gravity compensation for its integral action); the gripper is a
@@ -8,10 +9,11 @@ crumpled rest shape, so it keeps folds the fingers can pinch.
 
 from __future__ import annotations
 
+import importlib
 import json
 import math
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from rebot_b601.assets import ASSETS_DIR
@@ -19,7 +21,7 @@ from rebot_b601.kinematics import _FINGER_L, _FINGER_R, FINGER_TRAVEL_M
 
 from sorter.core.types import ColorClass
 from sorter.sim.config import SimConfig
-from sorter.sim.world import _PALETTE, camera_mount
+from sorter.sim.rig import PALETTE, camera_mount
 
 URDF = ASSETS_DIR / "reBot_Lite_RS_with_gripper.urdf"
 ARM_JOINTS = tuple(f"joint{i}" for i in range(1, 7))
@@ -44,25 +46,29 @@ _BIN_RGB = {
     ColorClass.COLORED: "0.14 0.55 0.67",
 }
 
-_CARDBOARD = "0.5 0.01 0.001"  # the box and the bins
-# the mat and the box / bin floors reach this far into the table: a cloth vertex pressed through
-# a thin slab would sit between its underside and the table top, pushed both ways, and stay
-# pinned there (the cloth then stretches from the gripper to the table and snaps back)
+CARDBOARD = "0.5 0.01 0.001"  # friction of the cargo box and the bins
+# tray floors reach this far into what they stand on: a cloth vertex pressed through a thin
+# slab would sit between its underside and the support, pushed both ways, and stay pinned there
+# (the cloth then stretches from the gripper to the support and snaps back)
 _SINK = 0.02
 MARK_MM = 12  # a tape mark's side
-CLOTH_N = 8  # vertices per side
-CLOTH_SHEET_M = 0.14  # side of the flat sheet
+CLOTH_N = 8  # vertices per side, every item
+CLOTH_SHEET_M = (0.14, 0.14)  # the flat sheet, default size
 CLOTH_GATHER = 0.6  # the rest shape is the sheet gathered to this fraction, with folds
 CLOTH_FOLD_M = 0.03  # height of the folds
 
 
 @dataclass(frozen=True)
 class ItemSpec:
-    id: int
+    """A cloth item a scene adds. `id` is set by `build`: the index in the scene's item list."""
+
     color: ColorClass
     rgb: tuple[float, float, float]
     pos: tuple[float, float, float]  # m, where the crumpled rest shape starts (drops from)
     yaw: float
+    sheet_m: tuple[float, float] = CLOTH_SHEET_M  # the flat sheet, before it is gathered
+    gather: float = CLOTH_GATHER
+    id: int = -1
 
 
 def _f(*v: float) -> str:
@@ -119,18 +125,25 @@ def _vec(s: str | None, n: int = 3) -> tuple[float, ...]:
     return tuple(float(v) for v in s.split()) if s else (0.0,) * n
 
 
-def crumpled_sheet(rng: np.random.Generator) -> tuple[np.ndarray, list[int]]:
+def crumpled_sheet(
+    rng: np.random.Generator,
+    sheet_m: tuple[float, float] = CLOTH_SHEET_M,
+    gather: float = CLOTH_GATHER,
+) -> tuple[np.ndarray, list[int]]:
     """Points (N², 3) of a gathered, folded sheet (its lowest point at z = 0) and triangles."""
-    n, side = CLOTH_N, CLOTH_SHEET_M
-    u = np.linspace(-side / 2, side / 2, n)
-    U, V = np.meshgrid(u, u)
+    n = CLOTH_N
+    U, V = np.meshgrid(
+        np.linspace(-sheet_m[0] / 2, sheet_m[0] / 2, n),
+        np.linspace(-sheet_m[1] / 2, sheet_m[1] / 2, n),
+    )
     Z = np.zeros_like(U)
+    side = max(sheet_m)
     for _ in range(6):
         k = rng.uniform(2, 6) * np.pi / side
         a, ph = rng.uniform(0, np.pi), rng.uniform(0, 2 * np.pi)
         Z += np.sin(k * (U * np.cos(a) + V * np.sin(a)) + ph)
     Z = CLOTH_FOLD_M * (Z - Z.min()) / np.ptp(Z)
-    pts = np.c_[(U * CLOTH_GATHER).ravel(), (V * CLOTH_GATHER).ravel(), Z.ravel()]
+    pts = np.c_[(U * gather).ravel(), (V * gather).ravel(), Z.ravel()]
     tris = []
     for i in range(n - 1):
         for j in range(n - 1):
@@ -139,28 +152,10 @@ def crumpled_sheet(rng: np.random.Generator) -> tuple[np.ndarray, list[int]]:
     return pts, tris
 
 
-def item_specs(cfg: SimConfig) -> list[ItemSpec]:
-    """The items piled in the box: random places inside it, dropped one above the other."""
-    rng = np.random.default_rng(cfg.seed)
-    box = cfg.layout.box
-    (cx, cy), (w, h) = box.center_mm, box.size_mm
-    reach = CLOTH_SHEET_M * CLOTH_GATHER * 1000 / math.sqrt(2) + 5  # a turned corner: off the walls
-    out = []
-    for i, color in enumerate(cfg.items):
-        x = rng.uniform(cx - w / 2 + reach, cx + w / 2 - reach)
-        y = rng.uniform(cy - h / 2 + reach, cy + h / 2 - reach)
-        b, g, r = _PALETTE[color][int(rng.integers(len(_PALETTE[color])))]
-        z = box.floor_z_mm / 1000 + 0.008 + 0.035 * i
-        out.append(
-            ItemSpec(
-                i,
-                color,
-                (r / 255, g / 255, b / 255),
-                (x / 1000, y / 1000, z),
-                float(rng.uniform(0, 2 * np.pi)),
-            )
-        )
-    return out
+def palette_rgb(color: ColorClass, rng: np.random.Generator) -> tuple[float, float, float]:
+    """A random cloth color of class `color`, RGB 0..1."""
+    b, g, r = PALETTE[color][int(rng.integers(len(PALETTE[color])))]
+    return (r / 255, g / 255, b / 255)
 
 
 def _arm(parent: ET.Element, cfg: SimConfig) -> None:
@@ -321,44 +316,58 @@ def _hex_rgba(h: str) -> str:
     return _f(*(int(h[i : i + 2], 16) / 255 for i in (0, 2, 4)), 1)
 
 
-def _open_box(
-    parent: ET.Element, name: str, center, inner, floor_z, wall_h, t, rgba, floor_rgba=None
-):
-    cx, cy = center
-    ix, iy = inner
-    top = floor_z + wall_h
-    ET.SubElement(
+def box(parent: ET.Element, name: str, lo, hi, rgba: str, **attrs: str) -> ET.Element:
+    """A static box geom between corners `lo` and `hi` (m)."""
+    lo, hi = np.asarray(lo, dtype=float), np.asarray(hi, dtype=float)
+    return ET.SubElement(
         parent,
         "geom",
-        name=f"{name}_floor",
+        name=name,
         type="box",
-        size=_f(ix / 2 + t, iy / 2 + t, (floor_z + _SINK) / 2),
-        pos=_f(cx, cy, (floor_z - _SINK) / 2),
-        rgba=floor_rgba or rgba,
-        friction=_CARDBOARD,
+        size=_f(*(hi - lo) / 2),
+        pos=_f(*(hi + lo) / 2),
+        rgba=rgba,
+        **attrs,
     )
-    for k, (dx, dy, sx, sy) in enumerate(
-        (
-            (-(ix + t) / 2, 0, t / 2, iy / 2 + t),
-            ((ix + t) / 2, 0, t / 2, iy / 2 + t),
-            (0, -(iy + t) / 2, ix / 2, t / 2),
-            (0, (iy + t) / 2, ix / 2, t / 2),
-        )
-    ):
-        ET.SubElement(
-            parent,
-            "geom",
-            name=f"{name}_wall{k}",
-            type="box",
-            size=_f(sx, sy, top / 2),
-            pos=_f(cx + dx, cy + dy, top / 2),
-            rgba=rgba,
-            friction=_CARDBOARD,
-        )
+
+
+def tray(
+    parent: ET.Element,
+    name: str,
+    inner: tuple[float, float, float, float],
+    base_z: float,
+    floor_z: float,
+    rim_z: float,
+    t: float,
+    rgba: str,
+    floor_rgba: str | None = None,
+    dividers_x: tuple[float, ...] = (),
+) -> None:
+    """An open box standing on z = `base_z` (m): the inside `inner` = (x0, x1, y0, y1), its
+    floor's top at `floor_z`, walls of thickness `t` up to `rim_z`, and walls across it at
+    `dividers_x` (their centers)."""
+    x0, x1, y0, y1 = inner
+    box(
+        parent,
+        f"{name}_floor",
+        (x0 - t, y0 - t, base_z - _SINK),
+        (x1 + t, y1 + t, floor_z),
+        floor_rgba or rgba,
+        friction=CARDBOARD,
+    )
+    walls = (
+        ((x0 - t, y0 - t), (x0, y1 + t)),
+        ((x1, y0 - t), (x1 + t, y1 + t)),
+        ((x0, y0 - t), (x1, y0)),
+        ((x0, y1), (x1, y1 + t)),
+        *(((x - t / 2, y0), (x + t / 2, y1)) for x in dividers_x),
+    )
+    for k, (lo, hi) in enumerate(walls):
+        box(parent, f"{name}_wall{k}", (*lo, base_z), (*hi, rim_z), rgba, friction=CARDBOARD)
 
 
 def _cloth(parent: ET.Element, it: ItemSpec, rng: np.random.Generator) -> None:
-    pts, tris = crumpled_sheet(rng)
+    pts, tris = crumpled_sheet(rng, it.sheet_m, it.gather)
     c, s = math.cos(it.yaw), math.sin(it.yaw)
     pts = pts @ np.array([[c, s, 0], [-s, c, 0], [0, 0, 1]])
     f = ET.SubElement(
@@ -384,8 +393,8 @@ def _cloth(parent: ET.Element, it: ItemSpec, rng: np.random.Generator) -> None:
         damping="0.002",
         elastic2d="both",
     )
-    # cloth touches the table, the box, the bins and the fingers, but not other cloth: flex-flex
-    # contacts cost ~10x the rest of the step, so items in a pile pass through each other
+    # cloth touches the floor, the rover, the boxes and the fingers, but not other cloth:
+    # flex-flex contacts cost ~10x the rest of the step, so items in a pile pass through each other
     ET.SubElement(
         f,
         "contact",
@@ -398,9 +407,104 @@ def _cloth(parent: ET.Element, it: ItemSpec, rng: np.random.Generator) -> None:
     )
 
 
-def build_xml(cfg: SimConfig, board: bool = False, board_z_mm: float = 1.0) -> str:
-    """MJCF of the whole scene. `board`: a ChArUco board over the mat center, its top at
-    `board_z_mm` (hand-eye calibration)."""
+def _rover(world: ET.Element, cfg: SimConfig) -> None:
+    """The rover under the arm: chassis, wheels, the deck plate (top at z = 0), the cargo box."""
+    lay = cfg.layout
+    fz = lay.floor_z_mm / 1000
+    x0, x1, y0, y1 = (v / 1000 for v in lay.body.bounds())
+    wheel_r, wheel_w = 0.06, 0.05
+    # the chassis between the wheels, clear of the floor
+    box(
+        world,
+        "chassis",
+        (x0 + 0.05, y0 + wheel_w + 0.01, fz + wheel_r),
+        (x1 - 0.05, y1 - wheel_w - 0.01, -0.012),
+        "0.62 0.64 0.66 1",
+    )
+    for k, (x, y) in enumerate(
+        ((x0 + wheel_r, y0), (x1 - wheel_r, y0), (x0 + wheel_r, y1), (x1 - wheel_r, y1))
+    ):
+        side = 1 if y == y0 else -1
+        ET.SubElement(
+            world,
+            "geom",
+            name=f"wheel{k}",
+            type="cylinder",
+            size=_f(wheel_r, wheel_w / 2),
+            pos=_f(x, y + side * wheel_w / 2, fz + wheel_r),
+            quat=_f(*_quat((math.pi / 2, 0, 0))),
+            rgba="0.1 0.1 0.1 1",
+        )
+    dx0, dx1, dy0, dy1 = (v / 1000 for v in lay.deck.bounds())
+    box(world, "deck", (dx0, dy0, -0.012), (dx1, dy1, 0.0), "0.06 0.06 0.07 1")
+    cargo = lay.cargo
+    cx0, cx1, cy0, cy1 = (v / 1000 for v in cargo.bounds())
+    t = cargo.wall_t_mm / 1000
+    inner = [cargo.compartment(c) for c in cargo.compartments]
+    dividers = tuple(
+        (a.bounds()[1] + b.bounds()[0]) / 2000 for a, b in zip(inner, inner[1:], strict=False)
+    )
+    tray(
+        world,
+        "cargo",
+        (cx0, cx1, cy0, cy1),
+        0.0,
+        cargo.floor_z_mm / 1000,
+        cargo.rim_z_mm / 1000,
+        t,
+        "0.20 0.22 0.25 1",
+        "0.30 0.32 0.35 1",
+        dividers,
+    )
+
+
+def _floor_view_extras(world: ET.Element, cfg: SimConfig, board: bool, board_z_mm: float):
+    """The calibration's printed board and tape marks, on the floor view."""
+    fv = cfg.layout.floor_view
+    cx, cy = (v / 1000 for v in fv.center_mm)
+    if board:
+        from sorter.calibration.board import BOARD
+
+        w, h = BOARD.size_m
+        ET.SubElement(
+            world,
+            "geom",
+            name="board",
+            type="box",
+            size=_f(w / 2, h / 2, 0.0005),
+            pos=_f(cx, cy, board_z_mm / 1000 - 0.0005),
+            material="board",
+            contype="0",
+            conaffinity="0",
+        )
+    if cfg.marks:  # dark tape squares, where the /calibrate page asks for them
+        from sorter.calibration.marks import MARK_OFFSETS_MM
+
+        z = cfg.layout.floor_z_mm / 1000 + 0.0012
+        for name, (dx, dy) in MARK_OFFSETS_MM.items():
+            ET.SubElement(
+                world,
+                "geom",
+                name=f"mark_{name}",
+                type="box",
+                size=_f(MARK_MM / 2000, MARK_MM / 2000, 0.0002),
+                pos=_f(cx + dx / 1000, cy + dy / 1000, z),
+                rgba="0.08 0.08 0.1 1",
+                contype="0",
+                conaffinity="0",
+            )
+
+
+@dataclass(frozen=True)
+class Scene:
+    xml: str
+    items: list[ItemSpec]  # item id = index
+
+
+def build(cfg: SimConfig, board: bool = False, board_z_mm: float = 1.0) -> Scene:
+    """MJCF of the whole scene: the base, then each scene of `sim.scenes`, then the cloth items
+    they asked for. `board`: a ChArUco board over the floor view center, its top at `board_z_mm`
+    (hand-eye calibration)."""
     root = ET.Element("mujoco", model="sorter")
     ET.SubElement(root, "compiler", angle="radian", meshdir=str(ASSETS_DIR), autolimits="true")
     ET.SubElement(
@@ -432,19 +536,19 @@ def build_xml(cfg: SimConfig, board: bool = False, board_z_mm: float = 1.0) -> s
     ET.SubElement(
         asset,
         "texture",
-        name="wood",
+        name="floor",
         type="2d",
         builtin="flat",
-        rgb1="0.80 0.69 0.55",
-        rgb2="0.74 0.62 0.48",
+        rgb1="0.72 0.52 0.32",
+        rgb2="0.66 0.46 0.28",
         mark="random",
-        random="0.25",
-        markrgb="0.70 0.58 0.44",
+        random="0.2",
+        markrgb="0.60 0.40 0.24",
         width="512",
         height="512",
     )
     ET.SubElement(
-        asset, "material", name="wood", texture="wood", texrepeat="4 4", reflectance="0.05"
+        asset, "material", name="floor", texture="floor", texrepeat="6 6", reflectance="0.05"
     )
     if board:
         from sorter.calibration.board import board_texture
@@ -454,12 +558,13 @@ def build_xml(cfg: SimConfig, board: bool = False, board_z_mm: float = 1.0) -> s
         ET.SubElement(asset, "material", name="board", texture="board")
 
     world = ET.SubElement(root, "worldbody")
-    # a diffuse lamp: no hard shadow of the arm on the zones (block 1 asks the same of the rig)
+    # a diffuse lamp over the floor in front: no hard shadow of the arm
+    fv = cfg.layout.floor_view.center_mm
     ET.SubElement(
         world,
         "light",
         name="lamp",
-        pos="0.25 0 1.2",
+        pos=_f(fv[0] / 1000, fv[1] / 1000, 1.2),
         dir="0 0 -1",
         diffuse="0.5 0.5 0.49",
         castshadow="false",
@@ -473,86 +578,28 @@ def build_xml(cfg: SimConfig, board: bool = False, board_z_mm: float = 1.0) -> s
         diffuse="0.25 0.25 0.25",
         castshadow="false",
     )
-    lay = cfg.layout
     ET.SubElement(
         world,
         "geom",
-        name="table",
-        type="box",
-        size="0.5 1.2 0.02",  # 1 m deep from the back edge the arm is clamped to
-        pos=_f(lay.edge_x_mm / 1000 + 0.5, 0, -0.02),
-        material="wood",
+        name="floor",
+        type="plane",
+        size="3 3 0.05",
+        pos=_f(0, 0, cfg.layout.floor_z_mm / 1000),
+        material="floor",
         friction="0.8 0.01 0.001",
     )
-    bg = lay.background
-    ET.SubElement(
-        world,
-        "geom",
-        name="mat",
-        type="box",
-        size=_f(bg.size_mm[0] / 2000, bg.size_mm[1] / 2000, (0.001 + _SINK) / 2),
-        pos=_f(bg.center_mm[0] / 1000, bg.center_mm[1] / 1000, (0.001 - _SINK) / 2),
-        rgba="0.49 0.49 0.48 1",
-        friction="1.0 0.01 0.001",
-    )
-    if board:
-        from sorter.calibration.board import BOARD
-
-        w, h = BOARD.size_m
-        ET.SubElement(
-            world,
-            "geom",
-            name="board",
-            type="box",
-            size=_f(w / 2, h / 2, 0.0005),
-            pos=_f(bg.center_mm[0] / 1000, bg.center_mm[1] / 1000, board_z_mm / 1000 - 0.0005),
-            material="board",
-            contype="0",
-            conaffinity="0",
-        )
-    if cfg.marks:  # dark tape squares, where the /calibrate page asks for them
-        from sorter.calibration.marks import MARK_OFFSETS_MM
-
-        for name, (dx, dy) in MARK_OFFSETS_MM.items():
-            ET.SubElement(
-                world,
-                "geom",
-                name=f"mark_{name}",
-                type="box",
-                size=_f(MARK_MM / 2000, MARK_MM / 2000, 0.0002),
-                pos=_f((bg.center_mm[0] + dx) / 1000, (bg.center_mm[1] + dy) / 1000, 0.0012),
-                rgba="0.08 0.08 0.1 1",
-                contype="0",
-                conaffinity="0",
-            )
-    box = lay.box
-    _open_box(
-        world,
-        "box",
-        [c / 1000 for c in box.center_mm],
-        [s / 1000 for s in box.size_mm],
-        box.floor_z_mm / 1000,
-        box.wall_mm / 1000,
-        0.01,
-        "0.82 0.67 0.49 1",
-        "0.72 0.55 0.36 1",
-    )
-    bins = lay.bins
-    inner = (bins.size_mm - 24) / 1000
-    for color, (x, y) in bins.centers_mm.items():
-        _open_box(
-            world,
-            f"bin_{color.value}",
-            (x / 1000, y / 1000),
-            (inner, inner),
-            bins.floor_z_mm / 1000,
-            bins.wall_mm / 1000,
-            0.012,
-            _BIN_RGB[color] + " 1",
-        )
+    _rover(world, cfg)
+    _floor_view_extras(world, cfg, board, board_z_mm)
     _arm(world, cfg)
+
+    items: list[ItemSpec] = []
+    for name in cfg.scenes:
+        scene = importlib.import_module(f"sorter.sim.scenes.{name}.scene")
+        rng = np.random.default_rng([cfg.seed, len(items), sum(map(ord, name))])
+        items += scene.add(world, asset, cfg, rng)
+    items = [replace(it, id=i) for i, it in enumerate(items)]
     rng = np.random.default_rng(cfg.seed + 1000)
-    for it in item_specs(cfg):
+    for it in items:
         _cloth(world, it, rng)
 
     contact = ET.SubElement(root, "contact")
@@ -562,7 +609,7 @@ def build_xml(cfg: SimConfig, board: bool = False, board_z_mm: float = 1.0) -> s
     ET.SubElement(eq, "joint", joint1="finger_right", joint2="finger_left")
     # grip: every cloth vertex can be held by the gripper; PhysicsWorld switches these on for the
     # vertices pinched between the pads and sets where they are held
-    for it in item_specs(cfg):
+    for it in items:
         for k in range(CLOTH_N * CLOTH_N):
             ET.SubElement(
                 eq,
@@ -599,4 +646,4 @@ def build_xml(cfg: SimConfig, board: bool = False, board_z_mm: float = 1.0) -> s
         gear=f"{GRIPPER_N_PER_NM:.4f}",
         ctrlrange="-3 3",
     )
-    return ET.tostring(root, encoding="unicode")
+    return Scene(ET.tostring(root, encoding="unicode"), items)

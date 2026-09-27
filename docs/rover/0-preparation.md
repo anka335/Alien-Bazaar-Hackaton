@@ -1,88 +1,39 @@
 # Rover stage 0: Preparation
 
-**Status:** todo · **Owner:** — · **Branch:** —
-**Blocks:** [A: Loading](a-loading.md), [B: Unloading](b-unloading.md). Both start when this stage is done.
+**Status:** done · **Owner:** Softjey + Claude · **Branch:** `stage/0-preparation`
+**Unblocks:** [A: Loading](a-loading.md), [B: Unloading](b-unloading.md).
 
 ## Goal
 
-Everything that stages A and B share, fixed before they split: the contracts, the rover simulator scene, the reach layout, the arm's new limits and a benchmark that measures "good enough". After this stage A and B run in parallel without touching each other's code.
+A thin shared base so that A and B can work in parallel without touching each other's code: the contracts, a base simulator scene with one scene file per stage, the arm's limits on the rover, the rig computed for the rover, and the wiring of the two modes ([D-034](../decisions.md)). Tuning the scenes, vision, loops, benchmarks and panels belongs to A and B.
 
-Sim first ([D-032](../decisions.md)): nothing here needs the hardware.
+## What it delivered
 
-## Assumptions
+| # | Item | Where |
+| --- | --- | --- |
+| P1 | Contracts: zones `FLOOR` / `CARGO` / `LAUNDRY`, `Sock` / `FloorResult` / `FloorDetector`, rover phases, modes `load` / `unload`, `pick(..., yaw_rad)`, `drop_to_cargo`, `drop_to_laundry` | `core/types.py`, `core/protocols.py`, [architecture.md](../architecture.md) |
+| P2 | MuJoCo base scene (floor 200 mm below the deck, rover chassis and wheels, deck, cargo box with dividers, the arm) and scene files per stage with a baseline each | `sim/physics/model.py`, `sim/scenes/load/`, `sim/scenes/unload/` |
+| P3 | Rover layout and the layout tool: poses, zones, ROIs, keep-out, every pick and move checked (0 problems) | `sim/config.py`, `sim/layout.py`, `config/rig.yaml` |
+| P4 | Arm on the rover: floor limit, keep-out boxes on every path, gripper yaw, drops via home | `arm/` |
+| P5 | Shared state machine + one loop per mode (baselines), floor detector baseline, wiring | `orchestrator/`, `floor_detector/`, `app.py` |
+| P6 | The table flow removed: the table loop and layout, the kinematic sim, the table-era docs | — |
 
-- The rover is built and driven by others. It stops with a sock inside the arm's reach and tells us `stopped`. We answer `release()` when the arm is stowed and it may drive on.
-- The onboard (cargo) box has **3 compartments**, one per color (light / dark / colored).
-- The unload station has 3 laundry bins at fixed places relative to where the rover parks.
+Checked: `uv run pytest` passes; `python -m sorter.sim.layout` reports 0 problems; a scripted (no vision) run on the sim moved 3 socks from the floor into their compartments and socks from the compartments into the bins.
 
-## Tasks
+## Dropped from the original plan
 
-Status values: `todo` · `in progress` · `blocked` · `review` · `done`.
+- The `Rover` interface and the interlock: the rover stands still for our code. Back when the real rover interface is known.
+- The shared benchmark: each stage builds its own (A7, B6).
+- Scan poses, per-compartment look poses, parking noise, realistic socks and textures: A0–A1 and B0–B1.
 
-| # | Task | Status | Owner | Done when |
-| --- | --- | --- | --- | --- |
-| P1 | Contracts | todo | — | New contracts in `architecture.md`, stubs importable, old table-only contracts marked for removal |
-| P2 | Rover sim scene | todo | — | `run --sim` shows the rover scene; a scenario is reproducible from its seed |
-| P3 | Reach layout | todo | — | Layout tool passes on all poses and moves; the rover stop requirement is written down |
-| P4 | Arm: stow and keep-out | todo | — | Tests: no motion enters the rover body or goes below the floor; `stow` reachable from every pose |
-| P5 | Sim benchmark | todo | — | One command runs N seeded scenarios and prints the metrics |
-| P6 | Drop the table flow | todo | — | Old table-only code and docs removed or marked; status board in `plan.md` is the rover plan |
+## Known issues handed over
 
-### P1: Contracts
-
-- Zones: `FLOOR`, `CARGO` (compartment per `ColorClass`), `LAUNDRY` (bin per `ColorClass`). `BACKGROUND` goes away.
-- `Rover` protocol + stub: `wait_stopped(timeout)`, `is_stopped()`, `release()`. The sim stub is driven by the scenario generator (P2).
-- Interlock, both ways: the arm moves only while the rover is stopped; `release()` only with the arm in `stow`.
-- `FloorDetector` protocol: floor frame → list of socks (grasp pixel, grasp angle, color, confidence, mask). Reuses the shape of `ColorClassifier`'s result.
-- Box detector: per-compartment ROI (same `BoxResult`).
-- Hub: operator modes `load` and `unload` in place of `auto`.
-- Update `architecture.md` (physical setup, zones, both loops) and the *Log* of affected task files.
-
-### P2: Rover sim scene
-
-- MuJoCo scene: the arm on a rover body at a configurable mount height, the cargo box with 3 compartments, a floor with interchangeable textures (plain, wood, carpet-like), socks as small cloth flexes in several colors, the unload station with 3 laundry bins.
-- The rover does not drive. A scenario generator places the rover (and socks around it, or the rover at the station) from a seed and fires `stopped`.
-- Parking noise at the station (x, y, yaw) is a config value, so B can test against it.
-- Sim segmentation stays MuJoCo's, served as SAM3-style instances.
-- `sim.miss_prob` for floor grasps, so the retry paths are exercised: the grip attachment is optimistic.
-
-### P3: Reach layout
-
-- Like `sorter.sim.layout`: mount height, the reachable ring on the floor, scan poses, compartment and bin poses; IK check of every pose and move.
-- Output: the **rover stop requirement** ("sock between X and Y mm from the base, within ±θ"), handed to the rover team.
-
-### P4: Arm: stow and keep-out
-
-- `stow` pose for driving: low and compact.
-- Keep-out box for the rover body and wheels; floor as the lower z limit.
-- Scan poses, cargo drop poses per compartment, laundry drop poses per bin.
-
-### P5: Sim benchmark
-
-- `N` seeded scenarios (default 50) per mode, headless, `sim.realtime: 0`.
-- Metrics: success rate, correct compartment / bin, time per sock, failures by type. Report to `data/bench/<run_id>/`.
-- This is the yardstick for "good" in A and B.
-
-### P6: Drop the table flow
-
-- The mat, `LOOK_BG` / background-first loop ([D-008](../decisions.md)) and the table layout no longer apply. Remove or mark what A and B will replace, so no one builds on it.
-- Rebuild the status board in [plan.md](../plan.md) around the rover stages.
-
-## Owned paths (tentative, P1 fixes them)
-
-`src/sorter/core/`, `src/sorter/sim/`, `src/sorter/rover/` (new), `src/sorter/arm/`, `tests/core/`, `tests/sim/`, `tests/rover/`, `tests/arm/`, `config/default.yaml` → `sim`, `rover`, `arm`.
-
-## Exit criteria
-
-- P1–P6 done.
-- On the sim a scripted (no vision) load and unload run end to end: stopped → pick a known sock → cargo → release; station → compartment → bin.
-
-## Open questions
-
-- Rover dimensions and arm mount height. Until known: placeholders in config.
-- The rover's real interface (ROS 2 topic, serial, HTTP). The stub hides it until stage 3.
-- How `ros2_ws/` (MoveIt, `cloth_task`) relates to this plan. The plan builds on `sorter`'s MuJoCo sim.
+- xfail `tests/sim/test_physics.py::test_scripted_load` (A3) and `test_miss_prob_makes_a_grasp_catch_nothing` (A4).
+- Skipped until rewritten for the rover: `tests/orchestrator/test_runlog.py` (A5), `tests/color_classifier/test_classifier.py` (A2), `tests/dashboard/test_server.py`, `test_calibrate.py` (A6), `test_manual.py` (B5).
+- The front end still shows the table's "Auto" tab and 3D table (A6).
+- The calibration page and the board tool were moved to the floor view but not rerun on the sim.
 
 ## Log
 
 - 2026-09-27: stage defined ([D-032](../decisions.md)).
+- 2026-09-27: done, scope cut to a thin base ([D-034](../decisions.md)).

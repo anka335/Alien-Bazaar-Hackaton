@@ -8,7 +8,8 @@ fast as the CPU allows.
 Grip: soft cloth contacts let cloth slip out of a parallel gripper far more easily than real
 fabric does. So when a close command has stopped the fingers on cloth that touches both pads,
 the cloth vertices between the pads are attached to the gripper until an open command (a common
-simulation stand-in for friction).
+simulation stand-in for friction). That is optimistic, so `sim.miss_prob` makes a close catch
+nothing now and then.
 Everything else (the fingers stopping on the cloth, the cloth hanging, falling, landing) is
 simulated.
 """
@@ -24,14 +25,14 @@ from collections.abc import Callable, Sequence
 import mujoco
 import numpy as np
 
+from sorter.arm.config import LOOK_POSES
 from sorter.core.types import ColorClass, Zone
 from sorter.sim.config import SimConfig
-from sorter.sim.physics.model import ARM_JOINTS, ItemSpec, build_xml, item_specs
-from sorter.sim.world import LOOK_POSES, in_rect
+from sorter.sim.physics.model import ARM_JOINTS, ItemSpec, build
 
 log = logging.getLogger(__name__)
 
-SETTLE_S = 1.5  # the items fall into the box before anything else happens
+SETTLE_S = 1.5  # the items settle before anything else happens
 GRIP_CATCH_NM = 0.5  # motor 7 torque that means "closing" (rebot_b601 holds a grip with 1 N·m)
 GRIP_RELEASE_NM = 0.5  # and "opening"
 GRIP_MAX_M = 0.035  # a finger further out than this pinches nothing
@@ -51,13 +52,13 @@ class PhysicsWorld:
         self.cfg = cfg
         self.layout = cfg.layout
         self.poses = {k: np.asarray(v, dtype=float) for k, v in poses.items()}
-        self.model = mujoco.MjModel.from_xml_string(
-            build_xml(cfg, board=board, board_z_mm=board_z_mm)
-        )
+        scene = build(cfg, board=board, board_z_mm=board_z_mm)
+        self.model = mujoco.MjModel.from_xml_string(scene.xml)
         self.data = mujoco.MjData(self.model)
         self.lock = threading.RLock()
         m = self.model
-        self.items: list[ItemSpec] = item_specs(cfg)
+        self.items: list[ItemSpec] = scene.items
+        self._rng = np.random.default_rng(cfg.seed + 11)
         self.arm_qpos = np.array([m.jnt_qposadr[m.joint(j).id] for j in ARM_JOINTS])
         self.arm_dof = np.array([m.jnt_dofadr[m.joint(j).id] for j in ARM_JOINTS])
         self.arm_act = np.array([m.actuator(j).id for j in ARM_JOINTS])
@@ -188,6 +189,10 @@ class PhysicsWorld:
         both = set(self._vert_item[sorted(left)]) & set(self._vert_item[sorted(right)])
         both.discard(-1)
         if not both:
+            return
+        if self._rng.random() < self.cfg.miss_prob:  # this close catches nothing
+            self._closing_since = d.time + 1e9
+            log.debug("grip: missed on purpose (sim.miss_prob)")
             return
         touch = np.array(sorted(left | right), int)
         pinched = {
@@ -322,34 +327,33 @@ class PhysicsWorld:
             return self.data.flexvert_xpos[a : a + n] * 1000
 
     def location(self, item: int) -> tuple[str, ColorClass | None]:
-        """Where item `item` is: box / background / gripper / bin (+ color) / table."""
+        """Where item `item` is: gripper / cargo (+ compartment) / laundry (+ bin) / floor /
+        other (e.g. on the rover, or on a wall)."""
         with self.lock:
             if item in self._vert_item[self._grip_idx]:
                 return "gripper", None
         v = self.vertices(item)
-        x, y, _ = v.mean(axis=0)
+        x, y, z = v.mean(axis=0)
         lay = self.layout
-        if in_rect(x, y, lay.box):
-            return "box", None
-        if in_rect(x, y, lay.background):
-            return "background", None
-        half = lay.bins.size_mm / 2
-        for color, (bx, by) in lay.bins.centers_mm.items():
-            if abs(x - bx) <= half and abs(y - by) <= half:
-                return "bin", color
-        return "table", None
+        cargo = lay.cargo
+        if z < cargo.rim_z_mm + 20:
+            for color in cargo.compartments:
+                if cargo.compartment(color).contains(x, y):
+                    return "cargo", color
+        bins = lay.laundry
+        half = bins.size_mm / 2
+        for color, (bx, by) in bins.centers_mm.items():
+            if abs(x - bx) <= half and abs(y - by) <= half and z < lay.floor_z_mm + bins.height_mm:
+                return "laundry", color
+        if z < lay.floor_z_mm + 40:
+            return "floor", None
+        return "other", None
 
-    def at(self, location: str) -> list[ItemSpec]:
-        return [it for it in self.items if self.location(it.id)[0] == location]
-
-    def reset_if_sorted(self) -> None:
-        """Nothing left in the box or on the mat: the items go back into the box, as they were."""
-        if self.items and all(self.location(it.id)[0] in ("bin", "table") for it in self.items):
-            with self.lock:
-                q0, v0 = self._initial
-                arm = self.data.qpos[self.arm_qpos].copy()
-                self.data.qpos[:] = q0
-                self.data.qvel[:] = v0
-                self.data.qpos[self.arm_qpos] = arm
-                mujoco.mj_forward(self.model, self.data)
-            log.info("physics: items back in the box")
+    def at(self, location: str, color: ColorClass | None = None) -> list[ItemSpec]:
+        """Items at `location` (and in the compartment / bin of `color`, if given)."""
+        return [
+            it
+            for it in self.items
+            if self.location(it.id)[0] == location
+            and (color is None or self.location(it.id)[1] is color)
+        ]

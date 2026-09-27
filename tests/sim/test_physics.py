@@ -1,67 +1,135 @@
-"""The physics simulator: the real arm loop, camera, calibration and box detector on MuJoCo."""
+"""The rover scene on MuJoCo: the real arm loop, camera, calibration and detectors, and a
+scripted (no vision) load and unload."""
+
+import math
 
 import numpy as np
 import pytest
 
 from sorter.app import build_system
-from sorter.core.config import load_config
-from sorter.core.types import BoxStatus, Zone
+from sorter.core.types import ArmPoint, ColorClass, Zone
 
 pytest.importorskip("mujoco")
 
 
-@pytest.fixture(scope="module")
-def system():
-    cfg = load_config(
-        overrides={
-            "sim": {"engine": "physics", "realtime": 0, "items": ["light", "dark"]},
-            "state_machine": {"save_runs": False},
-        }
-    )
+def _system(sim_config, scenes, **sim):
+    cfg = sim_config.model_copy(deep=True)
+    cfg.sim.scenes = scenes
+    for k, v in sim.items():
+        setattr(cfg.sim, k, v)
     system = build_system(cfg, sim=True)
     system.camera.start()
     system.arm.start()
+    return system
+
+
+@pytest.fixture
+def load_system(sim_config):
+    sim_config.sim.load.socks = [ColorClass.DARK]
+    system = _system(sim_config, ["load"])
     yield system
     system.camera.close()
     system.world.stop()
 
 
-def test_arm_reaches_the_look_pose(system):
-    system.arm.look(Zone.BOX)
-    q = np.array(system.arm.joints())
-    assert np.degrees(np.abs(q - system.cfg.poses["look_box"])).max() < 1.0
-    assert system.world.looking_at is Zone.BOX
+@pytest.fixture
+def unload_system(sim_config):
+    sim_config.sim.unload.cargo = {ColorClass.COLORED: 1}
+    system = _system(sim_config, ["unload"])
+    yield system
+    system.camera.close()
+    system.world.stop()
 
 
-def test_pixels_of_a_cloth_map_onto_it(system):
-    obs = system.observer.observe(Zone.BOX)
-    items = system.camera.segment(obs.frame.color)
-    assert items, "no cloth in view"
-    r = system.box_detector.detect(obs.frame)
-    assert r.status is BoxStatus.GRASP
-    p = system.calibration.to_arm(obs, r.grasp)
-    cloth = np.vstack([system.world.vertices(it.id) for it in system.world.items])
-    # the grasp point lies on a cloth: within its thickness of some vertex
+def _top(world, item) -> ArmPoint:
+    """Where to grasp item `item`: its middle, at the top of the cloth there."""
+    v = world.vertices(item)
+    c = v.mean(axis=0)
+    near = v[np.hypot(v[:, 0] - c[0], v[:, 1] - c[1]) < 25]
+    return ArmPoint(float(c[0]), float(c[1]), float(near[:, 2].max()))
+
+
+def test_scenes_put_the_socks_in_place(sim_config):
+    sim_config.sim.load.socks = [ColorClass.LIGHT, ColorClass.DARK]
+    sim_config.sim.unload.cargo = {ColorClass.LIGHT: 1, ColorClass.COLORED: 1}
+    world = _system(sim_config, ["load", "unload"]).world
+    try:
+        where = [(it.color, world.location(it.id)) for it in world.items]
+        assert where == [
+            (ColorClass.LIGHT, ("floor", None)),
+            (ColorClass.DARK, ("floor", None)),
+            (ColorClass.LIGHT, ("cargo", ColorClass.LIGHT)),
+            (ColorClass.COLORED, ("cargo", ColorClass.COLORED)),
+        ]
+    finally:
+        world.stop()
+
+
+def test_arm_reaches_the_look_pose(load_system):
+    load_system.arm.look(Zone.CARGO)
+    q = np.array(load_system.arm.joints())
+    assert np.degrees(np.abs(q - load_system.cfg.poses["look_cargo"])).max() < 1.0
+    assert load_system.world.looking_at is Zone.CARGO
+
+
+def test_floor_detector_finds_the_sock(load_system):
+    s = load_system
+    obs = s.observer.observe(Zone.FLOOR)
+    result = s.floor_detector.detect(obs.frame)
+    assert [sock.color for sock in result.socks] == [ColorClass.DARK]
+    p = s.calibration.to_arm(obs, result.socks[0].grasp)
+    cloth = s.world.vertices(0)
+    # the grasp point lies on the sock: within its thickness of some vertex
     assert np.linalg.norm(cloth - [p.x, p.y, p.z], axis=1).min() < 15
 
 
-def test_pick_from_the_box_and_release_on_the_mat(system):
-    world = system.world
-    obs = system.observer.observe(Zone.BOX)
-    grasp = system.box_detector.detect(obs.frame).grasp
-    result = system.arm.pick(system.calibration.to_arm(obs, grasp), Zone.BOX)
-    held = [it.id for it in world.items if world.location(it.id)[0] == "gripper"]
-    assert held and not result.likely_empty
-    system.arm.place_on_background()
-    system.arm.look(Zone.BACKGROUND)  # let it land
-    assert all(world.location(i)[0] == "background" for i in held)
+@pytest.mark.xfail(
+    reason="the dropped sock doesn't settle in its compartment in time (stage A, A3)"
+)
+def test_scripted_load(load_system):
+    """A sock from the floor into its cargo compartment, from its known position."""
+    s, world = load_system, load_system.world
+    result = s.arm.pick(_top(world, 0), Zone.FLOOR)
+    assert world.location(0)[0] == "gripper" and not result.likely_empty
+    s.arm.drop_to_cargo(ColorClass.DARK)
+    s.arm.look(Zone.CARGO)  # let it land
+    assert world.location(0) == ("cargo", ColorClass.DARK)
 
 
-def test_twin_sends_the_cloth(system):
+def test_scripted_unload(unload_system):
+    """A sock from its cargo compartment into its laundry bin, from its known position."""
+    s, world = unload_system, unload_system.world
+    s.arm.look(Zone.CARGO)
+    result = s.arm.pick(_top(world, 0), Zone.CARGO, math.pi / 2)
+    assert world.location(0)[0] == "gripper" and not result.likely_empty
+    s.arm.drop_to_laundry(ColorClass.COLORED)
+    s.arm.look(Zone.FLOOR)  # let it land
+    assert world.location(0) == ("laundry", ColorClass.COLORED)
+
+
+@pytest.mark.xfail(reason="friction alone still drags the sock along (stage A, A4)")
+def test_miss_prob_makes_a_grasp_catch_nothing(sim_config):
+    sim_config.sim.load.socks = [ColorClass.DARK]
+    s = _system(sim_config, ["load"], miss_prob=1.0)
+    try:
+        s.arm.pick(_top(s.world, 0), Zone.FLOOR)  # likely_empty is a hint: cloth may be pinched
+        s.arm.home()
+        assert s.world.location(0)[0] == "floor"
+    finally:
+        s.camera.close()
+        s.world.stop()
+
+
+def test_twin_sends_the_scene_and_the_cloth(load_system):
     from sorter.dashboard.twin import Twin
 
-    twin = Twin(system.arm, system.calibration, system.cfg, system.world)
-    n = twin.layout()["cloth_n"]
+    s = load_system
+    twin = Twin(s.arm, s.calibration, s.cfg, s.world)
+    layout = twin.layout()
+    names = {p["name"] for p in layout["parts"]}
+    assert {"floor", "deck", "cargo_floor"} <= names
+    n = layout["cloth_n"]
     items = twin.state()["items"]
-    assert n and len(items) == len(system.world.items)
-    assert all(len(it["vertices"]) == n * n * 3 for it in items)
+    assert len(items) == 1 and len(items[0]["vertices"]) == n * n * 3
+    # the rig (no sim world) builds the same scene from the config
+    assert Twin(s.arm, s.calibration, s.cfg).layout()["parts"] == layout["parts"]

@@ -1,5 +1,6 @@
-"""CLI: `python -m sorter run [--sim] [--mode auto|manual|calibrate]`; `python -m sorter manual`
-is `run --mode manual`. The mode switches on the dashboard at any time."""
+"""CLI: `python -m sorter run [--sim] [--mode load|unload|manual|calibrate]`;
+`python -m sorter manual` is `run --mode manual`. The mode switches on the dashboard at any
+time."""
 
 from __future__ import annotations
 
@@ -22,7 +23,7 @@ def main(argv: list[str] | None = None) -> None:
     run_p.add_argument(
         "--mode",
         choices=[m.value for m in OperatorMode],
-        default=OperatorMode.AUTO.value,
+        default=OperatorMode.LOAD.value,
         help="the dashboard's operator mode to start in",
     )
     run_p.add_argument("-v", "--verbose", action="store_true", help="debug logging")

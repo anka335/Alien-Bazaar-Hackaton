@@ -13,10 +13,8 @@ from sorter.core.hub import Hub
 from sorter.core.log import HubLogHandler
 from sorter.core.observer import Observer
 from sorter.core.system import System
-from sorter.core.types import Command, OperatorMode, Zone
+from sorter.core.types import RUN_MODES, Command, OperatorMode
 from sorter.dashboard.twin import Twin
-from sorter.sim import backend as sim_backend
-from sorter.sim.world import SimWorld
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +24,7 @@ COMPONENTS = {
     "arm": ("sorter.arm", 5),
     "calibration": ("sorter.calibration", 2),
     "box_detector": ("sorter.box_detector", 3),
-    "color_classifier": ("sorter.color_classifier", 4),
+    "floor_detector": ("sorter.floor_detector", "A"),
 }
 
 
@@ -37,9 +35,7 @@ def _real(name: str, cfg: Config):
     except ModuleNotFoundError as e:
         if e.name != f"{package}.backend":
             raise
-        raise NotImplementedError(
-            f"no real {name} backend yet (block {block}); set backends.{name}: sim"
-        ) from None
+        raise NotImplementedError(f"no real {name} backend yet (block {block})") from None
     return backend.create(cfg)
 
 
@@ -48,38 +44,31 @@ HARDWARE = ("camera", "arm")
 
 def build_system(cfg: Config, sim: bool = False) -> System:
     """Create every component per `cfg.backends`. `sim=True` simulates the hardware (camera and
-    arm); the rest follows `backends`.
-
-    `sim.engine: physics` (MuJoCo) simulates only the hardware: calibration, box detector and
-    color classifier run their real code on the rendered frames. `kinematic` also has quick
-    stand-ins for them (tests).
+    arm) in MuJoCo (`sorter.sim.physics`); calibration, the box detector and the floor detector
+    run their real code on the rendered frames.
     """
     if sim:
         backends = cfg.backends.model_copy(update=dict.fromkeys(HARDWARE, Backend.SIM))
         cfg = cfg.model_copy(update={"backends": backends})
     simulated = [n for n in COMPONENTS if getattr(cfg.backends, n) is Backend.SIM]
     world = None
-    if simulated and cfg.sim.engine == "physics":
+    if simulated:
         from sorter.sim.physics import backend as physics_backend
         from sorter.sim.physics.world import PhysicsWorld
 
         world = PhysicsWorld(
             cfg.sim, cfg.poses, board=cfg.sim.board, board_z_mm=cfg.calibration.board_z_mm
         )
-        make_sim = physics_backend.create
-    elif simulated:
-        world = SimWorld(cfg.sim, cfg.poses)
-        make_sim = sim_backend.create
     parts = {}
     for name in COMPONENTS:  # in order: the camera comes before what depends on it
         if name in simulated:
-            parts[name] = make_sim(name, cfg, world)
-        elif cfg.sim.engine == "physics" and "camera" in simulated and name in _PHYSICS_RIG:
+            parts[name] = physics_backend.create(name, cfg, world)
+        elif "camera" in simulated and name in _PHYSICS_RIG:
             parts[name] = _PHYSICS_RIG[name](cfg, parts)
         else:
             parts[name] = _real(name, cfg)
-    if world is not None and not isinstance(world, SimWorld):
-        world.start()  # physics: the scene runs from now on, like the real world
+    if world is not None:
+        world.start()  # the scene runs from now on, like the real world
     arm = parts["arm"]
     twin = Twin(arm, parts["calibration"], cfg, world)
     return System(
@@ -88,14 +77,14 @@ def build_system(cfg: Config, sim: bool = False) -> System:
         arm=arm,
         calibration=parts["calibration"],
         box_detector=parts["box_detector"],
-        color_classifier=parts["color_classifier"],
+        floor_detector=parts["floor_detector"],
         observer=Observer(parts["camera"], arm, parts["calibration"]),
         hub=Hub(parts["camera"], on_hold=arm.hold, twin=twin, speed=arm),
         world=world,
     )
 
 
-# On the simulated camera the real calibration and color classifier use what the sim knows
+# On the simulated camera the real calibration and floor detector use what the sim knows
 # exactly: the camera mount (config/hand_eye.yaml belongs to the real camera) and the rendered
 # segmentation (in place of the SAM3 service, unless `sim.use_sam3`).
 
@@ -107,18 +96,13 @@ def _physics_calibration(cfg: Config, parts: dict):
     return HandEyeCalibration(hand_eye(cfg))
 
 
-def _physics_classifier(cfg: Config, parts: dict):
-    if cfg.sim.use_sam3:
-        return _real("color_classifier", cfg)
-    from sorter.color_classifier.classifier import Sam3ColorClassifier
+def _physics_floor_detector(cfg: Config, parts: dict):
+    from sorter.floor_detector.backend import create
 
-    view = cfg.views.get(Zone.BACKGROUND)
-    return Sam3ColorClassifier(
-        cfg.color_classifier, parts["camera"].segment, view.roi if view else ()
-    )
+    return create(cfg, None if cfg.sim.use_sam3 else parts["camera"].segment)
 
 
-_PHYSICS_RIG = {"calibration": _physics_calibration, "color_classifier": _physics_classifier}
+_PHYSICS_RIG = {"calibration": _physics_calibration, "floor_detector": _physics_floor_detector}
 
 
 def _serve(system: System, manual=None, calibrate=None, modes=None):
@@ -144,7 +128,7 @@ def _close(system: System) -> None:
     except SorterError:
         log.exception("arm shutdown failed")
     system.camera.close()
-    if system.world is not None and hasattr(system.world, "stop"):
+    if system.world is not None:
         system.world.stop()
 
 
@@ -152,7 +136,7 @@ def _nominal_hand_eye(cfg: Config) -> Config:
     """Setup comes before the hand-eye calibration: without `config/hand_eye.yaml` the 3D view
     and the calibration page use the nominal camera mount (`sim.camera_mount_mm`)."""
     from sorter.calibration.config import HandEyeResult
-    from sorter.sim.world import camera_mount
+    from sorter.sim.rig import camera_mount
 
     log.warning(
         "no config/hand_eye.yaml: using the nominal camera mount; calibrate before an auto run"
@@ -172,7 +156,7 @@ def _setup_controls(system: System, sim: bool, rig_file: Path):
     # on the sim the result goes next to the board tool's sim check, and is compared to the
     # true mount; the real one is config/hand_eye.yaml
     true_mount = None
-    if sim and system.cfg.sim.engine == "physics":
+    if sim:
         from sorter.sim.physics.backend import hand_eye
 
         true_mount = hand_eye(system.cfg)
@@ -191,9 +175,9 @@ def _setup_controls(system: System, sim: bool, rig_file: Path):
 
 
 def _show_marks(world):
-    """The sim's tape marks lie on the mat in the calibrate mode only: elsewhere they would
+    """The sim's tape marks lie on the floor in the calibrate mode only: elsewhere they would
     be clutter the vision sees."""
-    if not hasattr(world, "show_marks"):
+    if world is None:
         return None
     return lambda mode: world.show_marks(mode is OperatorMode.CALIBRATE)
 
@@ -204,11 +188,12 @@ def run(
     sim: bool = False,
     dashboard: bool = True,
     autostart: bool = False,
-    mode: OperatorMode = OperatorMode.AUTO,
+    mode: OperatorMode = OperatorMode.LOAD,
     rig_file: Path | None = None,
 ) -> None:
     """The sorter: the state machine and, with `dashboard`, the web dashboard with its operator
-    modes (auto, manual, calibrate), starting in `mode`. Ctrl+C → hold → rest pose → motors off."""
+    modes (load, unload, manual, calibrate), starting in `mode`. Ctrl+C → hold → rest pose →
+    motors off."""
     from sorter.dashboard.modes import ModeSwitch
     from sorter.orchestrator.state_machine import StateMachine
 
@@ -234,7 +219,7 @@ def run(
         modes = ModeSwitch(system.hub, manual, on_change=_show_marks(system.world))
         server = _serve(system, manual, calibrate, modes)
 
-    if autostart and system.hub.mode() is OperatorMode.AUTO:
+    if autostart and system.hub.mode() in RUN_MODES:
         system.hub.send(Command.START)
     try:
         while sm_thread.is_alive() and (server is None or server.thread.is_alive()):

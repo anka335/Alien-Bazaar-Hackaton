@@ -1,7 +1,7 @@
 """Tuning tool: classify recorded observations and print the color stats of every item.
 
-    uv run python -m sorter.color_classifier.stats data/runs/<run_id>/0001_sense_bg.npz [...]
-    uv run python -m sorter.color_classifier.stats --sim   # a rendered sim frame
+    uv run python -m sorter.color_classifier.stats data/runs/<run_id>/0001_sense_floor.npz [...]
+    uv run python -m sorter.color_classifier.stats --sim   # a rendered sim frame of the floor
 
 `--save DIR` writes each frame with the overlay drawn on it.
 """
@@ -13,24 +13,24 @@ from pathlib import Path
 
 import cv2
 
-from sorter.color_classifier.backend import create
+from sorter.color_classifier.classifier import Sam3ColorClassifier
+from sorter.color_classifier.segmenter import SamSegmenter
 from sorter.core.config import load_config
 from sorter.core.io import load_observation
-from sorter.core.types import BackgroundResult, Frame, Zone
+from sorter.core.types import BackgroundResult, ColorClass, Zone
 
 
-def _sim_frame(cfg, n_items: int) -> Frame:
+def _sim_frame(cfg, n_items: int):
+    """A rendered frame of `n_items` socks on the floor, and the sim's segmentation."""
     from sorter.app import build_system
-    from sorter.sim.world import BG_ITEM_HEIGHT_MM
 
-    system = build_system(cfg, sim=True)
-    world = system.world
-    for it in world.at("box")[:n_items]:
-        it.x, it.y = world.free_point_on_background()
-        it.location, it.height_mm = "background", BG_ITEM_HEIGHT_MM
+    colors = [list(ColorClass)[i % len(ColorClass)] for i in range(n_items)]
+    load = cfg.sim.load.model_copy(update={"socks": colors})
+    sim = cfg.sim.model_copy(update={"realtime": 0, "scenes": ["load"], "load": load})
+    system = build_system(cfg.model_copy(update={"sim": sim}), sim=True)
     system.arm.start()
-    system.arm.look(Zone.BACKGROUND)
-    return system.camera.fresh()
+    system.arm.look(Zone.FLOOR)
+    return system.camera.fresh(), system.camera.segment
 
 
 def report(name: str, bg: BackgroundResult) -> None:
@@ -54,20 +54,23 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--save", type=Path, help="write frames with the overlay here")
     args = p.parse_args(argv)
 
-    # --sim: the quick kinematic sim (its top-down render doesn't match the pinhole ROIs)
-    over = {"sim": {"engine": "kinematic", "time_scale": 0.0, "vision_s": 0.0}}
+    over: dict = {}
     prompts = [s.strip() for s in args.prompts.split(",")] if args.prompts else None
     sam = {"prompts": prompts, "threshold": args.threshold}
     over["color_classifier"] = {"sam": {k: v for k, v in sam.items() if v is not None}}
     cfg = load_config(overrides=over)
-    if args.sim:
-        cfg.views = {}
-    classifier = create(cfg)
+    view = cfg.views.get(Zone.FLOOR)
+    roi = view.roi if view else ()
+    segment = None
     frames = [(str(path), load_observation(path).frame) for path in args.paths]
     if args.sim:
-        frames.append(("sim", _sim_frame(cfg, args.sim)))
+        frame, segment = _sim_frame(cfg, args.sim)
+        frames.append(("sim", frame))
     if not frames:
         p.error("give observation files or --sim")
+    if segment is None or cfg.sim.use_sam3:
+        segment = SamSegmenter(cfg.color_classifier.sam).segment
+    classifier = Sam3ColorClassifier(cfg.color_classifier, segment, roi)
 
     for name, frame in frames:
         bg = classifier.classify(frame)

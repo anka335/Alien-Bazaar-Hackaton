@@ -2,6 +2,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from sorter.arm.config import POSE_NAMES
 from sorter.core.config import Backend, deep_merge, load_config
 from sorter.core.types import Zone
 
@@ -15,9 +16,10 @@ def test_deep_merge_merges_nested_and_replaces_leaves():
 
 def test_committed_config_loads():
     cfg = load_config()
-    assert cfg.backends.camera is Backend.REAL and cfg.sim.engine == "physics"
-    assert set(cfg.zones) == {Zone.BOX, Zone.BACKGROUND}
-    assert {"rest", "home", "look_box", "look_bg", "place_bg"} <= set(cfg.poses)
+    assert cfg.backends.camera is Backend.REAL
+    assert set(cfg.zones) == {Zone.FLOOR, Zone.CARGO}
+    assert set(POSE_NAMES) <= set(cfg.poses)
+    assert cfg.arm.keep_out_mm and cfg.arm.z_min_mm == cfg.sim.layout.floor_z_mm + 3
 
 
 def test_files_merge_in_order(tmp_path):

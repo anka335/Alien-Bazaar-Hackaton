@@ -1,6 +1,7 @@
-"""The dashboard's operator mode switch: AUTO (the state machine), MANUAL, CALIBRATE (D-031).
+"""The dashboard's operator mode switch: LOAD / UNLOAD (the state machine's loops), MANUAL,
+CALIBRATE (D-031, D-032).
 
-One process serves all three. The mode itself lives in the Hub (it gates the run commands); this
+One process serves all of them. The mode itself lives in the Hub (it gates the run commands); this
 adds what the setup side needs: a change waits for no manual motion to run, the arm's motors go
 on when a setup mode starts (the state machine does it itself at Start), and `on_change` lets the
 simulator show the calibration's tape marks only in CALIBRATE. Manual and calibration actions run
@@ -51,7 +52,7 @@ class ModeSwitch:
     def _enter_setup(self) -> None:
         arm = self.manual.arm
         if not getattr(arm, "connected", True):
-            arm.start()  # motors on; the state machine's Start does the same in AUTO
+            arm.start()  # motors on; the state machine's Start does the same in a run mode
 
     def set(self, mode: OperatorMode | str) -> OperatorMode:
         """Switch to `mode`; WrongMode if it can't be done now (a run or a motion is going)."""

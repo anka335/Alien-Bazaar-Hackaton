@@ -2,8 +2,8 @@
 image (also the texture of the board in the physics simulator).
 
 Print `python -m sorter.calibration.board board.png` at 100% scale: 7 x 5 squares of 45 mm
-(315 x 225 mm), 32 mm ArUco markers (6x6), and lay it flat in front of the arm under `look_bg`
-(`calibration.board_z_mm`: its top above the table).
+(315 x 225 mm), 32 mm ArUco markers (6x6), and lay it flat on the floor in front of the rover
+under `look_floor` (`calibration.board_z_mm`: its top, arm frame).
 """
 
 from __future__ import annotations

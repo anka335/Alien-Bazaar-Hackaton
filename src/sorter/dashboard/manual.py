@@ -24,8 +24,19 @@ from sorter.core.errors import SorterError
 
 log = logging.getLogger(__name__)
 
-# The tour starts where a cycle does, at the box, then visits every place the arm goes.
-TOUR = ("look_box", "look_bg", "place_bg", "bin_light", "bin_dark", "bin_colored", "home")
+# The tour visits every place the arm goes: the floor, the cargo box, the laundry bins.
+TOUR = (
+    "look_floor",
+    "look_cargo",
+    "cargo_light",
+    "cargo_dark",
+    "cargo_colored",
+    "laundry_light",
+    "laundry_dark",
+    "laundry_colored",
+    "home",
+)
+DROP_POSES = ("cargo_", "laundry_")
 
 
 class Busy(Exception):
@@ -98,11 +109,11 @@ class ManualControl:
     # --- actions ---
 
     def _route(self, name: str) -> None:
-        # A straight joint move between a bin and anywhere else sweeps through the bin walls:
-        # go via home, like ArmController.drop_to_bin.
+        # A straight joint move between a drop pose and anywhere else can sweep through walls:
+        # go via home, like ArmController's drops.
         at = self.arm.at or ""
-        via_bin = name.startswith("bin_") or at.startswith("bin_")
-        if via_bin and "home" not in (name, at):
+        via_home = name.startswith(DROP_POSES) or at.startswith(DROP_POSES)
+        if via_home and "home" not in (name, at):
             self.arm.go_to("home")
         self.arm.go_to(name)
 

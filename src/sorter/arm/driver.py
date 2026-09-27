@@ -1,7 +1,7 @@
 """ArmDriver: the joint-level arm under the controller. Internal to block 5 (and the simulator).
 
-Two implementations: `RebotDriver` (the real arm through `rebot_b601`, or its simulated motors
-with `arm.dry_run`) and `sorter.sim.driver.SimDriver` (kinematic, drives the sim world).
+`RebotDriver`: the real arm through `rebot_b601`, its simulated motors with `arm.dry_run`, or
+the MuJoCo motors of the simulator (`sorter.sim.physics.motors`).
 """
 
 from __future__ import annotations
