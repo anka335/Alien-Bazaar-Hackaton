@@ -92,6 +92,28 @@ The camera (`nav.real.camera`, `auto` tries them in this order): the OAK-D's ROS
 5. Stay on the rover's Wi-Fi: other saved networks can take over mid-run (`nmcli con modify LeoRover-9a1f connection.autoconnect-priority 10`). Safety: speeds are capped by `nav.real.max_linear_mps` (0.25) and `max_angular_rps` (0.8), a command by `max_command_s` (10 s); a twist goes out every tick, so if this process dies the firmware stops the rover within 0.5 s; if the odometry moves opposite to the command for 0.4 s the rover stops with a fault (a sign error would otherwise run away). Stop: Esc / Stop in the tab, Ctrl+C on the CLI.
 6. The mount: OAK-D on the front of the top plate, 25° down (`nav.camera.mount_xyz_m`, `pitch_deg`); keep depth mode `extended`. Measure the real mount and put it in `config/local.yaml` → `nav.camera`.
 
+### Standalone Leo Rover sim, driven by jevomir
+
+A second, separate simulator: the official Leo Rover in a MuJoCo room, with a web UI, that you drive by hand or that **jevomir** drives, a VLM (Qwen3.5-4B) which sees only the rover's camera and answers closed-choice questions like *"Where is the red ball in this photo?"*. No ROS needed. Commands, results and details: [`rover_nav/sim`](ros2_ws/src/rover_nav/sim/README.md) ([D-039](docs/decisions.md)).
+
+```bash
+cd ros2_ws/src/rover_nav/sim && uv sync
+uv run python -m leo_sim serve                               # web UI at http://127.0.0.1:8095
+uv run python -m leo_sim drive --target red_ball --oracle    # headless run, no GPU or API needed
+```
+
+<p align="center"><img src="ros2_ws/src/rover_nav/sim/docs/ui.png" alt="leo_sim web UI" width="820"></p>
+
+| Rover camera (all the model sees) | Chase view |
+|:---:|:---:|
+| <img src="ros2_ws/src/rover_nav/sim/docs/camera.png" width="400"> | <img src="ros2_ws/src/rover_nav/sim/docs/chase.png" width="400"> |
+
+A "find the red ball" run: the rover turns towards the ball and stops 0.35 m from it (11 steps, no bumps).
+
+| Step 0 | Last step | Path on the ground-truth map |
+|:---:|:---:|:---:|
+| <img src="ros2_ws/src/rover_nav/sim/docs/step-first.jpg" width="230"> | <img src="ros2_ws/src/rover_nav/sim/docs/step-last.jpg" width="230"> | <img src="ros2_ws/src/rover_nav/sim/docs/run-map.png" width="300"> |
+
 ## Setup on the rig
 
 **Manual mode** (`uv run python -m sorter manual`, or the Manual tab): the wrist camera, the 3D view, named poses and a tour through them (`look_floor`, `look_cargo`, the cargo and laundry drop poses, home), joint jog, gripper, Hold / Release, **Clear fault** after a blocked joint, and **Save current** to re-teach a pose into `config/rig.yaml` (commit it). Moves to and from a drop pose go via `home`. Without `config/hand_eye.yaml` it uses the nominal camera mount (`sim.camera_mount_mm`).

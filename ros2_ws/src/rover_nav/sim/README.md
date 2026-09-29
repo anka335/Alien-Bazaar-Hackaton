@@ -1,6 +1,58 @@
-# leo_sim: the Leo Rover in MuJoCo, driven by hand or by jevomir
+<div align="center">
 
-ROS 2 rover navigation ([brief](../../../../docs/rover/ros2-navigation.md), [D-039](../../../../docs/decisions.md)). A MuJoCo simulation of the Leo Rover in a furnished room, with a web UI. The rover can be driven by hand, or by **jevomir**: a VLM behind a scoring API (Qwen3.5-4B, closed-choice questions, one forward pass each; see `jevomir/API.md`) that sees only the rover's camera. This is a plain Python project (uv), separate from the ROS package around it: no ROS needed.
+# 🤖 leo_sim
+
+**The [Leo Rover](https://www.leorover.tech/) in a MuJoCo living room, driven by hand or by an AI that only sees through the rover's camera.**
+
+![Python](https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white)
+![MuJoCo](https://img.shields.io/badge/physics-MuJoCo-E8590C)
+![uv](https://img.shields.io/badge/managed%20by-uv-6E56CF)
+![ROS](https://img.shields.io/badge/ROS%20needed-no-2EA44F)
+
+<img src="docs/ui.png" alt="The leo_sim web UI: rover camera, map and jevomir controls" width="900">
+
+</div>
+
+Part of the ROS 2 rover navigation work ([brief](../../../../docs/rover/ros2-navigation.md), [D-039](../../../../docs/decisions.md)). A plain Python project (uv), separate from the ROS package around it: **no ROS needed**.
+
+## What it is
+
+A physics simulation of the official Leo Rover in a furnished room (a laundry basket, a red ball, a green bin, boxes and socks on the floor), with a web UI. You can:
+
+- **drive it by hand** with the arrow keys or WASD,
+- let **jevomir** drive it: a vision-language model (Qwen3.5-4B) that is shown only the rover's camera image, is asked closed-choice questions such as *"Where is the red ball in this photo?"*, and picks the next move from its answers,
+- run **benchmarks** over random rooms to see how often it finds its target.
+
+## Simulation
+
+| Rover camera | Chase view |
+|:---:|:---:|
+| <img src="docs/camera.png" width="420"> | <img src="docs/chase.png" width="420"> |
+| What the rover sees: the red ball far ahead, a blue box and a big dark obstacle to the right. The model gets only this. | The same moment from behind the rover (the official model, with rockers and skid-steer wheels). |
+
+### A run: "find the red ball"
+
+jevomir (here answered by the oracle, so no GPU is needed) turns towards the ball, drives up to it and says it has arrived: 11 steps, no bumps, 0.35 m from the target.
+
+| Step 0 | Last step | Path on the ground-truth map |
+|:---:|:---:|:---:|
+| <img src="docs/step-first.jpg" width="250"> | <img src="docs/step-last.jpg" width="250"> | <img src="docs/run-map.png" width="330"> |
+| Ball far ahead. | Ball close and centred: "I have arrived". | Orange = path, red cross = target. The model never sees this map. |
+
+The web UI (top of this page) also has the OAK-D camera view, manual driving, a room seed for random layouts, and a panel that shows every image the model saw with its questions and probabilities.
+
+## Quick start
+
+```bash
+cd ros2_ws/src/rover_nav/sim
+uv sync                                   # mujoco, numpy, pillow (+ pytest)
+uv run python -m leo_sim serve            # open http://127.0.0.1:8095
+uv run python -m leo_sim drive --target red_ball --oracle   # headless run, no GPU or API needed
+```
+
+The details follow: how the model of the rover was built, all commands, connecting the real jevomir, how it drives, benchmark results and the file map.
+
+---
 
 ## The model
 
