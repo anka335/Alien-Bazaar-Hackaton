@@ -1,5 +1,8 @@
 # Alien Bazaar Hackathon — Sock-Sorting Rover
 
+<p align="center"><img src="docs/media/robot-collecting-sock.gif" alt="Our rover with the arm picking up a sock from the floor" width="800"></p>
+<p align="center"><sub>The real rover picking up a sock.</sub></p>
+
 A robotic arm on a rover collects socks from the floor and sorts them by color.
 
 **Load:** the rover stops next to socks. The arm looks at the floor with the depth camera on its wrist, classifies each sock as **light**, **dark** or **colored**, picks it up and drops it into the cargo box on the rover (one box for now; where the color sorting happens is open, [D-040](docs/decisions.md)). **Unload:** at a station the arm empties the box into the laundry bins. A live dashboard shows the camera, the decisions, a 3D view and the counters.
